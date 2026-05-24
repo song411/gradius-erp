@@ -1,7 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // localtunnel 등 외부 접속 허용
+  allowedDevOrigins: [
+    'gradius-erp.loca.lt',
+    '*.loca.lt',
+  ],
 };
 
 export default nextConfig;
