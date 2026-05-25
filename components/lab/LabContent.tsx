@@ -115,7 +115,7 @@ const TOOLS: Tool[] = [
     name: 'AI 업무 도우미',
     desc: '가디어스 ERP 데이터를 바탕으로 매출·미수금·크루 현황을 자연어로 질문하세요',
     category: 'AI & 데이터',
-    status: 'ready',
+    status: 'soon',
     gradient: 'from-violet-600 to-purple-800',
   },
   {
