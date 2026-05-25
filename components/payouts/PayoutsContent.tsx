@@ -51,7 +51,7 @@ function groupByInquiry(inquiries: Inquiry[], assignments: Assignment[], payouts
     const unregistered   = payableLeaders.filter(a => !inqPayouts.find(p => p.assignment_id === a.id)).length
 
     // 지급 상태는 외부(유급) 인원의 지급 기록만 기준으로 판단
-    // → 본사 인원이 섞여 있어도 외부 인원이 모두 지급완료면 완료로 처리
+    // → 본사 인원 지급 기록 무시, 미등록 인원(후보 미확정)도 무시
     const payableLeaderIds = new Set(payableLeaders.map(a => a.id))
     const payablePayouts   = inqPayouts.filter(p => payableLeaderIds.has(p.assignment_id || ''))
     const pendingCount     = payablePayouts.filter(p => p.status === '대기').length
@@ -59,12 +59,13 @@ function groupByInquiry(inquiries: Inquiry[], assignments: Assignment[], payouts
     const paidCount        = payablePayouts.filter(isDone).length
 
     // 처리 상태 판단
-    const isHqOnly    = inqAssigns.length > 0 && payableLeaders.length === 0
-    // 본사 전원 행사 or 외부 인원 전원 지급완료 → 완료 탭으로 이동
-    const allDone     = isHqOnly
-                        || (payableLeaders.length > 0 && unregistered === 0
-                            && pendingCount === 0 && confirmedCount === 0 && paidCount > 0)
-    const needsAction = !isHqOnly && (unregistered > 0 || pendingCount > 0 || confirmedCount > 0)
+    const isHqOnly = inqAssigns.length > 0 && payableLeaders.length === 0
+
+    // 완료 조건: 등록된 외부 지급 기록이 1건 이상이고 전부 입금완료
+    // → 미등록 인원(후보 미확정)은 무시, 본사 인원도 무시
+    const allRegisteredPaid = payablePayouts.length > 0 && payablePayouts.every(isDone)
+    const allDone           = isHqOnly || allRegisteredPaid
+    const needsAction       = !isHqOnly && !allDone
 
     return {
       inq, inqAssigns, hqAssigns, payableAssigns, payableLeaders, inqPayouts,
