@@ -47,15 +47,20 @@ function groupByInquiry(inquiries: Inquiry[], assignments: Assignment[], payouts
     const payableLeaders = payableAssigns.filter(a => a.role_type !== '팀원')
     const inqPayouts     = payouts.filter(p => p.inquiry_id === inq.id)
 
-    const pendingCount   = inqPayouts.filter(p => p.status === '대기').length
-    const confirmedCount = inqPayouts.filter(p => p.status === '검토완료' || p.status === '확인완료').length
-    const paidCount      = inqPayouts.filter(isDone).length
     const totalFinal     = inqPayouts.reduce((s, p) => s + (p.final_pay || 0), 0)
     const unregistered   = payableLeaders.filter(a => !inqPayouts.find(p => p.assignment_id === a.id)).length
 
+    // 지급 상태는 외부(유급) 인원의 지급 기록만 기준으로 판단
+    // → 본사 인원이 섞여 있어도 외부 인원이 모두 지급완료면 완료로 처리
+    const payableLeaderIds = new Set(payableLeaders.map(a => a.id))
+    const payablePayouts   = inqPayouts.filter(p => payableLeaderIds.has(p.assignment_id || ''))
+    const pendingCount     = payablePayouts.filter(p => p.status === '대기').length
+    const confirmedCount   = payablePayouts.filter(p => p.status === '검토완료' || p.status === '확인완료').length
+    const paidCount        = payablePayouts.filter(isDone).length
+
     // 처리 상태 판단
     const isHqOnly    = inqAssigns.length > 0 && payableLeaders.length === 0
-    // 본사 전원 행사는 지급 대상 없음 → 자동으로 완료 처리
+    // 본사 전원 행사 or 외부 인원 전원 지급완료 → 완료 탭으로 이동
     const allDone     = isHqOnly
                         || (payableLeaders.length > 0 && unregistered === 0
                             && pendingCount === 0 && confirmedCount === 0 && paidCount > 0)
@@ -227,53 +232,65 @@ export default function PayoutsContent() {
               initial={{ opacity: 0, x: leftTab === 'pending' ? -8 : 8 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.15 }}>
+              transition={{ duration: 0.15 }}
+              className="p-2">
               {activeGroups.length === 0 && !loading && (
                 <div className="text-center py-12 text-xs text-gray-400">
                   {leftTab === 'pending' ? '처리 필요한 행사가 없습니다 ✅' : '완료된 행사가 없습니다.'}
                 </div>
               )}
-              {activeGroups.map(({ inq, hqAssigns: hq, payableLeaders: leaders, inqPayouts, totalFinal, pendingCount, confirmedCount, paidCount, unregistered: unreg, isHqOnly, allDone, needsAction }) => {
-                const isSelected = inq.id === selectedId
-                return (
-                  <button key={inq.id} onClick={() => setSelectedId(inq.id)}
-                    className={`w-full text-left px-4 py-3.5 border-b transition-all ${
-                      isSelected ? 'bg-blue-50 border-l-[3px] border-l-blue-500' : 'hover:bg-gray-50 border-l-[3px] border-l-transparent'
-                    }`}>
-                    <div className="flex justify-between items-start gap-2">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold text-gray-800 truncate">{inq.event_name || '(행사명 없음)'}</p>
-                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                          <p className="text-xs text-gray-500 font-medium truncate">{inq.company_name}</p>
-                          {inq.event_start && (
-                            <p className="text-xs text-gray-400">{formatDate(inq.event_start)}{inq.event_end && inq.event_end !== inq.event_start ? ` ~ ${formatDate(inq.event_end)}` : ''}</p>
-                          )}
-                        </div>
-                        {inq.location && <p className="text-xs text-gray-400 truncate mt-0.5">📍 {inq.location}</p>}
+              {/* 2열 그리드 */}
+              <div className="grid grid-cols-2 gap-2">
+                {activeGroups.map(({ inq, hqAssigns: hq, payableLeaders: leaders, inqPayouts, totalFinal, pendingCount, confirmedCount, paidCount, unregistered: unreg, isHqOnly, allDone, needsAction }) => {
+                  const isSelected = inq.id === selectedId
+                  return (
+                    <button key={inq.id} onClick={() => setSelectedId(inq.id)}
+                      className={`text-left rounded-xl border-2 p-3 transition-all hover:shadow-md ${
+                        isSelected
+                          ? 'bg-blue-50 border-blue-400 shadow-sm'
+                          : 'bg-white border-gray-200 hover:border-blue-300'
+                      }`}>
+                      {/* 행사명 + 상태 뱃지 */}
+                      <div className="flex items-start justify-between gap-1 mb-1.5">
+                        <p className="text-xs font-bold text-gray-800 leading-snug line-clamp-2 flex-1">{inq.event_name || '(행사명 없음)'}</p>
+                        {allDone && !isHqOnly && <span className="text-[9px] bg-green-500 text-white rounded-full px-1.5 py-0.5 font-bold shrink-0">완료</span>}
+                        {isHqOnly && <span className="text-[9px] bg-purple-500 text-white rounded-full px-1.5 py-0.5 font-bold shrink-0">본사</span>}
+                        {needsAction && <span className="text-[9px] bg-red-500 text-white rounded-full px-1.5 py-0.5 font-bold shrink-0">처리필요</span>}
                       </div>
-                      <ChevronRight className="h-4 w-4 text-gray-300 shrink-0 mt-0.5" />
-                    </div>
-                    {/* 인원 구성 */}
-                    <div className="flex gap-1.5 mt-2 flex-wrap items-center">
-                      {isHqOnly && <span className="text-[10px] bg-purple-100 text-purple-700 border border-purple-200 rounded-full px-2 py-0.5 font-bold">🏢 본사 전원</span>}
-                      {leaders.length > 0 && <span className="text-[10px] bg-gray-100 text-gray-600 border border-gray-200 rounded-full px-2 py-0.5">외부 {leaders.length}명</span>}
-                      {hq.length > 0 && !isHqOnly && <span className="text-[10px] bg-purple-50 text-purple-600 border border-purple-200 rounded-full px-2 py-0.5">본사 {hq.length}</span>}
-                    </div>
-                    {/* 지급 상태 */}
-                    <div className="flex gap-1.5 mt-1 flex-wrap items-center">
-                      {unreg > 0 && <span className="text-[10px] bg-orange-100 text-orange-700 border border-orange-200 rounded-full px-2 py-0.5 font-bold">⚠ 미등록 {unreg}</span>}
-                      {pendingCount > 0 && <span className="text-[10px] bg-amber-100 text-amber-700 border border-amber-200 rounded-full px-2 py-0.5">대기 {pendingCount}</span>}
-                      {confirmedCount > 0 && <span className="text-[10px] bg-blue-100 text-blue-700 border border-blue-200 rounded-full px-2 py-0.5">검토 {confirmedCount}</span>}
-                      {paidCount > 0 && <span className="text-[10px] bg-green-100 text-green-700 border border-green-200 rounded-full px-2 py-0.5">완료 {paidCount}</span>}
-                      {allDone && !isHqOnly && <span className="text-[10px] bg-green-200 text-green-800 rounded-full px-2 py-0.5 font-bold">✓ 전원지급</span>}
-                      {isHqOnly && allDone && <span className="text-[10px] bg-purple-200 text-purple-800 rounded-full px-2 py-0.5 font-bold">✓ 지급없음</span>}
-                    </div>
-                    {totalFinal > 0 && (
-                      <p className="text-sm font-extrabold text-blue-600 mt-1.5">{formatKRW(totalFinal)}</p>
-                    )}
-                  </button>
-                )
-              })}
+                      {/* 의뢰처 */}
+                      <p className="text-[10px] text-gray-500 font-medium truncate">{inq.company_name}</p>
+                      {/* 날짜 */}
+                      {inq.event_start && (
+                        <p className="text-[10px] text-gray-400 mt-0.5">
+                          {formatDate(inq.event_start)}{inq.event_end && inq.event_end !== inq.event_start ? ` ~ ${formatDate(inq.event_end)}` : ''}
+                        </p>
+                      )}
+                      {/* 장소 */}
+                      {inq.location && <p className="text-[10px] text-gray-400 truncate mt-0.5">📍 {inq.location}</p>}
+
+                      {/* 인원 구성 */}
+                      <div className="flex gap-1 mt-2 flex-wrap">
+                        {isHqOnly && <span className="text-[9px] bg-purple-100 text-purple-700 rounded-full px-1.5 py-0.5">🏢 본사 전원</span>}
+                        {leaders.length > 0 && <span className="text-[9px] bg-gray-100 text-gray-600 rounded-full px-1.5 py-0.5">외부 {leaders.length}명</span>}
+                        {hq.length > 0 && !isHqOnly && <span className="text-[9px] bg-purple-50 text-purple-600 rounded-full px-1.5 py-0.5">본사 {hq.length}</span>}
+                      </div>
+
+                      {/* 지급 상태 */}
+                      <div className="flex gap-1 mt-1 flex-wrap">
+                        {unreg > 0 && <span className="text-[9px] bg-orange-100 text-orange-700 rounded-full px-1.5 py-0.5 font-bold">⚠ {unreg}미등록</span>}
+                        {pendingCount > 0 && <span className="text-[9px] bg-amber-100 text-amber-700 rounded-full px-1.5 py-0.5">대기 {pendingCount}</span>}
+                        {confirmedCount > 0 && <span className="text-[9px] bg-blue-100 text-blue-700 rounded-full px-1.5 py-0.5">검토 {confirmedCount}</span>}
+                        {paidCount > 0 && <span className="text-[9px] bg-green-100 text-green-700 rounded-full px-1.5 py-0.5">완료 {paidCount}</span>}
+                      </div>
+
+                      {/* 금액 */}
+                      {totalFinal > 0 && (
+                        <p className="text-xs font-extrabold text-blue-600 mt-2">{formatKRW(totalFinal)}</p>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
             </motion.div>
           </AnimatePresence>
         </div>
