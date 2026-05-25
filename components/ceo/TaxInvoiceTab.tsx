@@ -171,11 +171,11 @@ function TaxRow({
       : inq.event_start.slice(0,10)
     : null
 
-  // 현장주소: 행사장 주소 (inquiry.location 또는 settlement.site_address)
+  // 현장주소: 파견 행사장 주소 (inquiry.location → settlement.site_address 순)
   const siteAddr = inq?.location || row.site_address || null
 
-  // 사업장주소: 세금계산서용 회사 등록 주소 (customers.address 우선)
-  const bizAddr = row.customer?.address || null
+  // 사업장주소: 세금계산서용 회사 등록 주소 (settlement.biz_address 우선, 없으면 customers.address)
+  const bizAddr = row.biz_address || row.customer?.address || null
 
   // 잔액
   const balance = row.balance ?? (row.invoice_amount - row.received_amount)

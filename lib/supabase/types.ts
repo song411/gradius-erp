@@ -274,6 +274,7 @@ export interface Settlement {
   contact_phone?: string
   invoice_request?: string
   biz_reg_url?: string
+  biz_address?: string      // 사업장주소 (세금계산서용)
   created_at: string
   updated_at: string
 }

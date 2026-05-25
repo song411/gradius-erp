@@ -44,7 +44,7 @@ export default function ClosingForm({ open, onClose, onSaved, editTarget, custom
     email:              '',
     contact_phone:      '',
     item_description:   '',
-    site_address:       '',   // 사업장주소 (이관 데이터는 site_address 컬럼에 저장됨)
+    biz_address:        '',   // 사업장주소 (세금계산서용)
     invoice_request:    '',
     received_amount:    '',
     deposit_status:     '미입금',
@@ -64,7 +64,7 @@ export default function ClosingForm({ open, onClose, onSaved, editTarget, custom
       email:              editTarget.email || '',
       contact_phone:      editTarget.contact_phone || '',
       item_description:   editTarget.item_description || '',
-      site_address:       editTarget.site_address || '',
+      biz_address:        editTarget.biz_address || '',
       invoice_request:    editTarget.invoice_request || '',
       received_amount:    String(editTarget.received_amount || ''),
       deposit_status:     editTarget.deposit_status || '미입금',
@@ -86,7 +86,7 @@ export default function ClosingForm({ open, onClose, onSaved, editTarget, custom
         email:              form.email || null,
         contact_phone:      form.contact_phone || null,
         item_description:   form.item_description || null,
-        site_address:       form.site_address || null,
+        biz_address:        form.biz_address || null,
         invoice_request:    form.invoice_request || null,
         received_amount:    Number(form.received_amount) || 0,
         deposit_status:     form.deposit_status,
@@ -118,10 +118,11 @@ export default function ClosingForm({ open, onClose, onSaved, editTarget, custom
   const receivedNum   = Number(form.received_amount) || 0
   const balance       = invoiceAmt - receivedNum
 
-  // 고객사 주소 자동 조회 (inquiry.customer_id 기준)
+  // 현장주소: inquiry.location → settlement.site_address 순
+  const siteAddress = inq?.location || editTarget.site_address || null
+  // 사업장주소: settlement.biz_address 우선, 없으면 고객사 주소
   const linkedCustomer = customers.find(c => c.id === inq?.customer_id)
-  const bizAddress     = linkedCustomer?.address || null
-  const siteAddress    = inq?.location || editTarget.site_address || null
+  const bizAddress = editTarget.biz_address || linkedCustomer?.address || null
 
   // 파견일자
   const eventPeriod = inq?.event_start
@@ -216,8 +217,8 @@ export default function ClosingForm({ open, onClose, onSaved, editTarget, custom
               <Input value={form.item_description} onChange={e => setForm(f => ({ ...f, item_description: e.target.value }))} placeholder="예) 행사 도우미 파견" />
             </div>
             <div className="col-span-2">
-              <label className="label-xs">사업장주소</label>
-              <Input value={form.site_address} onChange={e => setForm(f => ({ ...f, site_address: e.target.value }))} placeholder="서울특별시 중구 ..." />
+              <label className="label-xs">사업장주소 (세금계산서용)</label>
+              <Input value={form.biz_address} onChange={e => setForm(f => ({ ...f, biz_address: e.target.value }))} placeholder="서울특별시 중구 ..." />
             </div>
           </div>
         </section>
