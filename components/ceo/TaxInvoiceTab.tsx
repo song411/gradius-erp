@@ -78,10 +78,10 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
       </div>
 
       {/* 미발행 목록 */}
-      <div className="bg-white rounded-xl border border-red-100 overflow-hidden">
-        <div className="bg-red-50 px-4 py-3 border-b border-red-100 flex items-center gap-2">
-          <AlertCircle className="h-4 w-4 text-red-500" />
-          <h3 className="font-semibold text-red-700 text-sm">미발행 세금계산서 ({unissued.length}건)</h3>
+      <div className="bg-white rounded-xl border-2 border-red-200 overflow-hidden shadow-sm">
+        <div className="bg-red-50 px-4 py-3 border-b-2 border-red-200 flex items-center gap-2">
+          <AlertCircle className="h-4 w-4 text-red-600" />
+          <h3 className="font-bold text-red-700 text-sm">미발행 세금계산서 ({unissued.length}건)</h3>
         </div>
         {unissued.length === 0 ? (
           <div className="py-10 text-center text-gray-400 text-sm">미발행 건이 없습니다 ✅</div>
@@ -108,9 +108,9 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
       </div>
 
       {/* 발행완료 이력 (접기/펼치기) */}
-      <div className="bg-white rounded-xl border border-green-100 overflow-hidden">
+      <div className="bg-white rounded-xl border-2 border-green-200 overflow-hidden shadow-sm">
         <button
-          className="w-full bg-green-50 px-4 py-3 border-b border-green-100 flex items-center justify-between hover:bg-green-100 transition-colors"
+          className="w-full bg-green-50 px-4 py-3 border-b-2 border-green-200 flex items-center justify-between hover:bg-green-100 transition-colors"
           onClick={() => setHistoryOpen(v => !v)}
         >
           <div className="flex items-center gap-2">
@@ -216,10 +216,10 @@ function TaxRow({
 
       {/* 세금계산서 상세 정보 */}
       {open && (
-        <div className="bg-gray-50 px-8 py-4 border-t border-dashed border-gray-200 space-y-3">
+        <div className="bg-slate-50 px-8 py-4 border-t-2 border-dashed border-gray-300 space-y-4">
           {/* 세금계산서 발행정보 */}
-          <div>
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">세금계산서 발행 정보</p>
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <p className="text-xs font-bold text-gray-600 uppercase tracking-wider mb-3 border-b border-gray-100 pb-2">세금계산서 발행 정보</p>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               <InfoItem label="🏢 사업자번호"   value={row.biz_number} />
               <InfoItem label="🏗️ 법인명"        value={row.corp_name} />
@@ -232,8 +232,8 @@ function TaxRow({
 
           {/* 주소 정보 */}
           {(siteAddr || bizAddr) && (
-            <div>
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">주소 정보</p>
+            <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <p className="text-xs font-bold text-gray-600 uppercase tracking-wider mb-3 border-b border-gray-100 pb-2">주소 정보</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {siteAddr && (
                   <div className="flex items-start gap-1.5 bg-blue-50 rounded-lg px-3 py-2">
@@ -258,8 +258,8 @@ function TaxRow({
           )}
 
           {/* 금액 정보 */}
-          <div>
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">금액 정보</p>
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <p className="text-xs font-bold text-gray-600 uppercase tracking-wider mb-3 border-b border-gray-100 pb-2">금액 정보</p>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <AmountItem label="💰 공급가액"      value={row.supply_price} />
               <AmountItem label="💰 부가세"         value={row.vat} />
@@ -270,9 +270,9 @@ function TaxRow({
 
           {/* 메모 */}
           {row.invoice_request && (
-            <div className="bg-yellow-50 border border-yellow-100 rounded-lg px-3 py-2">
-              <p className="text-[10px] text-yellow-600 font-semibold mb-1">메모</p>
-              <p className="text-xs text-gray-700 whitespace-pre-line">{row.invoice_request}</p>
+            <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg px-4 py-3">
+              <p className="text-xs text-yellow-700 font-bold mb-1">📝 메모</p>
+              <p className="text-sm text-gray-700 whitespace-pre-line">{row.invoice_request}</p>
             </div>
           )}
         </div>
@@ -285,8 +285,8 @@ function InfoItem({ label, value, className = '' }: { label: string; value?: str
   if (!value) return null
   return (
     <div className={className}>
-      <span className="text-[10px] text-gray-400 font-semibold block">{label}</span>
-      <span className="text-xs text-gray-700 font-medium">{value}</span>
+      <span className="text-[10px] text-gray-500 font-bold block mb-0.5">{label}</span>
+      <span className="text-sm text-gray-800 font-semibold">{value}</span>
     </div>
   )
 }
@@ -308,17 +308,17 @@ function SummaryCard({ label, count, color, icon, sub }: {
   label: string; count: number; color: string; icon: React.ReactNode; sub: string
 }) {
   const styles: Record<string, string> = {
-    red:   'bg-red-50 border-red-200 text-red-700',
-    green: 'bg-green-50 border-green-200 text-green-700',
-    blue:  'bg-blue-50 border-blue-200 text-blue-700',
+    red:   'bg-red-50 border-2 border-red-300 text-red-700 shadow-sm',
+    green: 'bg-green-50 border-2 border-green-300 text-green-700 shadow-sm',
+    blue:  'bg-blue-50 border-2 border-blue-300 text-blue-700 shadow-sm',
   }
   return (
-    <div className={`rounded-xl border p-4 flex items-start gap-3 ${styles[color]}`}>
+    <div className={`rounded-xl p-4 flex items-start gap-3 ${styles[color]}`}>
       <div className="mt-0.5 shrink-0">{icon}</div>
       <div>
-        <p className="text-xs opacity-70">{label}</p>
-        <p className="text-2xl font-bold">{count}<span className="text-sm font-normal ml-0.5">건</span></p>
-        {sub && <p className="text-xs opacity-60 mt-0.5">{sub}</p>}
+        <p className="text-xs font-semibold opacity-80">{label}</p>
+        <p className="text-2xl font-extrabold">{count}<span className="text-sm font-normal ml-0.5">건</span></p>
+        {sub && <p className="text-xs font-medium opacity-70 mt-0.5">{sub}</p>}
       </div>
     </div>
   )

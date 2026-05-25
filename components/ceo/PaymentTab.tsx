@@ -489,24 +489,25 @@ function StatCard({ icon, label, sub, count, amount, color, onClick, clickable }
   onClick?: () => void; clickable?: boolean
 }) {
   const styles: Record<string, string> = {
-    blue:  'bg-blue-50 border-blue-200 text-blue-700',
-    red:   'bg-red-50 border-red-200 text-red-700',
-    green: 'bg-green-50 border-green-200 text-green-700',
+    blue:  'bg-blue-50 border-2 border-blue-300 text-blue-700 shadow-sm',
+    red:   'bg-red-50 border-2 border-red-300 text-red-700 shadow-sm',
+    green: 'bg-green-50 border-2 border-green-300 text-green-700 shadow-sm',
   }
   return (
     <div
-      className={`rounded-xl border p-4 ${styles[color]} ${clickable ? 'cursor-pointer hover:brightness-95 transition-all' : ''}`}
+      className={`rounded-xl p-4 ${styles[color]} ${clickable ? 'cursor-pointer hover:brightness-95 active:scale-[0.99] transition-all' : ''}`}
       onClick={onClick}
     >
       <div className="flex items-center gap-2 mb-2">
         {icon}
         <div>
-          <p className="font-semibold text-sm">{label}</p>
-          <p className="text-[10px] opacity-60">{sub}</p>
+          <p className="font-bold text-sm">{label}</p>
+          <p className="text-[10px] opacity-70">{sub}</p>
         </div>
+        {clickable && <span className="ml-auto text-[10px] opacity-50">클릭 ▶</span>}
       </div>
-      <p className="text-2xl font-bold">{count}<span className="text-sm font-normal ml-0.5">건</span></p>
-      {amount > 0 && <p className="text-xs mt-1 opacity-70">{formatKRW(amount)}</p>}
+      <p className="text-2xl font-extrabold">{count}<span className="text-sm font-normal ml-0.5">건</span></p>
+      {amount > 0 && <p className="text-xs mt-1 font-semibold opacity-80">{formatKRW(amount)}</p>}
     </div>
   )
 }

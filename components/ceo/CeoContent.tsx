@@ -92,8 +92,8 @@ export default function CeoContent() {
   return (
     <div className="flex flex-col h-full">
       {/* 탭 네비게이션 */}
-      <div className="border-b border-gray-200 bg-white px-4 shrink-0">
-        <nav className="flex gap-1">
+      <div className="border-b-2 border-amber-200 bg-white px-4 shrink-0 shadow-sm">
+        <nav className="flex gap-0.5">
           {TABS.map(({ id, label, icon: Icon }) => {
             const badge  = getBadge(id)
             const active = tab === id
@@ -101,17 +101,17 @@ export default function CeoContent() {
               <button
                 key={id}
                 onClick={() => setTab(id)}
-                className={`flex items-center gap-1.5 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                className={`flex items-center gap-1.5 px-4 py-3.5 text-sm font-semibold border-b-[3px] transition-all whitespace-nowrap ${
                   active
-                    ? 'border-amber-500 text-amber-700'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    ? 'border-amber-500 text-amber-700 bg-amber-50'
+                    : 'border-transparent text-gray-500 hover:text-gray-800 hover:border-gray-300 hover:bg-gray-50'
                 }`}
               >
                 <Icon className="h-4 w-4" />
                 {label}
                 {badge > 0 && (
-                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center ${
-                    active ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-600'
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center ${
+                    active ? 'bg-amber-200 text-amber-800' : 'bg-red-500 text-white'
                   }`}>
                     {badge}
                   </span>
@@ -123,7 +123,7 @@ export default function CeoContent() {
       </div>
 
       {/* 탭 콘텐츠 */}
-      <div className="flex-1 overflow-y-auto p-5">
+      <div className="flex-1 overflow-y-auto p-5 bg-gray-50">
         {tab === 'overview'  && <OverviewTab   data={ceoData} />}
         {tab === 'tax'       && <TaxInvoiceTab data={ceoData} />}
         {tab === 'payment'   && <PaymentTab    data={ceoData} />}

@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import {
@@ -38,13 +39,29 @@ export default function Sidebar() {
     >
       {/* 로고 */}
       <div className="flex items-center gap-3 p-4 border-b border-gray-700">
-        <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center shrink-0">
-          <span className="text-white font-bold text-sm">G</span>
+        {/* public/logo.png 업로드 시 자동 적용, 없으면 기본 G 뱃지 표시 */}
+        <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0 bg-white flex items-center justify-center">
+          <Image
+            src="/logo.png"
+            alt="GUARDIUS 로고"
+            width={36}
+            height={36}
+            className="object-contain"
+            onError={(e) => {
+              const el = e.currentTarget as HTMLImageElement
+              el.style.display = 'none'
+              const parent = el.parentElement
+              if (parent) {
+                parent.classList.add('bg-amber-500')
+                parent.innerHTML = '<span class="text-white font-bold text-sm">G</span>'
+              }
+            }}
+          />
         </div>
         {!collapsed && (
-          <div>
-            <span className="text-white font-bold text-base">Gradius</span>
-            <p className="text-gray-400 text-xs">인력파견 ERP</p>
+          <div className="min-w-0">
+            <p className="text-gray-300 text-[10px] font-medium leading-tight">주식회사 가디어스</p>
+            <span className="text-white font-extrabold text-sm tracking-wide leading-tight">GUARDIUS ERP</span>
           </div>
         )}
       </div>

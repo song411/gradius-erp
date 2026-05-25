@@ -93,34 +93,34 @@ export default function DepositTab({ data }: { data: CeoData }) {
     <div className="space-y-5">
       {/* 요약 카드 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+        <div className="bg-red-50 border-2 border-red-300 rounded-xl p-4 shadow-sm">
           <div className="flex items-center gap-2 text-red-700 mb-1">
             <AlertCircle className="h-4 w-4" />
-            <span className="text-xs font-semibold">미입금</span>
+            <span className="text-xs font-bold">미입금</span>
           </div>
-          <p className="text-2xl font-bold text-red-700">{unpaid.length}<span className="text-sm font-normal ml-0.5">건</span></p>
-          <p className="text-xs text-red-500 mt-0.5">{formatKRW(totalUnpaid)}</p>
+          <p className="text-2xl font-extrabold text-red-700">{unpaid.length}<span className="text-sm font-normal ml-0.5">건</span></p>
+          <p className="text-xs text-red-600 font-semibold mt-0.5">{formatKRW(totalUnpaid)}</p>
         </div>
-        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+        <div className="bg-yellow-50 border-2 border-yellow-300 rounded-xl p-4 shadow-sm">
           <div className="flex items-center gap-2 text-yellow-700 mb-1">
             <Clock className="h-4 w-4" />
-            <span className="text-xs font-semibold">부분입금</span>
+            <span className="text-xs font-bold">부분입금</span>
           </div>
-          <p className="text-2xl font-bold text-yellow-700">{partial.length}<span className="text-sm font-normal ml-0.5">건</span></p>
+          <p className="text-2xl font-extrabold text-yellow-700">{partial.length}<span className="text-sm font-normal ml-0.5">건</span></p>
         </div>
-        <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+        <div className="bg-green-50 border-2 border-green-300 rounded-xl p-4 shadow-sm">
           <div className="flex items-center gap-2 text-green-700 mb-1">
             <CheckCircle2 className="h-4 w-4" />
-            <span className="text-xs font-semibold">입금완료</span>
+            <span className="text-xs font-bold">입금완료</span>
           </div>
-          <p className="text-2xl font-bold text-green-700">{complete.length}<span className="text-sm font-normal ml-0.5">건</span></p>
+          <p className="text-2xl font-extrabold text-green-700">{complete.length}<span className="text-sm font-normal ml-0.5">건</span></p>
         </div>
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+        <div className="bg-blue-50 border-2 border-blue-300 rounded-xl p-4 shadow-sm">
           <div className="flex items-center gap-2 text-blue-700 mb-1">
             <Building2 className="h-4 w-4" />
-            <span className="text-xs font-semibold">전체</span>
+            <span className="text-xs font-bold">전체</span>
           </div>
-          <p className="text-2xl font-bold text-blue-700">{settlements.length}<span className="text-sm font-normal ml-0.5">건</span></p>
+          <p className="text-2xl font-extrabold text-blue-700">{settlements.length}<span className="text-sm font-normal ml-0.5">건</span></p>
         </div>
       </div>
 
@@ -130,10 +130,10 @@ export default function DepositTab({ data }: { data: CeoData }) {
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className={`text-sm px-3 py-1.5 rounded-full border font-medium transition-colors ${
+            className={`text-sm px-4 py-1.5 rounded-full border-2 font-semibold transition-colors ${
               filter === f
                 ? 'bg-blue-600 text-white border-blue-600'
-                : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'
+                : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
             }`}
           >
             {f || '전체'}
@@ -142,21 +142,21 @@ export default function DepositTab({ data }: { data: CeoData }) {
       </div>
 
       {/* 테이블 */}
-      <div className="bg-white rounded-xl border overflow-hidden">
+      <div className="bg-white rounded-xl border-2 border-gray-200 overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-gray-50 border-b">
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">업체명</th>
-                <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500">행사명</th>
-                <th className="text-right px-3 py-3 text-xs font-semibold text-gray-500">청구금액</th>
-                <th className="text-right px-3 py-3 text-xs font-semibold text-gray-500">받은금액</th>
-                <th className="text-right px-3 py-3 text-xs font-semibold text-gray-500">미수금</th>
-                <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500">입금상태</th>
-                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500">액션</th>
+              <tr className="bg-gray-100 border-b-2 border-gray-200">
+                <th className="text-left px-4 py-3 text-xs font-bold text-gray-600">업체명</th>
+                <th className="text-left px-3 py-3 text-xs font-bold text-gray-600">행사명</th>
+                <th className="text-right px-3 py-3 text-xs font-bold text-gray-600">청구금액</th>
+                <th className="text-right px-3 py-3 text-xs font-bold text-gray-600">받은금액</th>
+                <th className="text-right px-3 py-3 text-xs font-bold text-gray-600">미수금</th>
+                <th className="text-center px-3 py-3 text-xs font-bold text-gray-600">입금상태</th>
+                <th className="text-right px-4 py-3 text-xs font-bold text-gray-600">액션</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-gray-200">
               {rows.length === 0 && (
                 <tr><td colSpan={7} className="text-center py-10 text-gray-400">데이터가 없습니다.</td></tr>
               )}

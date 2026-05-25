@@ -90,13 +90,13 @@ export default function ProfitTab({ data }: { data: CeoData }) {
 
       {/* 정렬 */}
       <div className="flex items-center gap-2">
-        <span className="text-xs text-gray-500 font-medium">정렬:</span>
+        <span className="text-xs text-gray-600 font-bold">정렬:</span>
         {([['profit', '수익액순'], ['rate', '수익률순'], ['supply', '매출액순']] as const).map(([k, l]) => (
           <button
             key={k}
             onClick={() => setSortKey(k)}
-            className={`text-xs px-3 py-1.5 rounded-full border font-medium transition-colors ${
-              sortKey === k ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'
+            className={`text-xs px-4 py-1.5 rounded-full border-2 font-semibold transition-colors ${
+              sortKey === k ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
             }`}
           >
             {l}
@@ -105,22 +105,22 @@ export default function ProfitTab({ data }: { data: CeoData }) {
       </div>
 
       {/* 프로젝트 목록 */}
-      <div className="bg-white rounded-xl border overflow-hidden">
+      <div className="bg-white rounded-xl border-2 border-gray-200 overflow-hidden shadow-sm">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-gray-50 border-b">
+            <tr className="bg-gray-100 border-b-2 border-gray-200">
               <th className="w-8 px-3 py-3" />
-              <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500">행사명</th>
-              <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500">업체명</th>
-              <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500">행사일</th>
-              <th className="text-right px-3 py-3 text-xs font-semibold text-gray-500">공급가액</th>
-              <th className="text-right px-3 py-3 text-xs font-semibold text-gray-500">총지급</th>
-              <th className="text-right px-3 py-3 text-xs font-semibold text-gray-500">순수익</th>
-              <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500">수익률</th>
-              <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500">상태</th>
+              <th className="text-left px-3 py-3 text-xs font-bold text-gray-600">행사명</th>
+              <th className="text-left px-3 py-3 text-xs font-bold text-gray-600">업체명</th>
+              <th className="text-left px-3 py-3 text-xs font-bold text-gray-600">행사일</th>
+              <th className="text-right px-3 py-3 text-xs font-bold text-gray-600">공급가액</th>
+              <th className="text-right px-3 py-3 text-xs font-bold text-gray-600">총지급</th>
+              <th className="text-right px-3 py-3 text-xs font-bold text-gray-600">순수익</th>
+              <th className="text-center px-3 py-3 text-xs font-bold text-gray-600">수익률</th>
+              <th className="text-center px-3 py-3 text-xs font-bold text-gray-600">상태</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-gray-200">
             {projects.length === 0 && (
               <tr><td colSpan={9} className="py-10 text-center text-gray-400">데이터가 없습니다.</td></tr>
             )}
