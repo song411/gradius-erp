@@ -546,6 +546,9 @@ function OverviewTab({
 // ═══════════════════════════════════════════
 // 탭 2: 캘린더
 // ═══════════════════════════════════════════
+// 체결 이상 상태만 캘린더에 표시
+const CONTRACTED_STATUSES = ['체결', '배정완료', '진행중', '완료', '정산완료']
+
 function CalendarTab({ inquiries }: { inquiries: Inquiry[] }) {
   const now = new Date()
   const [year,  setYear]  = useState(now.getFullYear())
@@ -556,9 +559,12 @@ function CalendarTab({ inquiries }: { inquiries: Inquiry[] }) {
   const startWDay = firstDay.getDay()   // 0=일
   const totalDays = lastDay.getDate()
 
+  // 체결 이상 행사만 필터링
+  const contractedInqs = inquiries.filter(inq => CONTRACTED_STATUSES.includes(inq.status))
+
   // 이 달의 행사
   const monthKey = `${year}-${String(month+1).padStart(2,'0')}`
-  const monthInqs = inquiries.filter(inq => {
+  const monthInqs = contractedInqs.filter(inq => {
     if (!inq.event_start) return false
     const s = inq.event_start.substring(0,7)
     const e = inq.event_end   ? inq.event_end.substring(0,7) : s
