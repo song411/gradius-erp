@@ -4,6 +4,7 @@ import { useState } from 'react'
 import type { Staff } from '@/lib/supabase/types'
 import { X, Edit2, Star, Phone, MapPin, Languages, Car, CreditCard, FileText, Eye, EyeOff, IdCard } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { motion, AnimatePresence } from 'framer-motion'
 
 // 추천등급별 헤더 테마
 const THEME: Record<string, { bg: string; badge: string; text: string; ring: string }> = {
@@ -99,13 +100,21 @@ export default function CrewProfileCard({ staff, onClose, onEdit }: Props) {
 
   return (
     // 오버레이
-    <div
+    <motion.div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
       onClick={onClose}
     >
       {/* 카드 본체 */}
-      <div
+      <motion.div
         className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden"
+        initial={{ opacity: 0, scale: 0.92, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 10 }}
+        transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
         onClick={e => e.stopPropagation()}
       >
         {/* 헤더 배너 */}
@@ -256,8 +265,8 @@ export default function CrewProfileCard({ staff, onClose, onEdit }: Props) {
             </Button>
           </div>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   )
 }
 

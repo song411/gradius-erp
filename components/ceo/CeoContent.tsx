@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { db } from '@/lib/supabase/api'
 import type { Inquiry, Settlement, Payout, Assignment, Customer } from '@/lib/supabase/types'
 import { BarChart3, Receipt, Banknote, Building2, TrendingUp } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
 
 // 탭별 컴포넌트
 import OverviewTab   from './OverviewTab'
@@ -124,11 +125,21 @@ export default function CeoContent() {
 
       {/* 탭 콘텐츠 */}
       <div className="flex-1 overflow-y-auto p-5 bg-gray-50">
-        {tab === 'overview'  && <OverviewTab   data={ceoData} />}
-        {tab === 'tax'       && <TaxInvoiceTab data={ceoData} />}
-        {tab === 'payment'   && <PaymentTab    data={ceoData} />}
-        {tab === 'deposit'   && <DepositTab    data={ceoData} />}
-        {tab === 'profit'    && <ProfitTab     data={ceoData} />}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={tab}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
+          >
+            {tab === 'overview'  && <OverviewTab   data={ceoData} />}
+            {tab === 'tax'       && <TaxInvoiceTab data={ceoData} />}
+            {tab === 'payment'   && <PaymentTab    data={ceoData} />}
+            {tab === 'deposit'   && <DepositTab    data={ceoData} />}
+            {tab === 'profit'    && <ProfitTab     data={ceoData} />}
+          </motion.div>
+        </AnimatePresence>
       </div>
     </div>
   )
