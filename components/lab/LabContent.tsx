@@ -34,12 +34,13 @@ const TOOLS: Tool[] = [
     gradient: 'from-blue-500 to-blue-700',
   },
   {
+  {
     id: 'deploy-report',
     emoji: '📋',
     name: '배치신고서 작성기',
     desc: '인원배정 DB 연동 → 경비업법 표준 양식 자동 완성',
     category: '경비업무',
-    status: 'beta',
+    status: 'soon',
     gradient: 'from-sky-500 to-cyan-600',
   },
   {
@@ -164,7 +165,10 @@ export default function LabContent() {
   const [category, setCategory] = useState('전체')
   const [openTool, setOpenTool] = useState<string | null>(null)
 
-  const visible = TOOLS.filter(t => category === '전체' || t.category === category)
+  const STATUS_ORDER: Record<ToolStatus, number> = { ready: 0, beta: 1, soon: 2 }
+  const visible = TOOLS
+    .filter(t => category === '전체' || t.category === category)
+    .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status])
 
   function handleClick(tool: Tool) {
     if (tool.status === 'soon') return
