@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, ExternalLink } from 'lucide-react'
+import { X } from 'lucide-react'
 import ContactsModal from './tools/ContactsModal'
 import MbtiModal from './tools/MbtiModal'
 import TaxCalcModal from './tools/TaxCalcModal'
@@ -198,18 +198,15 @@ export default function LabContent() {
 
       {/* ── 도구 그리드 ── */}
       <div className="px-8 py-6">
-        <motion.div layout className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <AnimatePresence>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {visible.map((tool, i) => {
               const meta = STATUS_META[tool.status]
               const isReady = tool.status !== 'soon'
               return (
                 <motion.div key={tool.id}
-                  layout
-                  initial={{ opacity: 0, y: 20 }}
+                  initial={{ opacity: 0, y: 16 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ duration: 0.2, delay: i * 0.04 }}
+                  transition={{ duration: 0.18, delay: i * 0.03 }}
                   onClick={() => handleClick(tool)}
                   className={`relative group rounded-2xl border overflow-hidden transition-all duration-200 ${
                     isReady
@@ -258,8 +255,7 @@ export default function LabContent() {
                 </motion.div>
               )
             })}
-          </AnimatePresence>
-        </motion.div>
+        </div>
       </div>
 
       {/* ── 하단 로드맵 메시지 ── */}
