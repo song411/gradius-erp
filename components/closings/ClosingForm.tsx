@@ -11,16 +11,17 @@ import { Select } from '@/components/ui/select'
 import {
   Dialog, DialogHeader, DialogTitle, DialogContent, DialogFooter, DialogClose,
 } from '@/components/ui/dialog'
-import { Receipt, CheckCircle, Save } from 'lucide-react'
-import type { Settlement, Inquiry } from '@/lib/supabase/types'
+import { Receipt, CheckCircle, Save, MapPin, Building2 } from 'lucide-react'
+import type { Settlement, Inquiry, Customer } from '@/lib/supabase/types'
 
-type SettRow = Settlement & { inquiries?: Inquiry }
+type SettRow = Settlement & { inquiries?: Inquiry & { location?: string; customer_id?: string } }
 
 interface Props {
   open: boolean
   onClose: () => void
   onSaved: () => void
   editTarget: SettRow | null
+  customers?: Customer[]
 }
 
 const DEPOSIT_OPTIONS = ['미입금', '부분입금', '입금완료']
@@ -35,7 +36,7 @@ const INVOICE_REQUEST_PRESETS = [
   '현금영수증 요청',
 ]
 
-export default function ClosingForm({ open, onClose, onSaved, editTarget }: Props) {
+export default function ClosingForm({ open, onClose, onSaved, editTarget, customers = [] }: Props) {
   const [form, setForm]     = useState({
     biz_number:         '',
     rep_name:           '',
@@ -110,15 +111,27 @@ export default function ClosingForm({ open, onClose, onSaved, editTarget }: Prop
 
   if (!editTarget) return null
 
-  const inq = editTarget.inquiries
+  const inq           = editTarget.inquiries
   const invoiceAmt    = editTarget.invoice_amount || 0
   const supplyPrice   = editTarget.supply_price || 0
   const vat           = editTarget.vat || 0
   const receivedNum   = Number(form.received_amount) || 0
   const balance       = invoiceAmt - receivedNum
 
+  // 고객사 주소 자동 조회 (inquiry.customer_id 기준)
+  const linkedCustomer = customers.find(c => c.id === inq?.customer_id)
+  const bizAddress     = linkedCustomer?.address || null
+  const siteAddress    = inq?.location || editTarget.site_address || null
+
+  // 파견일자
+  const eventPeriod = inq?.event_start
+    ? inq.event_end && inq.event_end !== inq.event_start
+      ? `${inq.event_start.slice(0,10)} ~ ${inq.event_end.slice(0,10)}`
+      : inq.event_start.slice(0,10)
+    : null
+
   return (
-    <Dialog open={open} onClose={onClose} className="max-w-xl">
+    <Dialog open={open} onClose={onClose} className="max-w-2xl">
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
           <Receipt className="h-5 w-5 text-blue-600" />
@@ -135,18 +148,35 @@ export default function ClosingForm({ open, onClose, onSaved, editTarget }: Prop
           <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">{error}</div>
         )}
 
-        {/* 문의 / 견적 요약 */}
-        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs space-y-1 text-slate-600">
+        {/* 문의 / 행사 요약 */}
+        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs space-y-2 text-slate-600">
           <div className="font-semibold text-slate-800 text-sm">{inq?.event_name || editTarget.site_name}</div>
           <div className="flex flex-wrap gap-x-4 gap-y-0.5">
-            {inq?.event_start && <span>📅 {inq.event_start.slice(0, 10)}</span>}
-            {editTarget.dispatch_period && <span>🗓 {editTarget.dispatch_period}</span>}
-            {editTarget.manager && <span>👤 {editTarget.manager}</span>}
+            {eventPeriod && <span>📅 파견일자: <strong>{eventPeriod}</strong></span>}
+            {editTarget.manager && <span>👤 담당: {editTarget.manager}</span>}
           </div>
-          <div className="flex flex-wrap gap-x-4 gap-y-0.5 pt-1 border-t border-slate-200">
+          {/* 주소 정보 */}
+          {(siteAddress || bizAddress) && (
+            <div className="grid grid-cols-1 gap-1.5 pt-1.5 border-t border-slate-200">
+              {siteAddress && (
+                <div className="flex items-start gap-1.5">
+                  <MapPin className="h-3 w-3 text-blue-400 mt-0.5 shrink-0" />
+                  <span><span className="font-semibold text-blue-600">현장주소:</span> {siteAddress}</span>
+                </div>
+              )}
+              {bizAddress && (
+                <div className="flex items-start gap-1.5">
+                  <Building2 className="h-3 w-3 text-purple-400 mt-0.5 shrink-0" />
+                  <span><span className="font-semibold text-purple-600">사업장주소:</span> {bizAddress}</span>
+                </div>
+              )}
+            </div>
+          )}
+          <div className="flex flex-wrap gap-x-4 gap-y-0.5 pt-1.5 border-t border-slate-200">
             <span>공급가: <strong>{formatKRW(supplyPrice)}</strong></span>
             <span>VAT: <strong>{formatKRW(vat)}</strong></span>
             <span className="font-bold text-blue-700">청구: {formatKRW(invoiceAmt)}</span>
+            {balance > 0 && <span className="font-bold text-red-600">잔액: {formatKRW(balance)}</span>}
           </div>
         </div>
 
