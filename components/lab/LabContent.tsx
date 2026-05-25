@@ -6,6 +6,8 @@ import { X } from 'lucide-react'
 import ContactsModal from './tools/ContactsModal'
 import MbtiModal from './tools/MbtiModal'
 import TaxCalcModal from './tools/TaxCalcModal'
+import TarotModal from './tools/TarotModal'
+import QuoteModal from './tools/QuoteModal'
 
 // ───────── 도구 정의 ─────────
 type ToolStatus = 'ready' | 'beta' | 'soon'
@@ -87,6 +89,25 @@ const TOOLS: Tool[] = [
     status: 'soon',
     gradient: 'from-amber-500 to-orange-600',
   },
+  // 재미 & 동기부여
+  {
+    id: 'tarot',
+    emoji: '🎴',
+    name: '오늘의 타로',
+    desc: '메이저 아르카나 22장 중 한 장을 뽑아 오늘의 업무 메시지를 확인하세요',
+    category: '재미 & 동기부여',
+    status: 'ready',
+    gradient: 'from-indigo-600 to-purple-800',
+  },
+  {
+    id: 'quote',
+    emoji: '💬',
+    name: '오늘의 한마디',
+    desc: '리더십·팀워크·현장 격언 40개 큐레이션 — 랜덤 뽑기로 오늘의 명언을',
+    category: '재미 & 동기부여',
+    status: 'ready',
+    gradient: 'from-slate-600 to-gray-800',
+  },
   // AI & 데이터
   {
     id: 'ai',
@@ -108,7 +129,7 @@ const TOOLS: Tool[] = [
   },
 ]
 
-const CATEGORIES = ['전체', '경비업무', '팀 & 크루', '계산 도구', 'AI & 데이터']
+const CATEGORIES = ['전체', '경비업무', '팀 & 크루', '계산 도구', '재미 & 동기부여', 'AI & 데이터']
 const STATUS_META: Record<ToolStatus, { label: string; cls: string }> = {
   ready: { label: '사용 가능',    cls: 'bg-green-100 text-green-700 border-green-200' },
   beta:  { label: 'BETA',        cls: 'bg-amber-100 text-amber-700 border-amber-200' },
@@ -131,6 +152,8 @@ function ToolModal({ toolId, onClose }: { toolId: string; onClose: () => void })
           {toolId === 'contacts'  && <ContactsModal onClose={onClose} />}
           {toolId === 'mbti'      && <MbtiModal     onClose={onClose} />}
           {toolId === 'taxcalc'   && <TaxCalcModal  onClose={onClose} />}
+          {toolId === 'tarot'     && <TarotModal    onClose={onClose} />}
+          {toolId === 'quote'     && <QuoteModal    onClose={onClose} />}
         </motion.div>
       </div>
     </AnimatePresence>
