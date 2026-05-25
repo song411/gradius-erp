@@ -132,8 +132,12 @@ export async function POST(req: NextRequest) {
 ${businessContext}`
 
   try {
+    // systemInstruction은 getGenerativeModel()에 전달해야 함 (startChat 아님)
     const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-1.5-flash',
+      systemInstruction: systemPrompt,
+    })
 
     // 대화 히스토리를 Gemini 형식으로 변환 (마지막 메시지 제외 → history)
     // Gemini 규칙: history는 반드시 'user' 메시지로 시작해야 함
@@ -147,10 +151,7 @@ ${businessContext}`
 
     const lastMessage = messages[messages.length - 1].content
 
-    const chat = model.startChat({
-      history,
-      systemInstruction: systemPrompt,
-    })
+    const chat = model.startChat({ history })
 
     const result = await chat.sendMessage(lastMessage)
     const text = result.response.text()
