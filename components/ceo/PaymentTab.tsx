@@ -156,6 +156,7 @@ export default function PaymentTab({ data }: { data: CeoData }) {
 
       const rows = readyPayouts.map(p => ({
         '이름':     p.staff_name || '',
+        '품목':     (p.assignment_id ? asgMap.get(p.assignment_id)?.job_type : null) || '',
         '은행':     p.bank_name || '',
         '계좌번호': p.account_number || '',
         '이체금액': p.final_pay,
@@ -165,7 +166,7 @@ export default function PaymentTab({ data }: { data: CeoData }) {
       const sheetName = (g.inquiry?.event_name || '미정').slice(0, 31) // Excel 시트명 최대 31자
       const ws = XLSX.utils.json_to_sheet(rows)
       // 열 너비 설정
-      ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 20 }, { wch: 12 }, { wch: 30 }]
+      ws['!cols'] = [{ wch: 12 }, { wch: 14 }, { wch: 10 }, { wch: 20 }, { wch: 12 }, { wch: 30 }]
       XLSX.utils.book_append_sheet(wb, ws, sheetName)
       totalSheets++
     }
@@ -185,6 +186,7 @@ export default function PaymentTab({ data }: { data: CeoData }) {
 
     const rows = readyPayouts.map(p => ({
       '이름':     p.staff_name || '',
+      '품목':     (p.assignment_id ? asgMap.get(p.assignment_id)?.job_type : null) || '',
       '은행':     p.bank_name || '',
       '계좌번호': p.account_number || '',
       '이체금액': p.final_pay,
@@ -342,6 +344,15 @@ function GroupRow({ g, asgMap, openGroups, toggleGroup, processing, handleMarkPa
   const hqCount   = g.payouts.filter(p => isHQByMap(p, asgMap)).length
   const paidCount = g.payouts.filter(p => !isHQByMap(p, asgMap) && (p.status === '지급완료' || p.status === '완료')).length
 
+  // 품목 목록 (assignments에서 job_type 조회)
+  const jobTypes = [...new Set(
+    g.payouts
+      .map(p => p.assignment_id ? asgMap.get(p.assignment_id)?.job_type : null)
+      .filter(Boolean)
+  )] as string[]
+
+  const hasExcel = !done && g.payouts.some(p => !isHQByMap(p, asgMap) && (p.status === '검토완료' || p.status === '확인완료'))
+
   return (
     <div className={`bg-white rounded-xl border overflow-hidden ${urgentBorder}`}>
       <div className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50" onClick={() => toggleGroup(g.key)}>
@@ -360,29 +371,37 @@ function GroupRow({ g, asgMap, openGroups, toggleGroup, processing, handleMarkPa
             {!done && <DDayBadge dday={g.dday} />}
             {done && <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold">✓ 완료</span>}
           </div>
-          <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-400">
-            {g.inquiry?.event_start && <span>행사: {g.inquiry.event_start.slice(0, 10)}</span>}
-            {g.inquiry?.event_end   && <span>~{g.inquiry.event_end.slice(0, 10)}</span>}
+          <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-400 flex-wrap">
+            {g.inquiry?.event_start && (
+              <span>📅 {g.inquiry.event_start.slice(0,10)}{g.inquiry.event_end ? ` ~ ${g.inquiry.event_end.slice(0,10)}` : ''}</span>
+            )}
             {!done && g.dday !== null && g.dday >= 0 && g.inquiry?.event_end && (
               <span className="text-orange-500 font-medium">
-                마감: {new Date(new Date(g.inquiry.event_end).getTime() + 14 * 86400000).toLocaleDateString('ko-KR')}
+                이체마감: {new Date(new Date(g.inquiry.event_end).getTime() + 14 * 86400000).toLocaleDateString('ko-KR')}
               </span>
             )}
           </div>
+          {jobTypes.length > 0 && (
+            <div className="flex gap-1 mt-1 flex-wrap">
+              {jobTypes.map(jt => (
+                <span key={jt} className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-medium">{jt}</span>
+              ))}
+            </div>
+          )}
         </div>
-        <div className="text-right shrink-0 space-y-0.5">
+        <div className="text-right shrink-0 space-y-1">
           <p className="text-sm font-bold text-gray-800">{formatKRW(g.totalFinalPay)}</p>
           <p className="text-[10px] text-gray-400">
             {hqCount > 0 && <span className="text-slate-400">[본사]{hqCount} </span>}
             {!done && <span>대기 {g.pendingCount}명 · </span>}
             완료 {paidCount}명
           </p>
-          {!done && g.payouts.some(p => !isHQByMap(p, asgMap) && (p.status === '검토완료' || p.status === '확인완료')) && (
+          {hasExcel && (
             <button
               onClick={e => { e.stopPropagation(); handleGroupExcel(g) }}
-              className="text-[10px] text-green-600 hover:text-green-700 flex items-center gap-0.5 ml-auto"
+              className="flex items-center gap-1 ml-auto text-xs font-semibold text-white bg-green-600 hover:bg-green-700 px-2.5 py-1 rounded-lg transition-colors"
             >
-              <FileSpreadsheet className="h-3 w-3" />이체명단
+              <FileSpreadsheet className="h-3.5 w-3.5" />이체명단
             </button>
           )}
         </div>
@@ -394,6 +413,7 @@ function GroupRow({ g, asgMap, openGroups, toggleGroup, processing, handleMarkPa
             <thead>
               <tr className="bg-gray-50">
                 <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500">이름</th>
+                <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500">품목</th>
                 <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500">은행</th>
                 <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500">계좌번호</th>
                 <th className="text-right px-3 py-2 text-xs font-semibold text-gray-500">총지급</th>
@@ -405,12 +425,14 @@ function GroupRow({ g, asgMap, openGroups, toggleGroup, processing, handleMarkPa
             <tbody className="divide-y divide-gray-100">
               {g.payouts.map(p => {
                 const hq = isHQByMap(p, asgMap)
+                const asg = p.assignment_id ? asgMap.get(p.assignment_id) : null
                 return (
                   <tr key={p.id} className={`hover:bg-gray-50 ${hq ? 'opacity-60' : ''}`}>
                     <td className="px-4 py-2.5 font-medium text-gray-800">
                       {p.staff_name || '-'}
                       {hq && <span className="ml-1 text-[10px] text-slate-400 font-normal">[본사]</span>}
                     </td>
+                    <td className="px-3 py-2.5 text-xs text-gray-500">{asg?.job_type || '-'}</td>
                     <td className="px-3 py-2.5 text-gray-500 text-xs">{hq ? '-' : (p.bank_name || '-')}</td>
                     <td className="px-3 py-2.5 text-gray-500 text-xs font-mono">{hq ? '-' : (p.account_number || '-')}</td>
                     <td className="px-3 py-2.5 text-right text-gray-500">{hq ? '-' : formatKRW(p.subtotal || p.final_pay)}</td>

@@ -64,7 +64,12 @@ export default function CeoContent() {
       ).length
     }
     if (id === 'payment') {
-      return data.payouts.filter(p => p.status === '검토완료' || p.status === '확인완료').length
+      // 본사 인원 제외, 미지급(대기+검토완료) 건수
+      const HQ = new Set(['최규성', '송무재', '여지은', '김영찬'])
+      return data.payouts.filter(p =>
+        !(p.staff_name && HQ.has(p.staff_name)) &&
+        !['지급완료', '완료'].includes(p.status)
+      ).length
     }
     if (id === 'deposit') {
       return data.settlements.filter(s => s.deposit_status === '미입금').length
