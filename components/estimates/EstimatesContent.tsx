@@ -212,6 +212,26 @@ export default function EstimatesContent() {
     }
   }
 
+  // 견적 발송 상태 토글
+  async function handleToggleSent(est: EstimateRow) {
+    const isSent = est.send_status === '발송완료'
+    const nextStatus = isSent ? '미발송' : '발송완료'
+    const msg = isSent
+      ? `"${est.version_label || 'A안'}" 발송 상태를 미발송으로 되돌리겠습니까?`
+      : `"${est.version_label || 'A안'}" 견적을 발송완료로 표시하겠습니까?`
+    if (!confirm(msg)) return
+    try {
+      await db.update('estimates', est.id, {
+        send_status: nextStatus,
+        send_at: nextStatus === '발송완료' ? new Date().toISOString() : null,
+      })
+      toast.success(nextStatus === '발송완료' ? '발송완료로 표시됐습니다.' : '미발송으로 되돌렸습니다.')
+      load()
+    } catch {
+      toast.error('상태 변경 실패')
+    }
+  }
+
   // 저장 완료 후 → 진행 중 탭으로 이동
   function handleSaved() {
     load()
@@ -385,6 +405,7 @@ export default function EstimatesContent() {
                   onUnmarkFinal={handleUnmarkFinal}
                   onAddVersion={openAddVersion}
                   onCreate={openCreate}
+                  onToggleSent={handleToggleSent}
                 />
               )}
             </>
@@ -416,7 +437,7 @@ export default function EstimatesContent() {
 // ── 견적 그룹 테이블 (문의별 그룹핑) ─────────────────────
 function EstimateGroupTable({
   estimates, allEstimates,
-  onPreview, onEdit, onDelete, onMarkFinal, onUnmarkFinal, onAddVersion, onCreate,
+  onPreview, onEdit, onDelete, onMarkFinal, onUnmarkFinal, onAddVersion, onCreate, onToggleSent,
 }: {
   estimates: EstimateRow[]
   allEstimates: EstimateRow[]
@@ -427,6 +448,7 @@ function EstimateGroupTable({
   onUnmarkFinal: (est: EstimateRow) => void
   onAddVersion: (inq: Inquiry) => void
   onCreate: () => void
+  onToggleSent: (est: EstimateRow) => void
 }) {
   if (estimates.length === 0) {
     return (
@@ -556,9 +578,18 @@ function EstimateGroupTable({
                             {rate}%
                           </span>
                         </td>
-                        {/* 발송 상태 */}
-                        <td className="px-2 py-3 w-24">
-                          <SendBadge status={est.send_status} method={est.send_method} />
+                        {/* 발송 상태 — 클릭하면 토글 */}
+                        <td className="px-2 py-3 w-28">
+                          <button
+                            onClick={() => onToggleSent(est)}
+                            title={est.send_status === '발송완료' ? '클릭하면 미발송으로 되돌리기' : '클릭하면 발송완료로 표시'}
+                            className="group flex items-center gap-1"
+                          >
+                            <SendBadge status={est.send_status} method={est.send_method} />
+                            <span className="text-[10px] text-gray-300 group-hover:text-blue-400 transition-colors opacity-0 group-hover:opacity-100">
+                              {est.send_status === '발송완료' ? '↩' : '✓'}
+                            </span>
+                          </button>
                         </td>
                         {/* 작성일 */}
                         <td className="px-2 py-3 w-24 text-xs text-gray-400">{est.created_at?.slice(0, 10)}</td>
