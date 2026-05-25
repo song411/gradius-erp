@@ -8,6 +8,7 @@ import TaxCalcModal from './tools/TaxCalcModal'
 import TarotModal from './tools/TarotModal'
 import QuoteModal from './tools/QuoteModal'
 import AiModal from './tools/AiModal'
+import GuideModal from './tools/GuideModal'
 
 // ───────── 도구 정의 ─────────
 type ToolStatus = 'ready' | 'beta' | 'soon'
@@ -23,6 +24,16 @@ interface Tool {
 }
 
 const TOOLS: Tool[] = [
+  // 가이드 & 도구
+  {
+    id: 'guide',
+    emoji: '📚',
+    name: 'ERP 가이드북',
+    desc: '업무 플로우 · 메뉴별 사용법 · FAQ · 버전별 업데이트 노트',
+    category: '가이드 & 도구',
+    status: 'ready',
+    gradient: 'from-amber-500 to-orange-600',
+  },
   // 경비업무
   {
     id: 'contacts',
@@ -129,7 +140,7 @@ const TOOLS: Tool[] = [
   },
 ]
 
-const CATEGORIES = ['전체', '경비업무', '팀 & 크루', '계산 도구', '재미 & 동기부여', 'AI & 데이터']
+const CATEGORIES = ['전체', '가이드 & 도구', '경비업무', '팀 & 크루', '계산 도구', '재미 & 동기부여', 'AI & 데이터']
 const STATUS_META: Record<ToolStatus, { label: string; cls: string }> = {
   ready: { label: '사용 가능',    cls: 'bg-green-100 text-green-700 border-green-200' },
   beta:  { label: 'BETA',        cls: 'bg-amber-100 text-amber-700 border-amber-200' },
@@ -139,7 +150,8 @@ const STATUS_META: Record<ToolStatus, { label: string; cls: string }> = {
 // AI 모달은 전체화면 오버레이로 직접 렌더 (다른 모달보다 크므로 분리)
 function ToolModal({ toolId, onClose }: { toolId: string; onClose: () => void }) {
   // AI 모달은 자체 오버레이를 포함하므로 별도 처리
-  if (toolId === 'ai') return <AiModal onClose={onClose} />
+  if (toolId === 'ai')    return <AiModal    onClose={onClose} />
+  if (toolId === 'guide') return <GuideModal onClose={onClose} />
 
   return (
     <AnimatePresence>
