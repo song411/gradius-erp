@@ -2,11 +2,14 @@
 
 import { useState, useMemo } from 'react'
 import { formatKRW } from '@/lib/utils'
-import { ChevronDown, ChevronRight, TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import { ChevronDown, ChevronRight, TrendingUp, TrendingDown, Minus, Clock, Users } from 'lucide-react'
 import type { CeoData } from './CeoContent'
 import type { Inquiry, Settlement, Payout } from '@/lib/supabase/types'
 
-// 수익률 색상
+// 본사 인원 목록
+const HQ_NAMES = new Set(['최규성', '송무재', '여지은', '김영찬'])
+
+// 수익률 태그
 function ProfitRateTag({ rate }: { rate: number }) {
   const color =
     rate >= 30 ? 'bg-emerald-100 text-emerald-700' :
@@ -22,18 +25,41 @@ function ProfitRateTag({ rate }: { rate: number }) {
   )
 }
 
+// 본사 인원 전용 태그 (수익률 100%)
+function HqRateTag() {
+  return (
+    <span className="inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 whitespace-nowrap">
+      <Users className="h-3 w-3" />본사 100%
+    </span>
+  )
+}
+
+// 지급 대기 태그
+function PendingTag() {
+  return (
+    <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 whitespace-nowrap">
+      <Clock className="h-3 w-3" />지급 후 표시
+    </span>
+  )
+}
+
+// 지급 케이스 구분
+type PayoutCase = 'normal' | 'hq_only' | 'pending' | 'none'
+
 interface ProjectRow {
   inquiry:     Inquiry
   settlement:  Settlement | undefined
-  payouts:     Payout[]
+  payouts:     Payout[]        // 지급완료 건만
   supplyPrice: number
   totalPayout: number
   profit:      number
   profitRate:  number
+  payoutCase:  PayoutCase      // 케이스 구분
+  hqNames:     string[]        // 본사 인원 이름 목록
 }
 
 export default function ProfitTab({ data }: { data: CeoData }) {
-  const { inquiries, settlements, payouts } = data
+  const { inquiries, settlements, payouts, assignments } = data
   const [openRows, setOpenRows] = useState<Set<string>>(new Set())
   const [sortKey, setSortKey]   = useState<'profit' | 'rate' | 'supply'>('profit')
 
@@ -42,14 +68,34 @@ export default function ProfitTab({ data }: { data: CeoData }) {
     return inquiries
       .filter(q => !['접수', '견적', '미체결', '보류', '취소'].includes(q.status))
       .map(q => {
-        const sett      = settlements.find(s => s.inquiry_id === q.id)
-        const inqPayouts = payouts.filter(p => p.inquiry_id === q.id && (p.status === '지급완료' || p.status === '완료'))
+        const sett         = settlements.find(s => s.inquiry_id === q.id)
+        const donePaouts   = payouts.filter(p => p.inquiry_id === q.id && (p.status === '지급완료' || p.status === '완료'))
+        const allPayouts   = payouts.filter(p => p.inquiry_id === q.id)
+        const inqAssigns   = assignments.filter(a => a.inquiry_id === q.id)
+
         const supplyPrice = sett?.supply_price || 0
-        const totalPayout = inqPayouts.reduce((s, p) => s + p.final_pay, 0)
+        const totalPayout = donePaouts.reduce((s, p) => s + p.final_pay, 0)
         const profit      = supplyPrice - totalPayout
         const profitRate  = supplyPrice > 0 ? Math.round((profit / supplyPrice) * 100) : 0
 
-        return { inquiry: q, settlement: sett, payouts: inqPayouts, supplyPrice, totalPayout, profit, profitRate }
+        // 본사 인원만 배정된 경우 판별
+        const hqNames     = inqAssigns.filter(a => a.staff_name && HQ_NAMES.has(a.staff_name)).map(a => a.staff_name!)
+        const nonHqAssigns = inqAssigns.filter(a => !HQ_NAMES.has(a.staff_name || ''))
+        const isHqOnly    = inqAssigns.length > 0 && nonHqAssigns.length === 0
+
+        // 케이스 결정
+        let payoutCase: PayoutCase = 'none'
+        if (totalPayout > 0) {
+          payoutCase = 'normal'
+        } else if (isHqOnly) {
+          payoutCase = 'hq_only'               // 본사 인원만 → 지급비 없음, 수익률 100%
+        } else if (allPayouts.length > 0 || nonHqAssigns.length > 0) {
+          payoutCase = 'pending'               // 배정/지급 있지만 아직 미지급완료
+        } else {
+          payoutCase = 'none'                  // 배정 자체 없음
+        }
+
+        return { inquiry: q, settlement: sett, payouts: donePaouts, supplyPrice, totalPayout, profit, profitRate, payoutCase, hqNames }
       })
       .filter(r => r.supplyPrice > 0)
       .sort((a, b) => {
@@ -58,7 +104,7 @@ export default function ProfitTab({ data }: { data: CeoData }) {
         if (sortKey === 'supply')  return b.supplyPrice - a.supplyPrice
         return 0
       })
-  }, [inquiries, settlements, payouts, sortKey])
+  }, [inquiries, settlements, payouts, assignments, sortKey])
 
   // 총계
   const totalSupply = projects.reduce((s, r) => s + r.supplyPrice, 0)
@@ -130,14 +176,14 @@ export default function ProfitTab({ data }: { data: CeoData }) {
                 <>
                   <tr
                     key={r.inquiry.id}
-                    className="hover:bg-gray-50 cursor-pointer"
-                    onClick={() => r.payouts.length > 0 && toggleRow(r.inquiry.id)}
+                    className={`transition-colors ${r.payoutCase !== 'none' ? 'hover:bg-gray-50 cursor-pointer' : ''}`}
+                    onClick={() => r.payoutCase !== 'none' && toggleRow(r.inquiry.id)}
                   >
                     <td className="px-3 py-3 text-gray-400">
-                      {r.payouts.length > 0 && (
+                      {r.payoutCase !== 'none' && (
                         isOpen
                           ? <ChevronDown className="h-3.5 w-3.5" />
-                          : <ChevronRight className="h-3.5 w-3.5" />
+                          : <ChevronRight className="h-3.5 w-3.5 opacity-40" />
                       )}
                     </td>
                     <td className="px-3 py-3 font-medium text-gray-800 max-w-[160px]">
@@ -149,13 +195,21 @@ export default function ProfitTab({ data }: { data: CeoData }) {
                     </td>
                     <td className="px-3 py-3 text-right font-semibold">{formatKRW(r.supplyPrice)}</td>
                     <td className="px-3 py-3 text-right text-orange-600">
-                      {r.totalPayout > 0 ? formatKRW(r.totalPayout) : <span className="text-gray-300 text-xs">미입력</span>}
+                      {r.payoutCase === 'normal'  && formatKRW(r.totalPayout)}
+                      {r.payoutCase === 'hq_only' && <span className="text-slate-400 text-xs">₩0 (본사)</span>}
+                      {r.payoutCase === 'pending' && <span className="text-amber-500 text-xs flex items-center justify-end gap-1"><Clock className="h-3 w-3" />지급 전</span>}
+                      {r.payoutCase === 'none'    && <span className="text-gray-300 text-xs">배정 없음</span>}
                     </td>
                     <td className={`px-3 py-3 text-right font-bold ${r.profit >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
-                      {r.totalPayout > 0 ? formatKRW(r.profit) : '-'}
+                      {r.payoutCase === 'normal'  && formatKRW(r.profit)}
+                      {r.payoutCase === 'hq_only' && <span className="text-emerald-600 font-bold">{formatKRW(r.supplyPrice)}</span>}
+                      {(r.payoutCase === 'pending' || r.payoutCase === 'none') && <span className="text-gray-300">-</span>}
                     </td>
                     <td className="px-3 py-3 text-center">
-                      {r.totalPayout > 0 ? <ProfitRateTag rate={r.profitRate} /> : <span className="text-gray-300 text-xs">-</span>}
+                      {r.payoutCase === 'normal'  && <ProfitRateTag rate={r.profitRate} />}
+                      {r.payoutCase === 'hq_only' && <HqRateTag />}
+                      {r.payoutCase === 'pending' && <PendingTag />}
+                      {r.payoutCase === 'none'    && <span className="text-gray-300 text-xs">-</span>}
                     </td>
                     <td className="px-3 py-3 text-center">
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
@@ -167,24 +221,46 @@ export default function ProfitTab({ data }: { data: CeoData }) {
                     </td>
                   </tr>
 
-                  {/* 드릴다운: 지급 내역 */}
-                  {isOpen && r.payouts.length > 0 && (
+                  {/* 드릴다운: 지급 내역 or 케이스 설명 */}
+                  {isOpen && (
                     <tr key={`${r.inquiry.id}-detail`}>
-                      <td colSpan={9} className="bg-slate-50 px-8 py-3">
-                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">지급 내역</p>
-                        <div className="flex flex-wrap gap-2">
-                          {r.payouts.map(p => (
-                            <div key={p.id} className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-xs">
-                              <p className="font-semibold text-gray-800">{p.staff_name || '이름 없음'}</p>
-                              <p className="text-gray-500">{p.bank_name} {p.account_number}</p>
-                              <p className="text-blue-700 font-bold mt-0.5">{formatKRW(p.final_pay)}</p>
+                      <td colSpan={9} className="bg-slate-50 px-8 py-4 border-t border-dashed border-slate-200">
+                        {r.payoutCase === 'normal' && (
+                          <>
+                            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">지급 내역</p>
+                            <div className="flex flex-wrap gap-2">
+                              {r.payouts.map(p => (
+                                <div key={p.id} className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-xs">
+                                  <p className="font-semibold text-gray-800">{p.staff_name || '이름 없음'}</p>
+                                  <p className="text-gray-500">{p.bank_name} {p.account_number}</p>
+                                  <p className="text-blue-700 font-bold mt-0.5">{formatKRW(p.final_pay)}</p>
+                                </div>
+                              ))}
+                              <div className="bg-slate-100 border border-slate-200 rounded-lg px-3 py-2 text-xs flex flex-col justify-center">
+                                <p className="text-gray-500">합계 지급</p>
+                                <p className="font-bold text-gray-800">{formatKRW(r.totalPayout)}</p>
+                              </div>
                             </div>
-                          ))}
-                          <div className="bg-slate-100 border border-slate-200 rounded-lg px-3 py-2 text-xs flex flex-col justify-center">
-                            <p className="text-gray-500">합계 지급</p>
-                            <p className="font-bold text-gray-800">{formatKRW(r.totalPayout)}</p>
+                          </>
+                        )}
+                        {r.payoutCase === 'hq_only' && (
+                          <div className="flex items-center gap-3">
+                            <div className="bg-slate-100 rounded-lg px-3 py-2 flex items-center gap-2">
+                              <Users className="h-4 w-4 text-slate-500" />
+                              <div>
+                                <p className="text-[10px] text-slate-500 font-semibold">본사 인원 투입</p>
+                                <p className="text-xs font-bold text-slate-700">{r.hqNames.join(', ')}</p>
+                              </div>
+                            </div>
+                            <p className="text-xs text-emerald-600 font-semibold">지급비 없음 → 수익 = 공급가액 전액</p>
                           </div>
-                        </div>
+                        )}
+                        {r.payoutCase === 'pending' && (
+                          <div className="flex items-center gap-2 text-amber-600">
+                            <Clock className="h-4 w-4" />
+                            <p className="text-xs font-semibold">인력비 지급관리에서 검토완료 후 지급완료 처리 시 수익이 표시됩니다.</p>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   )}
