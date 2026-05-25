@@ -43,7 +43,7 @@ export default function ClosingForm({ open, onClose, onSaved, editTarget }: Prop
     email:              '',
     contact_phone:      '',
     item_description:   '',
-    biz_address:        '',
+    site_address:       '',   // 사업장주소 (이관 데이터는 site_address 컬럼에 저장됨)
     invoice_request:    '',
     received_amount:    '',
     deposit_status:     '미입금',
@@ -63,7 +63,7 @@ export default function ClosingForm({ open, onClose, onSaved, editTarget }: Prop
       email:              editTarget.email || '',
       contact_phone:      editTarget.contact_phone || '',
       item_description:   editTarget.item_description || '',
-      biz_address:        (editTarget as Settlement & { biz_address?: string }).biz_address || '',
+      site_address:       editTarget.site_address || '',
       invoice_request:    editTarget.invoice_request || '',
       received_amount:    String(editTarget.received_amount || ''),
       deposit_status:     editTarget.deposit_status || '미입금',
@@ -85,6 +85,7 @@ export default function ClosingForm({ open, onClose, onSaved, editTarget }: Prop
         email:              form.email || null,
         contact_phone:      form.contact_phone || null,
         item_description:   form.item_description || null,
+        site_address:       form.site_address || null,
         invoice_request:    form.invoice_request || null,
         received_amount:    Number(form.received_amount) || 0,
         deposit_status:     form.deposit_status,
@@ -186,7 +187,7 @@ export default function ClosingForm({ open, onClose, onSaved, editTarget }: Prop
             </div>
             <div className="col-span-2">
               <label className="label-xs">사업장주소</label>
-              <Input value={form.biz_address} onChange={e => setForm(f => ({ ...f, biz_address: e.target.value }))} placeholder="서울특별시 중구 ..." />
+              <Input value={form.site_address} onChange={e => setForm(f => ({ ...f, site_address: e.target.value }))} placeholder="서울특별시 중구 ..." />
             </div>
           </div>
         </section>
