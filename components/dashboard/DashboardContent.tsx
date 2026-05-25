@@ -91,7 +91,16 @@ export default function DashboardContent() {
   const thisMonth   = toYM(todayStr)
   const in7Days     = new Date(now); in7Days.setDate(in7Days.getDate() + 7)
 
+  // inquiry_id → 마지막 settlement (단일 조회용)
   const settlementMap  = new Map(settlements.map(s => [s.inquiry_id, s]))
+  // inquiry_id → 해당 inquiry의 모든 settlement 합산 (매출 계산용)
+  const settlementsByInquiry = settlements.reduce<Map<string, Settlement[]>>((m, s) => {
+    if (s.inquiry_id) {
+      if (!m.has(s.inquiry_id)) m.set(s.inquiry_id, [])
+      m.get(s.inquiry_id)!.push(s)
+    }
+    return m
+  }, new Map())
   const assignCountMap = assignments.reduce<Map<string, number>>((m, a) => {
     if (a.inquiry_id) m.set(a.inquiry_id, (m.get(a.inquiry_id) || 0) + 1)
     return m
@@ -114,10 +123,11 @@ export default function DashboardContent() {
   // payouts 테이블에 실제 데이터가 있는지 여부
   const hasRealPayoutData = payouts.length > 0
 
-  // 이번달 체결 매출 (event_start 기준)
-  const thisMonthSetts = inquiries
-    .filter(i => i.event_start && toYM(i.event_start) === thisMonth)
-    .map(i => settlementMap.get(i.id)).filter(Boolean) as Settlement[]
+  // 이번달 체결 매출 (event_start 기준, 전체 settlement 합산)
+  const thisMonthInqIds = new Set(
+    inquiries.filter(i => i.event_start && toYM(i.event_start) === thisMonth).map(i => i.id)
+  )
+  const thisMonthSetts = settlements.filter(s => s.inquiry_id && thisMonthInqIds.has(s.inquiry_id))
   const monthlyRevenue = thisMonthSetts.reduce((s, r) => s + (r.supply_price || 0), 0)
   // 이번달 총청구액 (VAT 포함)
   const monthlyInvoice = thisMonthSetts.reduce((s, r) => s + (r.invoice_amount || r.supply_price + r.vat || 0), 0)
@@ -136,7 +146,8 @@ export default function DashboardContent() {
   // ── 2026년 연간 KPI (event_start 기준)
   const YEAR = String(now.getFullYear())
   const inqsYear  = inquiries.filter(i => i.event_start?.startsWith(YEAR))
-  const settsYear  = inqsYear.map(i => settlementMap.get(i.id)).filter(Boolean) as Settlement[]
+  const yearInqIds = new Set(inqsYear.map(i => i.id))
+  const settsYear  = settlements.filter(s => s.inquiry_id && yearInqIds.has(s.inquiry_id))
   const rev2026    = settsYear.reduce((s, r) => s + (r.supply_price || 0), 0)
   // 연간 지급액: payouts 우선, 없으면 settlement.payout_amount
   const payout2026 = settsYear.reduce((s, r) => s + getActualPayout(r.inquiry_id, r.payout_amount), 0)
@@ -173,9 +184,10 @@ export default function DashboardContent() {
     const d   = new Date(now.getFullYear(), now.getMonth() - 11 + i, 1)
     const key = toYM(d.toISOString())
     const label = `${d.getMonth() + 1}월`
-    const sInMonth = inquiries
-      .filter(inq => inq.event_start && toYM(inq.event_start) === key)
-      .map(inq => settlementMap.get(inq.id)).filter(Boolean) as Settlement[]
+    const monthInqIds = new Set(
+      inquiries.filter(inq => inq.event_start && toYM(inq.event_start) === key).map(inq => inq.id)
+    )
+    const sInMonth = settlements.filter(s => s.inquiry_id && monthInqIds.has(s.inquiry_id))
     const revenue   = sInMonth.reduce((s, r) => s + (r.supply_price || 0), 0)
     const payoutAmt = sInMonth.reduce((s, r) => s + getActualPayout(r.inquiry_id, r.payout_amount), 0)
     const profit    = revenue - payoutAmt
