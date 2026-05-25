@@ -951,7 +951,7 @@ function ProfitReport({
   supplyPrice, costPrice, finalTotal, extraSubtotal,
   memo, onMemoChange, companyName, eventName, eventPeriod,
 }: {
-  reportRef?: React.RefObject<HTMLDivElement>
+  reportRef?: React.RefObject<HTMLDivElement | null>
   staffItems: ItemRow2[]
   staffBilling: number; staffCost: number; staffProfit: number; staffRate: number
   supplyPrice: number; costPrice: number; finalTotal: number; extraSubtotal: number

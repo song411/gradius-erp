@@ -68,7 +68,7 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
       const h2c = (await import('html2canvas')).default
       const canvas = await h2c(docRef.current, { scale: 2, useCORS: true, backgroundColor: '#fff', logging: false })
       const link = document.createElement('a')
-      link.download = `견적서_${estimate.company_name || ''}_${estimate.estimate_code || ''}.png`
+      link.download = `견적서_${estimate?.company_name || ''}_${estimate?.estimate_code || ''}.png`
       link.href = canvas.toDataURL('image/png')
       link.click()
     } finally { setExporting(false) }

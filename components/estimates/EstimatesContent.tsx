@@ -87,7 +87,7 @@ export default function EstimatesContent() {
 
     // 각 견적에 해당하는 품목 attach
     // → inquiry_id 기준으로 estimate_items 조회 (마이그레이션 데이터 호환)
-    const inqIds = [...new Set(ests.map(e => e.inquiry_id).filter(Boolean))]
+    const inqIds = [...new Set(ests.map(e => e.inquiry_id).filter((id): id is string => !!id))]
     let itemsByInqId: Record<string, EstimateItem[]> = {}
     if (inqIds.length > 0) {
       const items = await db.list<EstimateItem>('estimate_items', {

@@ -115,7 +115,7 @@ export default function PayoutsContent() {
 
   const filtered = grouped.filter(({ inq }) => {
     if (!search) return true
-    return (inq.client_name || '').includes(search) || (inq.event_name || '').includes(search)
+    return (inq.company_name || '').includes(search) || (inq.event_name || '').includes(search)
   })
 
   const selectedGroup   = grouped.find(g => g.inq.id === selectedInquiryId)
@@ -264,7 +264,7 @@ export default function PayoutsContent() {
                 <div className="flex justify-between items-start">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-800 truncate">{inq.event_name || '(행사명 없음)'}</p>
-                    <p className="text-xs text-gray-400 truncate">{inq.client_name}</p>
+                    <p className="text-xs text-gray-400 truncate">{inq.company_name}</p>
                     <p className="text-xs text-gray-400">{inq.event_start ? formatDate(inq.event_start) : ''}</p>
                   </div>
                   <ChevronRight className="h-4 w-4 text-gray-300 shrink-0 mt-0.5" />
@@ -316,7 +316,7 @@ export default function PayoutsContent() {
             <div>
               <h2 className="text-base font-bold text-gray-800">{selectedInquiry.event_name || '(행사명 없음)'}</h2>
               <p className="text-xs text-gray-500">
-                {selectedInquiry.client_name} · {selectedInquiry.event_start ? formatDate(selectedInquiry.event_start) : ''} · {selectedInquiry.event_location || ''}
+                {selectedInquiry.company_name} · {selectedInquiry.event_start ? formatDate(selectedInquiry.event_start) : ''} · {selectedInquiry.location || ''}
               </p>
             </div>
             <div className="flex gap-2 flex-wrap justify-end">
