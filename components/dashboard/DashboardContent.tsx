@@ -242,7 +242,6 @@ export default function DashboardContent() {
           payout2026={payout2026}
           profit2026={profit2026}
           contractRate={contractRate}
-          monthlyPayout={monthlyPayout}
           hasRealPayoutData={hasRealPayoutData}
           settsYearCount={settsYear.length}
         />
