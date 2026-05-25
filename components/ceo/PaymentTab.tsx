@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react'
 import { db } from '@/lib/supabase/api'
 import { formatKRW } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { Download, ChevronDown, ChevronRight, Clock, AlertTriangle, CheckCircle2, Building } from 'lucide-react'
+import { Download, ChevronDown, ChevronRight, Clock, AlertTriangle, CheckCircle2, X, FileSpreadsheet } from 'lucide-react'
 import type { CeoData } from './CeoContent'
 import type { Payout, Inquiry, Assignment } from '@/lib/supabase/types'
 import { toast } from 'sonner'
@@ -76,9 +76,10 @@ export default function PaymentTab({ data }: { data: CeoData }) {
     () => new Map(assignments.map(a => [a.id, a])),
     [assignments]
   )
-  const [viewTab, setViewTab]         = useState<ViewTab>('pending')
-  const [openGroups, setOpenGroups]   = useState<Set<string>>(new Set())
-  const [processing, setProcessing]   = useState<string | null>(null)
+  const [viewTab, setViewTab]           = useState<ViewTab>('pending')
+  const [openGroups, setOpenGroups]     = useState<Set<string>>(new Set())
+  const [processing, setProcessing]     = useState<string | null>(null)
+  const [showDoneTable, setShowDoneTable] = useState(false)
 
   const { pendingGroups, doneGroups } = useMemo(() => {
     const map = new Map<string, { inquiry?: Inquiry; payouts: Payout[] }>()
@@ -142,31 +143,59 @@ export default function PaymentTab({ data }: { data: CeoData }) {
     }
   }
 
+  // 전체 이체명단 엑셀 (검토완료 건만, 행사별 시트 분리)
   function handleExcel() {
-    const rows: Record<string, string | number>[] = []
-    for (const g of [...pendingGroups, ...doneGroups]) {
-      if (!g.inquiry) continue
-      for (const p of g.payouts) {
-        if (isHQByMap(p, asgMap)) continue  // 본사 인원 제외
-        if (!['검토완료', '확인완료', '지급완료', '완료'].includes(p.status)) continue
-        rows.push({
-          '행사명': g.inquiry.event_name,
-          '업체명': g.inquiry.company_name || '',
-          '이름': p.staff_name || '',
-          '은행': p.bank_name || '',
-          '계좌번호': p.account_number || '',
-          '이체금액': p.final_pay,
-          '상태': p.status,
-          '메모': p.notes || '',
-        })
-      }
-    }
-    if (rows.length === 0) { toast.warning('이체 대상 데이터가 없습니다.'); return }
-    const ws = XLSX.utils.json_to_sheet(rows)
     const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, '이체명단')
-    XLSX.writeFile(wb, `이체명단_${new Date().toLocaleDateString('ko-KR').replace(/\. /g, '-').replace('.', '')}.xlsx`)
-    toast.success('엑셀 파일을 다운로드했습니다.')
+    let totalSheets = 0
+
+    for (const g of pendingGroups) {
+      const readyPayouts = g.payouts.filter(p =>
+        !isHQByMap(p, asgMap) && (p.status === '검토완료' || p.status === '확인완료')
+      )
+      if (readyPayouts.length === 0) continue
+
+      const rows = readyPayouts.map(p => ({
+        '이름':     p.staff_name || '',
+        '은행':     p.bank_name || '',
+        '계좌번호': p.account_number || '',
+        '이체금액': p.final_pay,
+        '메모':     p.notes || '',
+      }))
+
+      const sheetName = (g.inquiry?.event_name || '미정').slice(0, 31) // Excel 시트명 최대 31자
+      const ws = XLSX.utils.json_to_sheet(rows)
+      // 열 너비 설정
+      ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 20 }, { wch: 12 }, { wch: 30 }]
+      XLSX.utils.book_append_sheet(wb, ws, sheetName)
+      totalSheets++
+    }
+
+    if (totalSheets === 0) { toast.warning('검토완료 상태의 이체 대상이 없습니다.'); return }
+    const filename = `이체명단_검토완료_${new Date().toLocaleDateString('ko-KR').replace(/\. /g, '').replace('.', '')}.xlsx`
+    XLSX.writeFile(wb, filename)
+    toast.success(`${totalSheets}개 행사 이체명단을 다운로드했습니다.`)
+  }
+
+  // 개별 행사 이체명단 엑셀 (검토완료 건)
+  function handleGroupExcel(g: GroupInfo) {
+    const readyPayouts = g.payouts.filter(p =>
+      !isHQByMap(p, asgMap) && (p.status === '검토완료' || p.status === '확인완료')
+    )
+    if (readyPayouts.length === 0) { toast.warning('검토완료 상태의 이체 대상이 없습니다.'); return }
+
+    const rows = readyPayouts.map(p => ({
+      '이름':     p.staff_name || '',
+      '은행':     p.bank_name || '',
+      '계좌번호': p.account_number || '',
+      '이체금액': p.final_pay,
+      '메모':     p.notes || '',
+    }))
+    const ws = XLSX.utils.json_to_sheet(rows)
+    ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 20 }, { wch: 12 }, { wch: 30 }]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, (g.inquiry?.event_name || '이체명단').slice(0, 31))
+    XLSX.writeFile(wb, `이체명단_${g.inquiry?.event_name || ''}_${new Date().toLocaleDateString('ko-KR').replace(/\. /g, '').replace('.', '')}.xlsx`)
+    toast.success('이체명단을 다운로드했습니다.')
   }
 
   const overdueCount  = pendingGroups.filter(g => g.dday !== null && g.dday < 0).length
@@ -183,8 +212,9 @@ export default function PaymentTab({ data }: { data: CeoData }) {
           count={totalPending}      amount={pendingAmount}  color="blue" />
         <StatCard icon={<AlertTriangle className="h-5 w-5" />} label="D-Day 초과" sub="기한 경과"
           count={overdueCount}      amount={0}              color="red" />
-        <StatCard icon={<CheckCircle2 className="h-5 w-5" />}  label="지급완료" sub="완료 행사"
-          count={doneGroups.length} amount={0}              color="green" />
+        <StatCard icon={<CheckCircle2 className="h-5 w-5" />}  label="지급완료" sub="클릭하면 전체 내역 보기"
+          count={doneGroups.length} amount={0}              color="green"
+          onClick={() => setShowDoneTable(true)} clickable />
       </div>
 
       {/* 탭 + 엑셀 버튼 */}
@@ -195,9 +225,9 @@ export default function PaymentTab({ data }: { data: CeoData }) {
           <TabBtn active={viewTab === 'done'}    onClick={() => setViewTab('done')}
             label={`지급완료 이력 (${doneGroups.length})`} color="green" />
         </div>
-        <Button variant="outline" onClick={handleExcel} className="gap-2 text-sm">
-          <Download className="h-4 w-4" />
-          이체명단 엑셀
+        <Button variant="outline" onClick={handleExcel} className="gap-2 text-sm border-green-300 text-green-700 hover:bg-green-50">
+          <FileSpreadsheet className="h-4 w-4" />
+          검토완료 이체명단 전체 엑셀
         </Button>
       </div>
 
@@ -217,9 +247,72 @@ export default function PaymentTab({ data }: { data: CeoData }) {
               toggleGroup={toggleGroup}
               processing={processing}
               handleMarkPaid={handleMarkPaid}
+              handleGroupExcel={handleGroupExcel}
               done={viewTab === 'done'}
             />
           ))}
+        </div>
+      )}
+
+      {/* 지급완료 전체 테이블 모달 */}
+      {showDoneTable && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[85vh] flex flex-col mx-4">
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <div>
+                <h2 className="text-lg font-bold text-gray-800">지급완료 전체 내역</h2>
+                <p className="text-xs text-gray-400 mt-0.5">총 {doneGroups.reduce((s, g) => s + g.payouts.filter(p => !isHQByMap(p, asgMap)).length, 0)}건</p>
+              </div>
+              <button onClick={() => setShowDoneTable(false)} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
+                <X className="h-5 w-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-gray-50 z-10">
+                  <tr>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">행사명</th>
+                    <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500">업체명</th>
+                    <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500">이름</th>
+                    <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500">은행</th>
+                    <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500">계좌번호</th>
+                    <th className="text-right px-3 py-3 text-xs font-semibold text-gray-500">실수령액</th>
+                    <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500">지급일</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {doneGroups.flatMap(g =>
+                    g.payouts
+                      .filter(p => !isHQByMap(p, asgMap) && (p.status === '지급완료' || p.status === '완료'))
+                      .map(p => (
+                        <tr key={p.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-2.5 text-xs font-medium text-gray-800 max-w-[160px] truncate">
+                            {g.inquiry?.event_name || '-'}
+                          </td>
+                          <td className="px-3 py-2.5 text-xs text-gray-500">{g.inquiry?.company_name || '-'}</td>
+                          <td className="px-3 py-2.5 font-semibold text-gray-800">{p.staff_name || '-'}</td>
+                          <td className="px-3 py-2.5 text-xs text-gray-500">{p.bank_name || '-'}</td>
+                          <td className="px-3 py-2.5 text-xs font-mono text-gray-500">{p.account_number || '-'}</td>
+                          <td className="px-3 py-2.5 text-right font-bold text-blue-700">{formatKRW(p.final_pay)}</td>
+                          <td className="px-3 py-2.5 text-center text-xs text-gray-400">
+                            {p.paid_at ? new Date(p.paid_at).toLocaleDateString('ko-KR') : '-'}
+                          </td>
+                        </tr>
+                      ))
+                  )}
+                </tbody>
+                <tfoot className="sticky bottom-0 bg-gray-50">
+                  <tr>
+                    <td colSpan={5} className="px-4 py-3 text-xs font-semibold text-gray-600">합계</td>
+                    <td className="px-3 py-3 text-right font-bold text-blue-700">
+                      {formatKRW(doneGroups.flatMap(g => g.payouts.filter(p => !isHQByMap(p, asgMap) && (p.status === '지급완료' || p.status === '완료'))).reduce((s, p) => s + p.final_pay, 0))}
+                    </td>
+                    <td />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -227,13 +320,14 @@ export default function PaymentTab({ data }: { data: CeoData }) {
 }
 
 // ─── 그룹 행 ───────────────────────────────────────────
-function GroupRow({ g, asgMap, openGroups, toggleGroup, processing, handleMarkPaid, done }: {
+function GroupRow({ g, asgMap, openGroups, toggleGroup, processing, handleMarkPaid, handleGroupExcel, done }: {
   g: GroupInfo
   asgMap: Map<string, Assignment>
   openGroups: Set<string>
   toggleGroup: (key: string) => void
   processing: string | null
   handleMarkPaid: (id: string) => void
+  handleGroupExcel: (g: GroupInfo) => void
   done: boolean
 }) {
   const isOpen = openGroups.has(g.key)
@@ -283,6 +377,14 @@ function GroupRow({ g, asgMap, openGroups, toggleGroup, processing, handleMarkPa
             {!done && <span>대기 {g.pendingCount}명 · </span>}
             완료 {paidCount}명
           </p>
+          {!done && g.payouts.some(p => !isHQByMap(p, asgMap) && (p.status === '검토완료' || p.status === '확인완료')) && (
+            <button
+              onClick={e => { e.stopPropagation(); handleGroupExcel(g) }}
+              className="text-[10px] text-green-600 hover:text-green-700 flex items-center gap-0.5 ml-auto"
+            >
+              <FileSpreadsheet className="h-3 w-3" />이체명단
+            </button>
+          )}
         </div>
       </div>
 
@@ -360,8 +462,9 @@ function TabBtn({ active, onClick, label, color }: { active: boolean; onClick: (
   )
 }
 
-function StatCard({ icon, label, sub, count, amount, color }: {
+function StatCard({ icon, label, sub, count, amount, color, onClick, clickable }: {
   icon: React.ReactNode; label: string; sub: string; count: number; amount: number; color: string
+  onClick?: () => void; clickable?: boolean
 }) {
   const styles: Record<string, string> = {
     blue:  'bg-blue-50 border-blue-200 text-blue-700',
@@ -369,7 +472,10 @@ function StatCard({ icon, label, sub, count, amount, color }: {
     green: 'bg-green-50 border-green-200 text-green-700',
   }
   return (
-    <div className={`rounded-xl border p-4 ${styles[color]}`}>
+    <div
+      className={`rounded-xl border p-4 ${styles[color]} ${clickable ? 'cursor-pointer hover:brightness-95 transition-all' : ''}`}
+      onClick={onClick}
+    >
       <div className="flex items-center gap-2 mb-2">
         {icon}
         <div>
