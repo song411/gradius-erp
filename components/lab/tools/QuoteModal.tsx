@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { X, RefreshCw, Quote, Star, Shield } from 'lucide-react'
+import { X, RefreshCw, Quote, Star } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
 // ─────────────────────────────────────────
@@ -162,24 +162,15 @@ function getRandom<T>(arr: T[], exclude?: T): T {
 interface Props { onClose: () => void }
 
 export default function QuoteModal({ onClose }: Props) {
-  const [tab, setTab] = useState<'world' | 'guardius'>('world')
   const [category, setCategory] = useState<QuoteCat>('전체')
   const [quote, setQuote] = useState<QuoteItem>(() => getRandom(QUOTES))
-  const [gQuote, setGQuote] = useState<GuardiusQuote>(() => getRandom(GUARDIUS_QUOTES))
   const [liked, setLiked] = useState(false)
-  const [gLiked, setGLiked] = useState(false)
   const [animKey, setAnimKey] = useState(0)
 
   function shuffleQuote(cat: QuoteCat = category) {
     const pool = cat === '전체' ? QUOTES : QUOTES.filter(q => q.category === cat)
     setQuote(prev => getRandom(pool, prev))
     setLiked(false)
-    setAnimKey(k => k + 1)
-  }
-
-  function shuffleGuardius() {
-    setGQuote(prev => getRandom(GUARDIUS_QUOTES, prev))
-    setGLiked(false)
     setAnimKey(k => k + 1)
   }
 
@@ -198,135 +189,56 @@ export default function QuoteModal({ onClose }: Props) {
         <div>
           <h2 className="text-lg font-extrabold text-white flex items-center gap-2">
             <Quote className="h-5 w-5 text-amber-400" />
-            오늘의 한마디
+            오늘의 명언
           </h2>
-          <p className="text-gray-400 text-xs mt-0.5">세계 명언 {QUOTES.length}개 · 가디어스 현장 명언 {GUARDIUS_QUOTES.length}개</p>
+          <p className="text-gray-400 text-xs mt-0.5">세계 리더·철학자·운동선수 명언 {QUOTES.length}개 큐레이션</p>
         </div>
         <button onClick={onClose} className="text-gray-400 hover:text-white p-1 rounded-lg"><X className="h-5 w-5" /></button>
       </div>
 
-      {/* 탭 */}
-      <div className="flex border-b border-gray-800 bg-gray-900 shrink-0">
-        <button onClick={() => setTab('world')}
-          className={`flex-1 py-3 text-sm font-bold flex items-center justify-center gap-1.5 transition-colors border-b-2 ${
-            tab === 'world'
-              ? 'border-amber-400 text-amber-300'
-              : 'border-transparent text-gray-500 hover:text-gray-300'
-          }`}>
-          <Quote className="h-4 w-4" />오늘의 명언
-        </button>
-        <button onClick={() => setTab('guardius')}
-          className={`flex-1 py-3 text-sm font-bold flex items-center justify-center gap-1.5 transition-colors border-b-2 ${
-            tab === 'guardius'
-              ? 'border-purple-400 text-purple-300'
-              : 'border-transparent text-gray-500 hover:text-gray-300'
-          }`}>
-          <Shield className="h-4 w-4" />가디어스 명언
-        </button>
-      </div>
+      <div className="flex-1 overflow-y-auto bg-gray-950 p-5 space-y-4">
+        {/* 카테고리 필터 */}
+        <div className="flex flex-wrap gap-2">
+          {QUOTE_CATS.map(cat => (
+            <button key={cat} onClick={() => handleCategory(cat)}
+              className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                category === cat ? CAT_COLOR[cat] : 'bg-gray-800 text-gray-400 hover:text-white'
+              }`}>{cat}</button>
+          ))}
+        </div>
 
-      <div className="flex-1 overflow-y-auto bg-gray-950">
+        {/* 명언 카드 */}
         <AnimatePresence mode="wait">
-          {tab === 'world' ? (
-            <motion.div key="world" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              transition={{ duration: 0.15 }} className="p-5 space-y-4">
-
-              {/* 카테고리 필터 */}
-              <div className="flex flex-wrap gap-2">
-                {QUOTE_CATS.map(cat => (
-                  <button key={cat} onClick={() => handleCategory(cat)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
-                      category === cat ? CAT_COLOR[cat] : 'bg-gray-800 text-gray-400 hover:text-white'
-                    }`}>{cat}</button>
-                ))}
-              </div>
-
-              {/* 명언 카드 */}
-              <AnimatePresence mode="wait">
-                <motion.div key={animKey}
-                  initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}
-                  className="bg-gray-900 border border-gray-700 rounded-2xl p-6 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-4xl">{quote.emoji}</span>
-                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${CAT_BADGE[quote.category] || ''}`}>
-                      {quote.category}
-                    </span>
-                  </div>
-                  <blockquote>
-                    <p className="text-white text-xl font-bold leading-relaxed">&ldquo;{quote.text}&rdquo;</p>
-                    <footer className="mt-3 text-gray-400 text-sm">— {quote.author}</footer>
-                  </blockquote>
-                  <div className="pt-2 border-t border-gray-800 flex items-center justify-between">
-                    <button onClick={() => setLiked(l => !l)}
-                      className={`flex items-center gap-1.5 text-sm font-semibold transition-colors ${liked ? 'text-amber-400' : 'text-gray-500 hover:text-amber-400'}`}>
-                      <Star className={`h-4 w-4 ${liked ? 'fill-amber-400' : ''}`} />
-                      {liked ? '좋은 말이에요!' : '마음에 들면 별표'}
-                    </button>
-                    <span className="text-xs text-gray-600">총 {QUOTES.length}개 수록</span>
-                  </div>
-                </motion.div>
-              </AnimatePresence>
-
-              <motion.button onClick={() => shuffleQuote()}
-                whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
-                className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-extrabold rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20">
-                <RefreshCw className="h-4 w-4" />다른 명언 뽑기
-              </motion.button>
-            </motion.div>
-
-          ) : (
-            <motion.div key="guardius" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              transition={{ duration: 0.15 }} className="p-5 space-y-4">
-
-              {/* 설명 */}
-              <div className="bg-purple-900/30 border border-purple-700/40 rounded-xl p-3 text-center">
-                <p className="text-purple-200 text-sm font-semibold">🛡️ 현장 나가기 전, 한 장 뽑아보세요!</p>
-                <p className="text-purple-400 text-xs mt-0.5">가디어스 실무 현장에서 탄생한 진짜 경험의 언어들</p>
-              </div>
-
-              {/* 가디어스 명언 카드 */}
-              <AnimatePresence mode="wait">
-                <motion.div key={animKey + 'g'}
-                  initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.97 }} transition={{ duration: 0.2 }}
-                  className="bg-gradient-to-br from-purple-950 to-indigo-950 border border-purple-700/50 rounded-2xl p-6 space-y-5">
-
-                  <div className="flex items-start justify-between gap-3">
-                    <span className="text-5xl">{gQuote.emoji}</span>
-                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full shrink-0 ${TAG_COLOR[gQuote.tag] || 'bg-gray-100 text-gray-700'}`}>
-                      #{gQuote.tag}
-                    </span>
-                  </div>
-
-                  <blockquote>
-                    <p className="text-white text-2xl font-extrabold leading-relaxed">
-                      &ldquo;{gQuote.text}&rdquo;
-                    </p>
-                    <footer className="mt-3 text-purple-400 text-xs font-semibold">— GUARDIUS 현장 명언</footer>
-                  </blockquote>
-
-                  <div className="pt-3 border-t border-purple-800/50 flex items-center justify-between">
-                    <button onClick={() => setGLiked(l => !l)}
-                      className={`flex items-center gap-1.5 text-sm font-semibold transition-colors ${gLiked ? 'text-purple-300' : 'text-purple-600 hover:text-purple-300'}`}>
-                      <Star className={`h-4 w-4 ${gLiked ? 'fill-purple-300' : ''}`} />
-                      {gLiked ? '이거 맞아!' : '공감되면 별표'}
-                    </button>
-                    <span className="text-xs text-purple-700">총 {GUARDIUS_QUOTES.length}개 수록</span>
-                  </div>
-                </motion.div>
-              </AnimatePresence>
-
-              <motion.button onClick={shuffleGuardius}
-                whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
-                className="w-full py-3.5 bg-gradient-to-r from-purple-600 to-indigo-700 text-white font-extrabold rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-purple-500/20">
-                <RefreshCw className="h-4 w-4" />다른 명언 뽑기
-              </motion.button>
-
-              <p className="text-center text-purple-900 text-xs">현장에서 배운 것, 잊지 말아야 할 것</p>
-            </motion.div>
-          )}
+          <motion.div key={animKey}
+            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}
+            className="bg-gray-900 border border-gray-700 rounded-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-4xl">{quote.emoji}</span>
+              <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${CAT_BADGE[quote.category] || ''}`}>
+                {quote.category}
+              </span>
+            </div>
+            <blockquote>
+              <p className="text-white text-xl font-bold leading-relaxed">&ldquo;{quote.text}&rdquo;</p>
+              <footer className="mt-3 text-gray-400 text-sm">— {quote.author}</footer>
+            </blockquote>
+            <div className="pt-2 border-t border-gray-800 flex items-center justify-between">
+              <button onClick={() => setLiked(l => !l)}
+                className={`flex items-center gap-1.5 text-sm font-semibold transition-colors ${liked ? 'text-amber-400' : 'text-gray-500 hover:text-amber-400'}`}>
+                <Star className={`h-4 w-4 ${liked ? 'fill-amber-400' : ''}`} />
+                {liked ? '좋은 말이에요!' : '마음에 들면 별표'}
+              </button>
+              <span className="text-xs text-gray-600">총 {QUOTES.length}개 수록</span>
+            </div>
+          </motion.div>
         </AnimatePresence>
+
+        <motion.button onClick={() => shuffleQuote()}
+          whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+          className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-extrabold rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20">
+          <RefreshCw className="h-4 w-4" />다른 명언 뽑기
+        </motion.button>
       </div>
     </div>
   )
