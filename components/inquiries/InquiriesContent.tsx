@@ -267,7 +267,7 @@ export default function InquiriesContent() {
   return (
     <>
       {/* 필터 바 */}
-      <div className="flex flex-wrap gap-3 mb-4">
+      <div className="erp-filter-bar">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <Input
@@ -281,7 +281,7 @@ export default function InquiriesContent() {
           <option value="">전체 상태</option>
           {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
         </Select>
-        <Button onClick={openCreate}>
+        <Button onClick={openCreate} className="gap-1.5 shrink-0">
           <Plus className="h-4 w-4" />
           문의 등록
         </Button>
@@ -311,15 +311,14 @@ export default function InquiriesContent() {
       </div>
 
       {/* 테이블 */}
-      <Card>
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="flex items-center justify-center h-40">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="erp-table">
+      <div className="erp-card">
+        {loading ? (
+          <div className="flex items-center justify-center h-40">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="erp-table">
                 <thead>
                   <tr>
                     <th>문의번호</th>
@@ -336,7 +335,7 @@ export default function InquiriesContent() {
                 </thead>
                 <tbody>
                   {filtered.length === 0 ? (
-                    <tr><td colSpan={9} className="text-center text-gray-400 py-10">검색 결과가 없습니다.</td></tr>
+                    <tr><td colSpan={9}><div className="erp-empty"><Search className="h-10 w-10" /><p>검색 결과가 없습니다.</p></div></td></tr>
                   ) : (
                     filtered.map(inq => (
                       <tr key={inq.id}>
@@ -389,11 +388,10 @@ export default function InquiriesContent() {
                     ))
                   )}
                 </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            </table>
+          </div>
+        )}
+      </div>
 
       {/* ── 문의 등록/수정 다이얼로그 ── */}
       <Dialog open={showModal} onClose={() => setShowModal(false)} className="max-w-2xl">

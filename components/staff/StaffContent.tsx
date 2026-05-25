@@ -337,33 +337,32 @@ export default function StaffContent() {
       </div>
 
       {/* 테이블 */}
-      <Card>
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="flex items-center justify-center h-40">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="erp-table">
-                <thead>
+      <div className="erp-card">
+        {loading ? (
+          <div className="flex items-center justify-center h-40">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="erp-table">
+              <thead>
+                <tr>
+                  <th>이름</th>
+                  <th>추천등급</th>
+                  <th>성별</th>
+                  <th>지역</th>
+                  <th>연락처</th>
+                  <th>가능직무</th>
+                  <th>영어</th>
+                  <th>평점</th>
+                  <th className="text-right">액션</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.length === 0 ? (
                   <tr>
-                    <th>이름</th>
-                    <th>추천등급</th>
-                    <th>성별</th>
-                    <th>지역</th>
-                    <th>연락처</th>
-                    <th>가능직무</th>
-                    <th>영어</th>
-                    <th>평점</th>
-                    <th className="text-right">액션</th>
+                    <td colSpan={9}><div className="erp-empty"><p>조건에 맞는 크루가 없습니다.</p></div></td>
                   </tr>
-                </thead>
-                <tbody>
-                  {filtered.length === 0 ? (
-                    <tr>
-                      <td colSpan={9} className="text-center text-gray-400 py-10">조건에 맞는 크루가 없습니다.</td>
-                    </tr>
                   ) : (
                     filtered.map(s => (
                       <tr
@@ -439,12 +438,11 @@ export default function StaffContent() {
                       </tr>
                     ))
                   )}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       {/* 프로필 카드 모달 */}
       {profileStaff && (

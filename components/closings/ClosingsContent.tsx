@@ -112,15 +112,14 @@ export default function ClosingsContent() {
         ))}
       </div>
 
-      <Card>
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="flex items-center justify-center h-40">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="erp-table">
+      <div className="erp-card">
+        {loading ? (
+          <div className="flex items-center justify-center h-40">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="erp-table">
                 <thead>
                   <tr>
                     <th>업체명</th>
@@ -139,10 +138,7 @@ export default function ClosingsContent() {
                 <tbody>
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={11} className="text-center text-gray-400 py-12">
-                        <Receipt className="h-8 w-8 mx-auto mb-2 opacity-20" />
-                        <p>데이터가 없습니다.</p>
-                      </td>
+                      <td colSpan={11}><div className="erp-empty"><p>데이터가 없습니다.</p></div></td>
                     </tr>
                   ) : filtered.map(s => (
                     <tr key={s.id} className={`transition-colors ${s.tax_invoice_issued ? 'hover:bg-gray-50' : 'hover:bg-red-50'}`}>
@@ -176,10 +172,9 @@ export default function ClosingsContent() {
                   ))}
                 </tbody>
               </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+          </div>
+        )}
+      </div>
 
       {/* 세금계산서 편집 폼 */}
       <ClosingForm

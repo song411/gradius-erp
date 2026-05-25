@@ -274,7 +274,7 @@ export default function SettlementsContent() {
       </div>
 
       {/* 검색 + 필터 */}
-      <div className="flex flex-wrap gap-3 mb-4">
+      <div className="erp-filter-bar">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <Input
@@ -298,15 +298,14 @@ export default function SettlementsContent() {
       </div>
 
       {/* 테이블 */}
-      <Card>
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="flex items-center justify-center h-40">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="erp-table">
+      <div className="erp-card">
+        {loading ? (
+          <div className="flex items-center justify-center h-40">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="erp-table">
                 <thead>
                   <tr>
                     <th>업체명</th>
@@ -325,7 +324,7 @@ export default function SettlementsContent() {
                 <tbody>
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={11} className="text-center text-gray-400 py-10">정산 내역이 없습니다.</td>
+                      <td colSpan={11}><div className="erp-empty"><p>정산 내역이 없습니다.</p></div></td>
                     </tr>
                   ) : (
                     filtered.map(s => {
@@ -470,11 +469,10 @@ export default function SettlementsContent() {
                     })
                   )}
                 </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            </table>
+          </div>
+        )}
+      </div>
 
       {/* 등록/수정 모달 */}
       <Dialog open={showModal} onClose={() => setShowModal(false)} className="max-w-2xl">

@@ -166,15 +166,14 @@ export default function CustomersContent() {
         </Button>
       </div>
 
-      <Card>
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="flex items-center justify-center h-40">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="erp-table">
+      <div className="erp-card">
+        {loading ? (
+          <div className="flex items-center justify-center h-40">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="erp-table">
                 <thead>
                   <tr>
                     <th>업체명</th>
@@ -191,7 +190,7 @@ export default function CustomersContent() {
                 <tbody>
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="text-center text-gray-400 py-10">고객사가 없습니다.</td>
+                      <td colSpan={9}><div className="erp-empty"><p>고객사가 없습니다.</p></div></td>
                     </tr>
                   ) : (
                     filtered.map(c => {
@@ -241,11 +240,10 @@ export default function CustomersContent() {
                     })
                   )}
                 </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            </table>
+          </div>
+        )}
+      </div>
 
       <Dialog open={showModal} onClose={() => setShowModal(false)} className="max-w-xl">
         <DialogHeader>
