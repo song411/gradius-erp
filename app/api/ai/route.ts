@@ -136,10 +136,14 @@ ${businessContext}`
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
 
     // 대화 히스토리를 Gemini 형식으로 변환 (마지막 메시지 제외 → history)
-    const history = messages.slice(0, -1).map(m => ({
+    // Gemini 규칙: history는 반드시 'user' 메시지로 시작해야 함
+    // → 앞쪽의 'model'(assistant 환영 메시지 등) 제거
+    const rawHistory = messages.slice(0, -1).map(m => ({
       role: m.role === 'assistant' ? 'model' : 'user',
       parts: [{ text: m.content }],
     }))
+    const firstUserIdx = rawHistory.findIndex(m => m.role === 'user')
+    const history = firstUserIdx >= 0 ? rawHistory.slice(firstUserIdx) : []
 
     const lastMessage = messages[messages.length - 1].content
 
