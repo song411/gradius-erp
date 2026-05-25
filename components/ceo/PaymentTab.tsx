@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react'
 import { db } from '@/lib/supabase/api'
 import { formatKRW } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { Download, ChevronDown, ChevronRight, Clock, AlertTriangle, CheckCircle2, X, FileSpreadsheet } from 'lucide-react'
+import { ChevronDown, ChevronRight, Clock, AlertTriangle, CheckCircle2, FileSpreadsheet } from 'lucide-react'
 import type { CeoData } from './CeoContent'
 import type { Payout, Inquiry, Assignment } from '@/lib/supabase/types'
 import { toast } from 'sonner'
@@ -79,7 +79,6 @@ export default function PaymentTab({ data }: { data: CeoData }) {
   const [viewTab, setViewTab]           = useState<ViewTab>('pending')
   const [openGroups, setOpenGroups]     = useState<Set<string>>(new Set())
   const [processing, setProcessing]     = useState<string | null>(null)
-  const [showDoneTable, setShowDoneTable] = useState(false)
 
   const { pendingGroups, doneGroups } = useMemo(() => {
     const map = new Map<string, { inquiry?: Inquiry; payouts: Payout[] }>()
@@ -214,9 +213,8 @@ export default function PaymentTab({ data }: { data: CeoData }) {
           count={totalPending}      amount={pendingAmount}  color="blue" />
         <StatCard icon={<AlertTriangle className="h-5 w-5" />} label="D-Day 초과" sub="기한 경과"
           count={overdueCount}      amount={0}              color="red" />
-        <StatCard icon={<CheckCircle2 className="h-5 w-5" />}  label="지급완료" sub="클릭하면 전체 내역 보기"
-          count={doneGroups.length} amount={0}              color="green"
-          onClick={() => setShowDoneTable(true)} clickable />
+        <StatCard icon={<CheckCircle2 className="h-5 w-5" />}  label="지급완료" sub="이력 탭에서 전체 확인"
+          count={doneGroups.length} amount={0}              color="green" />
       </div>
 
       {/* 탭 + 엑셀 버튼 */}
@@ -233,90 +231,111 @@ export default function PaymentTab({ data }: { data: CeoData }) {
         </Button>
       </div>
 
-      {/* 그룹 목록 */}
-      {activeGroups.length === 0 ? (
-        <div className="bg-white rounded-xl border p-12 text-center text-gray-400">
-          {viewTab === 'pending' ? '처리 대기 중인 지급 건이 없습니다 ✅' : '완료된 지급 이력이 없습니다.'}
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {activeGroups.map(g => (
-            <GroupRow
-              key={g.key}
-              g={g}
-              asgMap={asgMap}
-              openGroups={openGroups}
-              toggleGroup={toggleGroup}
-              processing={processing}
-              handleMarkPaid={handleMarkPaid}
-              handleGroupExcel={handleGroupExcel}
-              done={viewTab === 'done'}
-            />
-          ))}
-        </div>
+      {/* 처리 필요 탭: 기존 아코디언 */}
+      {viewTab === 'pending' && (
+        activeGroups.length === 0 ? (
+          <div className="bg-white rounded-xl border p-12 text-center text-gray-400">
+            처리 대기 중인 지급 건이 없습니다 ✅
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {activeGroups.map(g => (
+              <GroupRow
+                key={g.key}
+                g={g}
+                asgMap={asgMap}
+                openGroups={openGroups}
+                toggleGroup={toggleGroup}
+                processing={processing}
+                handleMarkPaid={handleMarkPaid}
+                handleGroupExcel={handleGroupExcel}
+                done={false}
+              />
+            ))}
+          </div>
+        )
       )}
 
-      {/* 지급완료 전체 테이블 모달 */}
-      {showDoneTable && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[85vh] flex flex-col mx-4">
-            <div className="flex items-center justify-between px-6 py-4 border-b">
-              <div>
-                <h2 className="text-lg font-bold text-gray-800">지급완료 전체 내역</h2>
-                <p className="text-xs text-gray-400 mt-0.5">총 {doneGroups.reduce((s, g) => s + g.payouts.filter(p => !isHQByMap(p, asgMap)).length, 0)}건</p>
+      {/* 지급완료 탭: 전체 평면 테이블 */}
+      {viewTab === 'done' && (() => {
+        const doneRows = doneGroups.flatMap(g =>
+          g.payouts
+            .filter(p => !isHQByMap(p, asgMap) && (p.status === '지급완료' || p.status === '완료'))
+            .map(p => ({ p, g }))
+        ).sort((a, b) => (b.p.paid_at || '').localeCompare(a.p.paid_at || ''))
+
+        const totalAmt = doneRows.reduce((s, { p }) => s + p.final_pay, 0)
+
+        return doneRows.length === 0 ? (
+          <div className="bg-white rounded-xl border p-12 text-center text-gray-400">
+            완료된 지급 이력이 없습니다.
+          </div>
+        ) : (
+          <div className="bg-white rounded-xl border overflow-hidden">
+            {/* 테이블 헤더 요약 */}
+            <div className="px-5 py-3 border-b bg-green-50 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <CheckCircle2 className="h-4 w-4 text-green-600" />
+                <span className="text-sm font-bold text-green-800">지급완료 전체 이력</span>
+                <span className="text-xs text-green-600 bg-green-100 rounded-full px-2 py-0.5">{doneRows.length}건</span>
               </div>
-              <button onClick={() => setShowDoneTable(false)} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
-                <X className="h-5 w-5 text-gray-500" />
-              </button>
+              <span className="text-sm font-extrabold text-blue-700">{formatKRW(totalAmt)}</span>
             </div>
-            <div className="overflow-y-auto flex-1">
+            <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-gray-50 z-10">
+                <thead className="bg-gray-50 border-b">
                   <tr>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">행사명</th>
-                    <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500">업체명</th>
-                    <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500">이름</th>
-                    <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500">은행</th>
-                    <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500">계좌번호</th>
-                    <th className="text-right px-3 py-3 text-xs font-semibold text-gray-500">실수령액</th>
-                    <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500">지급일</th>
+                    <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 whitespace-nowrap">입금일</th>
+                    <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500">행사명</th>
+                    <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500">업체명</th>
+                    <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500">이름</th>
+                    <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500">품목</th>
+                    <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500">은행</th>
+                    <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 whitespace-nowrap">계좌번호</th>
+                    <th className="text-right px-4 py-2.5 text-xs font-semibold text-gray-500 whitespace-nowrap">실수령액</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {doneGroups.flatMap(g =>
-                    g.payouts
-                      .filter(p => !isHQByMap(p, asgMap) && (p.status === '지급완료' || p.status === '완료'))
-                      .map(p => (
-                        <tr key={p.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-2.5 text-xs font-medium text-gray-800 max-w-[160px] truncate">
-                            {g.inquiry?.event_name || '-'}
-                          </td>
-                          <td className="px-3 py-2.5 text-xs text-gray-500">{g.inquiry?.company_name || '-'}</td>
-                          <td className="px-3 py-2.5 font-semibold text-gray-800">{p.staff_name || '-'}</td>
-                          <td className="px-3 py-2.5 text-xs text-gray-500">{p.bank_name || '-'}</td>
-                          <td className="px-3 py-2.5 text-xs font-mono text-gray-500">{p.account_number || '-'}</td>
-                          <td className="px-3 py-2.5 text-right font-bold text-blue-700">{formatKRW(p.final_pay)}</td>
-                          <td className="px-3 py-2.5 text-center text-xs text-gray-400">
-                            {p.paid_at ? new Date(p.paid_at).toLocaleDateString('ko-KR') : '-'}
-                          </td>
-                        </tr>
-                      ))
-                  )}
+                  {doneRows.map(({ p, g }) => {
+                    const asg = p.assignment_id ? asgMap.get(p.assignment_id) : null
+                    return (
+                      <tr key={p.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-4 py-2.5 text-xs text-gray-500 whitespace-nowrap">
+                          {p.paid_at
+                            ? new Date(p.paid_at).toLocaleDateString('ko-KR', { year: '2-digit', month: '2-digit', day: '2-digit' })
+                            : <span className="text-gray-300">-</span>
+                          }
+                        </td>
+                        <td className="px-3 py-2.5 text-xs font-medium text-gray-800 max-w-[140px] truncate">
+                          {g.inquiry?.event_name || '-'}
+                        </td>
+                        <td className="px-3 py-2.5 text-xs text-gray-500 max-w-[100px] truncate">
+                          {g.inquiry?.company_name || '-'}
+                        </td>
+                        <td className="px-3 py-2.5 font-semibold text-gray-800 whitespace-nowrap">
+                          {p.staff_name || '-'}
+                        </td>
+                        <td className="px-3 py-2.5 text-xs text-gray-500">{asg?.job_type || '-'}</td>
+                        <td className="px-3 py-2.5 text-xs text-gray-500">{p.bank_name || '-'}</td>
+                        <td className="px-3 py-2.5 text-xs font-mono text-gray-400">{p.account_number || '-'}</td>
+                        <td className="px-4 py-2.5 text-right font-bold text-blue-700 whitespace-nowrap">
+                          {formatKRW(p.final_pay)}
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
-                <tfoot className="sticky bottom-0 bg-gray-50">
+                <tfoot className="border-t-2 bg-gray-50">
                   <tr>
-                    <td colSpan={5} className="px-4 py-3 text-xs font-semibold text-gray-600">합계</td>
-                    <td className="px-3 py-3 text-right font-bold text-blue-700">
-                      {formatKRW(doneGroups.flatMap(g => g.payouts.filter(p => !isHQByMap(p, asgMap) && (p.status === '지급완료' || p.status === '완료'))).reduce((s, p) => s + p.final_pay, 0))}
-                    </td>
-                    <td />
+                    <td colSpan={7} className="px-4 py-3 text-xs font-bold text-gray-600">합계 ({doneRows.length}명)</td>
+                    <td className="px-4 py-3 text-right font-extrabold text-blue-700">{formatKRW(totalAmt)}</td>
                   </tr>
                 </tfoot>
               </table>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 }
