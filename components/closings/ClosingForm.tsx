@@ -37,15 +37,18 @@ const INVOICE_REQUEST_PRESETS = [
 
 export default function ClosingForm({ open, onClose, onSaved, editTarget }: Props) {
   const [form, setForm]     = useState({
-    biz_number:        '',
-    rep_name:          '',
-    corp_name:         '',
-    email:             '',
-    invoice_request:   '',
-    received_amount:   '',
-    deposit_status:    '미입금',
+    biz_number:         '',
+    rep_name:           '',
+    corp_name:          '',
+    email:              '',
+    contact_phone:      '',
+    item_description:   '',
+    biz_address:        '',
+    invoice_request:    '',
+    received_amount:    '',
+    deposit_status:     '미입금',
     tax_invoice_issued: false,
-    progress:          '계약체결',
+    progress:           '계약체결',
   })
   const [saving, setSaving] = useState(false)
   const [error, setError]   = useState('')
@@ -58,6 +61,9 @@ export default function ClosingForm({ open, onClose, onSaved, editTarget }: Prop
       rep_name:           editTarget.rep_name || '',
       corp_name:          editTarget.corp_name || editTarget.company_name || '',
       email:              editTarget.email || '',
+      contact_phone:      editTarget.contact_phone || '',
+      item_description:   editTarget.item_description || '',
+      biz_address:        (editTarget as Settlement & { biz_address?: string }).biz_address || '',
       invoice_request:    editTarget.invoice_request || '',
       received_amount:    String(editTarget.received_amount || ''),
       deposit_status:     editTarget.deposit_status || '미입금',
@@ -77,6 +83,8 @@ export default function ClosingForm({ open, onClose, onSaved, editTarget }: Prop
         rep_name:           form.rep_name || null,
         corp_name:          form.corp_name || null,
         email:              form.email || null,
+        contact_phone:      form.contact_phone || null,
+        item_description:   form.item_description || null,
         invoice_request:    form.invoice_request || null,
         received_amount:    Number(form.received_amount) || 0,
         deposit_status:     form.deposit_status,
@@ -167,6 +175,18 @@ export default function ClosingForm({ open, onClose, onSaved, editTarget }: Prop
             <div>
               <label className="label-xs">이메일 (전자세금계산서)</label>
               <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="tax@company.com" />
+            </div>
+            <div>
+              <label className="label-xs">연락처</label>
+              <Input value={form.contact_phone} onChange={e => setForm(f => ({ ...f, contact_phone: e.target.value }))} placeholder="010-0000-0000" />
+            </div>
+            <div>
+              <label className="label-xs">내용(품목)</label>
+              <Input value={form.item_description} onChange={e => setForm(f => ({ ...f, item_description: e.target.value }))} placeholder="예) 행사 도우미 파견" />
+            </div>
+            <div className="col-span-2">
+              <label className="label-xs">사업장주소</label>
+              <Input value={form.biz_address} onChange={e => setForm(f => ({ ...f, biz_address: e.target.value }))} placeholder="서울특별시 중구 ..." />
             </div>
           </div>
         </section>

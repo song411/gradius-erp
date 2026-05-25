@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { db } from '@/lib/supabase/api'
-import type { Inquiry, Settlement, Payout, Assignment } from '@/lib/supabase/types'
+import type { Inquiry, Settlement, Payout, Assignment, Customer } from '@/lib/supabase/types'
 import { BarChart3, Receipt, Banknote, Building2, TrendingUp } from 'lucide-react'
 
 // 탭별 컴포넌트
@@ -17,7 +17,8 @@ export interface CeoData {
   inquiries:   Inquiry[]
   settlements: Settlement[]
   payouts:     Payout[]
-  assignments: Assignment[]   // 본사 인원 판별용 (is_payable)
+  assignments: Assignment[]
+  customers:   Customer[]
   reload:      () => void
 }
 
@@ -38,13 +39,14 @@ export default function CeoContent() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [inquiries, settlements, payouts, assignments] = await Promise.all([
+    const [inquiries, settlements, payouts, assignments, customers] = await Promise.all([
       db.list<Inquiry>('inquiries'),
       db.list<Settlement>('settlements'),
       db.list<Payout>('payouts', { order: 'created_at', asc: false }),
       db.list<Assignment>('assignments', { order: 'assigned_at', asc: false }),
+      db.list<Customer>('customers'),
     ])
-    setData({ inquiries, settlements, payouts, assignments })
+    setData({ inquiries, settlements, payouts, assignments, customers })
     setLoading(false)
   }, [])
 
