@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 import {
   LayoutDashboard, MessageSquare, FileText, Users, UserCheck,
   Calculator, CreditCard, ClipboardList, Search, TrendingUp,
-  ChevronLeft, ChevronRight, Building2, Handshake, FlaskConical
+  ChevronLeft, ChevronRight, Building2, Handshake, FlaskConical, ShieldAlert
 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -25,6 +25,7 @@ const navItems = [
   { href: '/attendance', label: '출석부', icon: ClipboardList },
   { href: '/search', label: '통합검색', icon: Search },
   { href: '/lab', label: '스마트연구소', icon: FlaskConical },
+  { href: '/admin', label: 'DB 관리자', icon: ShieldAlert },
 ]
 
 export default function Sidebar() {
@@ -73,8 +74,9 @@ export default function Sidebar() {
           const Icon = item.icon
           const isActive = pathname === item.href ||
             (item.href !== '/' && pathname.startsWith(item.href))
-          const isCeo = item.href === '/ceo'
-          const isLab = item.href === '/lab'
+          const isCeo   = item.href === '/ceo'
+          const isLab   = item.href === '/lab'
+          const isAdmin = item.href === '/admin'
 
           return (
             <div key={item.href}>
@@ -86,6 +88,12 @@ export default function Sidebar() {
               )}
               {/* 스마트연구소 메뉴 위 구분선 */}
               {isLab && (
+                <div className={cn('my-1.5', collapsed ? 'mx-1' : 'mx-2')}>
+                  <div className="border-t border-gray-700" />
+                </div>
+              )}
+              {/* DB 관리자 메뉴 위 구분선 */}
+              {isAdmin && (
                 <div className={cn('my-1.5', collapsed ? 'mx-1' : 'mx-2')}>
                   <div className="border-t border-gray-700" />
                 </div>
@@ -102,9 +110,13 @@ export default function Sidebar() {
                       ? isActive
                         ? 'bg-emerald-600 text-white'
                         : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300'
-                      : isActive
-                        ? 'bg-blue-600 text-white'
-                        : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                      : isAdmin
+                        ? isActive
+                          ? 'bg-red-700 text-white'
+                          : 'bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300'
+                        : isActive
+                          ? 'bg-blue-600 text-white'
+                          : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                 )}
                 title={collapsed ? item.label : undefined}
               >

@@ -142,6 +142,20 @@ export default function PaymentTab({ data }: { data: CeoData }) {
     }
   }
 
+  async function handleRevertPaid(payoutId: string, staffName: string) {
+    if (!confirm(`"${staffName}" 지급완료를 검토완료로 되돌리겠습니까?`)) return
+    setProcessing(payoutId)
+    try {
+      await db.update('payouts', payoutId, { status: '검토완료', paid_at: null })
+      toast.success('검토완료로 되돌렸습니다.')
+      reload()
+    } catch {
+      toast.error('처리 중 오류가 발생했습니다.')
+    } finally {
+      setProcessing(null)
+    }
+  }
+
   // 전체 이체명단 엑셀 (검토완료 건만, 행사별 시트 분리)
   function handleExcel() {
     const wb = XLSX.utils.book_new()
@@ -293,6 +307,7 @@ export default function PaymentTab({ data }: { data: CeoData }) {
                     <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500">은행</th>
                     <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 whitespace-nowrap">계좌번호</th>
                     <th className="text-right px-4 py-2.5 text-xs font-semibold text-gray-500 whitespace-nowrap">실수령액</th>
+                    <th className="px-3 py-2.5 text-xs font-semibold text-gray-500"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -321,6 +336,15 @@ export default function PaymentTab({ data }: { data: CeoData }) {
                         <td className="px-4 py-2.5 text-right font-bold text-blue-700 whitespace-nowrap">
                           {formatKRW(p.final_pay)}
                         </td>
+                        <td className="px-3 py-2.5 text-center">
+                          <button
+                            onClick={() => handleRevertPaid(p.id, p.staff_name || '')}
+                            disabled={processing === p.id}
+                            className="text-[10px] text-orange-600 border border-orange-300 rounded-lg px-2 py-1 hover:bg-orange-50 transition-colors whitespace-nowrap disabled:opacity-40"
+                          >
+                            {processing === p.id ? '...' : '↩ 되돌리기'}
+                          </button>
+                        </td>
                       </tr>
                     )
                   })}
@@ -329,6 +353,7 @@ export default function PaymentTab({ data }: { data: CeoData }) {
                   <tr>
                     <td colSpan={7} className="px-4 py-3 text-xs font-bold text-gray-600">합계 ({doneRows.length}명)</td>
                     <td className="px-4 py-3 text-right font-extrabold text-blue-700">{formatKRW(totalAmt)}</td>
+                    <td />
                   </tr>
                 </tfoot>
               </table>
