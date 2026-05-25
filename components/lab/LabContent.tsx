@@ -2,12 +2,12 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X } from 'lucide-react'
 import ContactsModal from './tools/ContactsModal'
 import MbtiModal from './tools/MbtiModal'
 import TaxCalcModal from './tools/TaxCalcModal'
 import TarotModal from './tools/TarotModal'
 import QuoteModal from './tools/QuoteModal'
+import AiModal from './tools/AiModal'
 
 // ───────── 도구 정의 ─────────
 type ToolStatus = 'ready' | 'beta' | 'soon'
@@ -33,7 +33,6 @@ const TOOLS: Tool[] = [
     status: 'ready',
     gradient: 'from-blue-500 to-blue-700',
   },
-  {
   {
     id: 'deploy-report',
     emoji: '📋',
@@ -104,7 +103,7 @@ const TOOLS: Tool[] = [
     id: 'quote',
     emoji: '💬',
     name: '오늘의 한마디',
-    desc: '리더십·팀워크·현장 격언 40개 큐레이션 — 랜덤 뽑기로 오늘의 명언을',
+    desc: '리더십·팀워크·현장 격언 — 랜덤 뽑기로 오늘의 명언을',
     category: '재미 & 동기부여',
     status: 'ready',
     gradient: 'from-slate-600 to-gray-800',
@@ -114,10 +113,10 @@ const TOOLS: Tool[] = [
     id: 'ai',
     emoji: '🤖',
     name: 'AI 업무 도우미',
-    desc: '가디어스 데이터 기반 자연어 질문·답변 (Gemini API 연동 예정)',
+    desc: '가디어스 ERP 데이터를 바탕으로 매출·미수금·크루 현황을 자연어로 질문하세요',
     category: 'AI & 데이터',
-    status: 'soon',
-    gradient: 'from-slate-600 to-slate-800',
+    status: 'ready',
+    gradient: 'from-violet-600 to-purple-800',
   },
   {
     id: 'report-gen',
@@ -137,8 +136,11 @@ const STATUS_META: Record<ToolStatus, { label: string; cls: string }> = {
   soon:  { label: '준비 중',     cls: 'bg-gray-100 text-gray-500 border-gray-200' },
 }
 
-// 모달 렌더링
+// AI 모달은 전체화면 오버레이로 직접 렌더 (다른 모달보다 크므로 분리)
 function ToolModal({ toolId, onClose }: { toolId: string; onClose: () => void }) {
+  // AI 모달은 자체 오버레이를 포함하므로 별도 처리
+  if (toolId === 'ai') return <AiModal onClose={onClose} />
+
   return (
     <AnimatePresence>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -226,62 +228,56 @@ export default function LabContent() {
       {/* ── 도구 그리드 ── */}
       <div className="px-8 py-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {visible.map((tool, i) => {
-              const meta = STATUS_META[tool.status]
-              const isReady = tool.status !== 'soon'
-              return (
-                <motion.div key={tool.id}
-                  initial={{ opacity: 0, y: 16 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.18, delay: i * 0.03 }}
-                  onClick={() => handleClick(tool)}
-                  className={`relative group rounded-2xl border overflow-hidden transition-all duration-200 ${
-                    isReady
-                      ? 'border-gray-700 hover:border-amber-500/60 cursor-pointer hover:shadow-xl hover:shadow-black/30'
-                      : 'border-gray-800 opacity-60 cursor-not-allowed'
-                  }`}>
+          {visible.map((tool, i) => {
+            const meta = STATUS_META[tool.status]
+            const isReady = tool.status !== 'soon'
+            return (
+              <motion.div key={tool.id}
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.18, delay: i * 0.03 }}
+                onClick={() => handleClick(tool)}
+                className={`relative group rounded-2xl border overflow-hidden transition-all duration-200 ${
+                  isReady
+                    ? 'border-gray-700 hover:border-amber-500/60 cursor-pointer hover:shadow-xl hover:shadow-black/30'
+                    : 'border-gray-800 opacity-60 cursor-not-allowed'
+                }`}>
 
-                  {/* 그라디언트 상단 */}
-                  <div className={`h-1.5 bg-gradient-to-r ${tool.gradient}`} />
+                {/* 그라디언트 상단 바 */}
+                <div className={`h-1.5 bg-gradient-to-r ${tool.gradient}`} />
 
-                  <div className="bg-gray-800/60 p-5">
-                    {/* 이모지 + 상태 뱃지 */}
-                    <div className="flex items-start justify-between mb-3">
-                      <span className="text-4xl leading-none filter drop-shadow-sm">{tool.emoji}</span>
-                      <div className="flex flex-col items-end gap-1.5">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${meta.cls}`}>
-                          {meta.label}
-                        </span>
-                        <span className="text-[10px] text-gray-500 bg-gray-700 px-2 py-0.5 rounded-full">{tool.category}</span>
-                      </div>
-                    </div>
-
-                    {/* 이름 + 설명 */}
-                    <h3 className={`text-base font-extrabold mb-1.5 ${isReady ? 'text-white group-hover:text-amber-300' : 'text-gray-400'} transition-colors`}>
-                      {tool.name}
-                    </h3>
-                    <p className="text-xs text-gray-400 leading-relaxed">{tool.desc}</p>
-
-                    {/* 하단 액션 힌트 */}
-                    <div className="mt-4 flex items-center justify-end">
-                      {isReady ? (
-                        <span className="text-xs text-amber-400 font-semibold opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-                          열기 →
-                        </span>
-                      ) : (
-                        <span className="text-xs text-gray-600">출시 예정</span>
-                      )}
+                <div className="bg-gray-800/60 p-5">
+                  {/* 이모지 + 상태 뱃지 */}
+                  <div className="flex items-start justify-between mb-3">
+                    <span className="text-4xl leading-none filter drop-shadow-sm">{tool.emoji}</span>
+                    <div className="flex flex-col items-end gap-1.5">
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${meta.cls}`}>
+                        {meta.label}
+                      </span>
+                      <span className="text-[10px] text-gray-500 bg-gray-700 px-2 py-0.5 rounded-full">{tool.category}</span>
                     </div>
                   </div>
 
-                  {/* 호버 테두리 글로우 */}
-                  {isReady && (
-                    <div className={`absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-br ${tool.gradient} pointer-events-none`}
-                      style={{ opacity: 0, mixBlendMode: 'overlay' }} />
-                  )}
-                </motion.div>
-              )
-            })}
+                  {/* 이름 + 설명 */}
+                  <h3 className={`text-base font-extrabold mb-1.5 ${isReady ? 'text-white group-hover:text-amber-300' : 'text-gray-400'} transition-colors`}>
+                    {tool.name}
+                  </h3>
+                  <p className="text-xs text-gray-400 leading-relaxed">{tool.desc}</p>
+
+                  {/* 하단 액션 힌트 */}
+                  <div className="mt-4 flex items-center justify-end">
+                    {isReady ? (
+                      <span className="text-xs text-amber-400 font-semibold opacity-0 group-hover:opacity-100 transition-opacity">
+                        열기 →
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-600">출시 예정</span>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            )
+          })}
         </div>
       </div>
 
