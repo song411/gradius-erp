@@ -77,12 +77,32 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
     if (!docRef.current) return
     setExporting(true)
     try {
-      const h2c = (await import('html2canvas')).default
-      const canvas = await h2c(docRef.current, { scale: 2, useCORS: true, backgroundColor: '#fff', logging: false })
+      const { toPng } = await import('html-to-image')
+      const FIXED_WIDTH = 794
+      const clone = docRef.current.cloneNode(true) as HTMLElement
+      clone.style.cssText = [
+        'position:fixed', 'top:-9999px', 'left:-9999px',
+        `width:${FIXED_WIDTH}px`, 'max-width:none', 'overflow:visible',
+        'background:#fff', 'z-index:-1', 'line-height:1.5',
+      ].join(';')
+      clone.querySelectorAll<HTMLElement>('th, td').forEach(el => {
+        el.style.lineHeight = '1.2'
+        el.style.verticalAlign = 'middle'
+      })
+      document.body.appendChild(clone)
+      await new Promise(r => setTimeout(r, 150))
+
+      const dataUrl = await toPng(clone, {
+        pixelRatio: 2,
+        backgroundColor: '#fff',
+        width: FIXED_WIDTH,
+        height: clone.scrollHeight,
+      })
+      document.body.removeChild(clone)
+
       const link = document.createElement('a')
       link.download = `견적서_${estimate?.company_name || ''}_${estimate?.estimate_code || ''}.png`
-      link.href = canvas.toDataURL('image/png')
-      link.click()
+      link.href = dataUrl; link.click()
     } finally { setExporting(false) }
   }
 

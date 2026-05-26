@@ -369,13 +369,37 @@ export default function EstimateBuilder({
   async function handleDownloadImage() {
     if (!previewRef.current) return
     setExporting(true)
-    // 축소 transform 일시 제거 → 원본 A4 해상도로 캡처
     try {
-      const h2c = (await import('html2canvas')).default
-      const canvas = await h2c(previewRef.current, { scale: 2, useCORS: true, backgroundColor: '#fff', logging: false })
+      const { toPng } = await import('html-to-image')
+      // 고정 A4 너비 클론 — 화면 줌/스크롤/lineHeight 상속 무관하게 일정한 결과
+      const FIXED_WIDTH = 794
+      const clone = previewRef.current.cloneNode(true) as HTMLElement
+      clone.style.cssText = [
+        'position:fixed', 'top:-9999px', 'left:-9999px',
+        `width:${FIXED_WIDTH}px`, 'max-width:none', 'overflow:visible',
+        'background:#fff', 'z-index:-1',
+        // 부모 lineHeight 초기화 → 테이블 셀 수직 정렬에 영향 차단
+        'line-height:1.5',
+      ].join(';')
+      // 테이블 셀 lineHeight 명시 보강
+      clone.querySelectorAll<HTMLElement>('th, td').forEach(el => {
+        el.style.lineHeight = '1.2'
+        el.style.verticalAlign = 'middle'
+      })
+      document.body.appendChild(clone)
+      await new Promise(r => setTimeout(r, 150))
+
+      const dataUrl = await toPng(clone, {
+        pixelRatio: 2,
+        backgroundColor: '#fff',
+        width: FIXED_WIDTH,
+        height: clone.scrollHeight,
+      })
+      document.body.removeChild(clone)
+
       const link = document.createElement('a')
       link.download = `견적서_${selectedInq?.company_name || ''}_${new Date().toISOString().slice(0, 10)}.png`
-      link.href = canvas.toDataURL('image/png'); link.click()
+      link.href = dataUrl; link.click()
     } finally { setExporting(false) }
   }
 
