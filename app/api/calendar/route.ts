@@ -7,12 +7,23 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { event_name, company_name, event_start, event_end, phone, memo } = body
 
-    const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n')
+    // Vercel 환경변수에서 \n을 실제 줄바꿈으로 변환 (두 가지 케이스 모두 처리)
+    const rawKey = process.env.GOOGLE_PRIVATE_KEY || ''
+    const privateKey = rawKey.includes('\\n')
+      ? rawKey.replace(/\\n/g, '\n')
+      : rawKey
     const clientEmail = process.env.GOOGLE_CLIENT_EMAIL
     const calendarId = process.env.GOOGLE_CALENDAR_ID
 
+    console.log('[Calendar] clientEmail:', clientEmail)
+    console.log('[Calendar] calendarId:', calendarId)
+    console.log('[Calendar] privateKey exists:', !!privateKey)
+    console.log('[Calendar] privateKey starts with:', privateKey?.slice(0, 30))
+
     if (!privateKey || !clientEmail || !calendarId) {
-      return NextResponse.json({ error: '구글 캘린더 환경변수가 설정되지 않았습니다.' }, { status: 500 })
+      return NextResponse.json({
+        error: `환경변수 누락 - email:${!!clientEmail} key:${!!privateKey} cal:${!!calendarId}`
+      }, { status: 500 })
     }
 
     const auth = new google.auth.JWT({

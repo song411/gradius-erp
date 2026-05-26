@@ -125,15 +125,15 @@ export default function InquiryDetail({ id }: { id: string }) {
           }),
         })
         if (res.ok) {
-          toast.success('구글 캘린더에 일정이 등록되었습니다.')
+          toast.success('✅ 구글 캘린더에 일정이 등록되었습니다.')
         } else {
           const err = await res.json()
           console.error('캘린더 등록 실패:', err)
-          toast.warning('체결 완료. 구글 캘린더 등록에 실패했습니다.')
+          toast.error(`캘린더 등록 실패: ${err.error || '알 수 없는 오류'}`)
         }
-      } catch {
-        console.error('캘린더 API 호출 오류')
-        toast.warning('체결 완료. 구글 캘린더 등록에 실패했습니다.')
+      } catch (e) {
+        console.error('캘린더 API 호출 오류', e)
+        toast.error('캘린더 API 호출 중 오류가 발생했습니다.')
       }
     }
   }
