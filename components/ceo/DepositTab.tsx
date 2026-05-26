@@ -53,8 +53,8 @@ export default function DepositTab({ data }: { data: CeoData }) {
   const totalPartialReceived = partial.reduce((acc, r) => acc + (r.received_amount || 0), 0)
   // 입금완료: 청구금액 합계 (완납 총액)
   const totalComplete = complete.reduce((acc, r) => acc + billed(r), 0)
-  // 전체 실수령액: 부분입금 받은금액 + 입금완료 청구금액
-  const totalReceived = totalPartialReceived + totalComplete
+  // 전체 실수령액: 모든 정산 건의 received_amount 합산 (청구금액 초과 수령 케이스도 정확히 반영)
+  const totalReceived = settlements.reduce((acc, r) => acc + (r.received_amount || 0), 0)
 
   async function handleSaveAmount(sett: Settlement) {
     const amt = Number(editAmt)
