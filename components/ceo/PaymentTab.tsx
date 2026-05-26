@@ -129,38 +129,17 @@ export default function PaymentTab({ data }: { data: CeoData }) {
     })
   }
 
-  // 지급 상태 전용 API 호출 (/api/payouts/[id])
-  // status 업데이트는 항상 동작, paid_at은 컬럼 없어도 graceful 처리
-  async function updatePayoutStatus(
-    payoutId: string,
-    status: string,
-    paidAt: string | null | undefined,
-  ) {
-    const payload: Record<string, unknown> = { status }
-    if (paidAt !== undefined) payload.paid_at = paidAt
-
-    const res = await fetch(`/api/payouts/${payoutId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-
-    const json = await res.json()
-
-    if (!res.ok) {
-      throw new Error(json.error || '업데이트 실패')
-    }
-
-    // warning이 있으면 콘솔에 기록 (paid_at 미반영 등)
-    if (json.warning) {
-      console.warn('[PaymentTab]', json.warning)
-    }
-  }
-
   async function handleMarkPaid(payoutId: string) {
     setProcessing(payoutId)
     try {
-      await updatePayoutStatus(payoutId, '지급완료', new Date().toISOString())
+      // PayoutsContent와 동일한 검증된 방식: status만 먼저 업데이트
+      await db.update('payouts', payoutId, { status: '지급완료' })
+      // paid_at은 별도로 시도 - 컬럼 없어도 status 업데이트는 이미 완료됨
+      try {
+        await db.update('payouts', payoutId, { paid_at: new Date().toISOString() })
+      } catch {
+        console.warn('[PaymentTab] paid_at 컬럼 없음 - 무시하고 계속')
+      }
       toast.success('지급완료로 처리되었습니다.')
       reload()
     } catch (err) {
@@ -175,7 +154,13 @@ export default function PaymentTab({ data }: { data: CeoData }) {
     if (!confirm(`"${staffName}" 지급완료를 검토완료로 되돌리겠습니까?`)) return
     setProcessing(payoutId)
     try {
-      await updatePayoutStatus(payoutId, '검토완료', null)
+      await db.update('payouts', payoutId, { status: '검토완료' })
+      // paid_at 초기화도 시도 - 실패해도 무시
+      try {
+        await db.update('payouts', payoutId, { paid_at: null })
+      } catch {
+        console.warn('[PaymentTab] paid_at 초기화 실패 - 무시하고 계속')
+      }
       toast.success('검토완료로 되돌렸습니다.')
       reload()
     } catch (err) {
