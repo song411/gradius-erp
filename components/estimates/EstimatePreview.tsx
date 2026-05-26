@@ -228,8 +228,8 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
             <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '12px', fontSize: '11px' }}>
               <thead>
                 <tr style={{ backgroundColor: '#374151', color: '#fff' }}>
-                  {['품명', '시간/규격', '수량', '일수', '단가', '금액', '비고'].map((h, i) => (
-                    <th key={h} style={{ padding: '7px 6px', textAlign: i < 2 ? 'left' : 'right', fontWeight: '600', border: '1px solid #4b5563' }}>{h}</th>
+                  {['품명', '시간/규격', '수량', '일수', '단가', '금액', '비고'].map((h) => (
+                    <th key={h} style={{ padding: '7px 6px', textAlign: 'center', fontWeight: '600', border: '1px solid #4b5563' }}>{h}</th>
                   ))}
                 </tr>
               </thead>

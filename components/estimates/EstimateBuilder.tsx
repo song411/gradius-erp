@@ -1111,7 +1111,7 @@ function A4Preview({
       {/* 제목 */}
       <div style={{ textAlign: 'center', marginBottom: '24px', paddingBottom: '16px', borderBottom: '3px solid #1e3a5f' }}>
         <div style={{ fontSize: '34px', fontWeight: '900', letterSpacing: '16px', color: '#1e3a5f', marginBottom: '4px' }}>견 적 서</div>
-        <div style={{ fontSize: '11px', color: '#9ca3af', letterSpacing: '2px' }}>QUOTATION</div>
+        
       </div>
 
       {/* 공급받는자 / 공급자 테이블 */}
@@ -1177,8 +1177,8 @@ function A4Preview({
       <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '14px', fontSize: '11px' }}>
         <thead>
           <tr style={{ backgroundColor: '#1e3a5f', color: '#fff' }}>
-            {['품명', '시간/규격', '수량', '일수', '단가', '금액', '비고'].map((h, i) => (
-              <th key={h} style={{ padding: '9px 8px', textAlign: i < 2 ? 'left' : 'right', fontWeight: '700', fontSize: '11px', border: '1px solid #2d4a7a' }}>{h}</th>
+            {['품명', '시간/규격', '수량', '일수', '단가', '금액', '비고'].map((h) => (
+              <th key={h} style={{ padding: '9px 8px', textAlign: 'center', fontWeight: '700', fontSize: '11px', border: '1px solid #2d4a7a' }}>{h}</th>
             ))}
           </tr>
         </thead>
