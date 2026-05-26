@@ -42,20 +42,24 @@ export default function DepositTab({ data }: { data: CeoData }) {
       })
   }, [settlements, inquiries, filter])
 
-  // 요약
+  // 요약 — 청구금액(invoice_amount || supply_price) 기준
+  const billed = (s: Settlement) => s.invoice_amount || s.supply_price || 0
   const unpaid   = settlements.filter(s => s.deposit_status === '미입금')
   const partial  = settlements.filter(s => s.deposit_status === '부분입금')
   const complete = settlements.filter(s => s.deposit_status === '입금완료')
-  const totalUnpaid = unpaid.reduce((s, r) => s + (r.balance || r.supply_price - r.received_amount), 0)
+  const totalUnpaid   = unpaid.reduce((acc, r)  => acc + billed(r), 0)
+  const totalPartial  = partial.reduce((acc, r)  => acc + billed(r), 0)
+  const totalComplete = complete.reduce((acc, r) => acc + billed(r), 0)
 
   async function handleSaveAmount(sett: Settlement) {
     const amt = Number(editAmt)
     if (isNaN(amt) || amt < 0) { toast.error('올바른 금액을 입력해주세요.'); return }
     setSaving(true)
+    const billedAmt = billed(sett)
     try {
       const newDeposit: DepositStatus =
-        amt === 0                 ? '미입금' :
-        amt >= sett.supply_price  ? '입금완료' : '부분입금'
+        amt === 0            ? '미입금' :
+        amt >= billedAmt     ? '입금완료' : '부분입금'
 
       await db.update('settlements', sett.id, {
         received_amount: amt,
@@ -72,7 +76,7 @@ export default function DepositTab({ data }: { data: CeoData }) {
   }
 
   async function handleQuickDeposit(sett: Settlement, pct: number) {
-    const amt = Math.round(sett.supply_price * pct)
+    const amt = Math.round(billed(sett) * pct)
     setSaving(true)
     try {
       const newDeposit: DepositStatus = pct >= 1 ? '입금완료' : '부분입금'
@@ -107,6 +111,7 @@ export default function DepositTab({ data }: { data: CeoData }) {
             <span className="text-xs font-bold">부분입금</span>
           </div>
           <p className="text-2xl font-extrabold text-yellow-700">{partial.length}<span className="text-sm font-normal ml-0.5">건</span></p>
+          <p className="text-xs text-yellow-600 font-semibold mt-0.5">{formatKRW(totalPartial)}</p>
         </div>
         <div className="bg-green-50 border-2 border-green-300 rounded-xl p-4 shadow-sm">
           <div className="flex items-center gap-2 text-green-700 mb-1">
@@ -114,6 +119,7 @@ export default function DepositTab({ data }: { data: CeoData }) {
             <span className="text-xs font-bold">입금완료</span>
           </div>
           <p className="text-2xl font-extrabold text-green-700">{complete.length}<span className="text-sm font-normal ml-0.5">건</span></p>
+          <p className="text-xs text-green-600 font-semibold mt-0.5">{formatKRW(totalComplete)}</p>
         </div>
         <div className="bg-blue-50 border-2 border-blue-300 rounded-xl p-4 shadow-sm">
           <div className="flex items-center gap-2 text-blue-700 mb-1">
