@@ -152,6 +152,65 @@ const SCENARIOS = [
 // ─── 카카오톡 양식 ────────────────────────────────────────
 const KAKAO_TEMPLATES = [
   {
+    id: 'inquiry-form',
+    title: '📥 문의접수 양식 (고객 전달용)',
+    tag: '문의 받을 때',
+    color: 'bg-amber-50 border-amber-300',
+    tagColor: 'bg-amber-100 text-amber-800',
+    template: `📋 문의접수 양식
+아래 내용을 채워서 보내주세요 😊
+
+문의날짜 : 
+업체 : 
+성함 : 
+행사명 : 
+연락처 : 
+장소 : 
+일시 : 
+시간 : 
+서비스종류 : 
+요청인원수 : 
+페이 : 
+복장 : 
+식사 : 
+주차 : 
+특이사항 :
+
+감사합니다 🙏`,
+    sampleTitle: '✅ 작성 예시',
+    sample: `📋 문의접수 양식
+아래 내용을 채워서 보내주세요 😊
+
+문의날짜 : 5월 20일
+업체 : 개인(황보태)
+성함 : 황보태
+행사명 : 개인신변보호
+연락처 : 010-5269-6258
+장소 : 서울 및 파주
+일시 : 5월 22일
+시간 : 16:00 - 23:00
+서비스종류 : 개인수행
+요청인원수 : 1
+페이 : 50만원 내외
+복장 : 활동성 편한복장
+식사 : 미제공
+주차 : 가능
+특이사항 :
+2타임 나눠져있음
+16:00 서울역 → 청담동
+22:00 청담동 → 파주 금촌
+차량 필요, 휠체어 이용자이므로
+큰 차 있어야 할 듯
+
+감사합니다 🙏`,
+    tips: [
+      '업체명은 "업체명(담당자명)" 형식으로 입력하면 ERP에 고객사 자동 등록 시 편리해요',
+      '시간은 "시작 - 종료" 형식으로 작성해 주세요 (예: 10:00 - 18:00)',
+      '특이사항은 최대한 구체적으로 — 이 내용이 견적서 비고란에 활용됩니다',
+      '페이가 미정이면 "협의" 또는 "시장가"로 작성해도 됩니다',
+    ],
+  },
+  {
     id: 'inquiry-confirm',
     title: '문의 접수 확인',
     tag: '문의 접수 시',
@@ -530,6 +589,33 @@ export default function GuideModal({ onClose }: { onClose: () => void }) {
                         <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans leading-relaxed bg-white/60 rounded-lg px-4 py-3 border border-white/80">
                           {t.template}
                         </pre>
+
+                        {/* 작성 팁 */}
+                        {'tips' in t && Array.isArray(t.tips) && (
+                          <div className="mt-3 bg-white/70 rounded-lg px-4 py-3 border border-amber-200">
+                            <p className="text-xs font-bold text-amber-700 mb-2">💡 작성 팁</p>
+                            <ul className="space-y-1">
+                              {(t.tips as string[]).map((tip, i) => (
+                                <li key={i} className="text-xs text-gray-600 flex gap-1.5">
+                                  <span className="text-amber-500 shrink-0">•</span>{tip}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* 작성 예시 */}
+                        {'sample' in t && t.sample && (
+                          <div className="mt-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <p className="text-xs font-bold text-gray-600">{'sampleTitle' in t ? String(t.sampleTitle) : '✅ 작성 예시'}</p>
+                              <CopyButton text={String(t.sample)} />
+                            </div>
+                            <pre className="text-xs text-gray-600 whitespace-pre-wrap font-sans leading-relaxed bg-green-50 rounded-lg px-4 py-3 border border-green-200">
+                              {String(t.sample)}
+                            </pre>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
