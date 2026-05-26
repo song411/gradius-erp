@@ -78,17 +78,30 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
     setExporting(true)
     try {
       const h2c = (await import('html2canvas')).default
-      const cells = Array.from(docRef.current.querySelectorAll<HTMLElement>('th, td'))
-      const origStyles = cells.map(c => c.getAttribute('style') || '')
-      cells.forEach(c => {
-        c.style.verticalAlign = 'middle'
+      const ths = Array.from(docRef.current.querySelectorAll<HTMLElement>('th'))
+      const tds = Array.from(docRef.current.querySelectorAll<HTMLElement>('td'))
+      const allCells = [...ths, ...tds]
+      const origStyles = allCells.map(c => c.getAttribute('style') || '')
+
+      ths.forEach(c => {
+        c.style.verticalAlign = 'top'
         c.style.lineHeight = '1'
+        c.style.paddingTop = '12px'
+        c.style.paddingBottom = '4px'
       })
+      tds.forEach(c => {
+        c.style.verticalAlign = 'top'
+        c.style.lineHeight = '1'
+        c.style.paddingTop = '11px'
+        c.style.paddingBottom = '4px'
+      })
+
       const canvas = await h2c(docRef.current, {
         scale: 2, useCORS: true, allowTaint: true,
         backgroundColor: '#fff', logging: false,
       })
-      cells.forEach((c, i) => c.setAttribute('style', origStyles[i]))
+      allCells.forEach((c, i) => c.setAttribute('style', origStyles[i]))
+
       const link = document.createElement('a')
       link.download = `견적서_${estimate?.company_name || ''}_${estimate?.estimate_code || ''}.png`
       link.href = canvas.toDataURL('image/png'); link.click()

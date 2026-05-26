@@ -371,19 +371,32 @@ export default function EstimateBuilder({
     setExporting(true)
     try {
       const h2c = (await import('html2canvas')).default
-      // 캡처 직전 셀 스타일 직접 수정 → html2canvas가 수정된 상태를 그대로 캡처
-      const cells = Array.from(previewRef.current.querySelectorAll<HTMLElement>('th, td'))
-      const origStyles = cells.map(c => c.getAttribute('style') || '')
-      cells.forEach(c => {
-        c.style.verticalAlign = 'middle'
+      // html2canvas는 Korean 폰트(Malgun Gothic) descender 때문에 텍스트가 아래로 치우침
+      // vertical-align 대신 padding 보정으로 강제 중앙 배치
+      const ths = Array.from(previewRef.current.querySelectorAll<HTMLElement>('th'))
+      const tds = Array.from(previewRef.current.querySelectorAll<HTMLElement>('td'))
+      const allCells = [...ths, ...tds]
+      const origStyles = allCells.map(c => c.getAttribute('style') || '')
+
+      ths.forEach(c => {
+        c.style.verticalAlign = 'top'
         c.style.lineHeight = '1'
+        c.style.paddingTop = '12px'
+        c.style.paddingBottom = '4px'
       })
+      tds.forEach(c => {
+        c.style.verticalAlign = 'top'
+        c.style.lineHeight = '1'
+        c.style.paddingTop = '11px'
+        c.style.paddingBottom = '4px'
+      })
+
       const canvas = await h2c(previewRef.current, {
         scale: 2, useCORS: true, allowTaint: true,
         backgroundColor: '#fff', logging: false,
       })
-      // 원복
-      cells.forEach((c, i) => c.setAttribute('style', origStyles[i]))
+      allCells.forEach((c, i) => c.setAttribute('style', origStyles[i]))
+
       const link = document.createElement('a')
       link.download = `견적서_${selectedInq?.company_name || ''}_${new Date().toISOString().slice(0, 10)}.png`
       link.href = canvas.toDataURL('image/png'); link.click()
