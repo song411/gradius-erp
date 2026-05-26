@@ -177,18 +177,30 @@ const KAKAO_TEMPLATES = [
 특이사항 :
 
 감사합니다 🙏`,
+    copyText: `문의날짜 : 
+업체 : 
+성함 : 
+행사명 : 
+연락처 : 
+장소 : 
+일시 : 
+시간 : 
+서비스종류 : 
+요청인원수 : 
+페이 : 
+복장 : 
+식사 : 
+주차 : 
+특이사항 :`,
     sampleTitle: '✅ 작성 예시',
-    sample: `📋 문의접수 양식
-아래 내용을 채워서 보내주세요 😊
-
-문의날짜 : 5월 20일
+    sample: `문의날짜 : 5월 20일
 업체 : 개인(황보태)
 성함 : 황보태
 행사명 : 개인신변보호
 연락처 : 010-5269-6258
 장소 : 서울 및 파주
 일시 : 5월 22일
-시간 : 16:00 - 23:00
+시간 : 16:00 ~ 23:00
 서비스종류 : 개인수행
 요청인원수 : 1
 페이 : 50만원 내외
@@ -200,9 +212,7 @@ const KAKAO_TEMPLATES = [
 16:00 서울역 → 청담동
 22:00 청담동 → 파주 금촌
 차량 필요, 휠체어 이용자이므로
-큰 차 있어야 할 듯
-
-감사합니다 🙏`,
+큰 차 있어야 할 듯`,
     tips: [
       '업체명은 "업체명(담당자명)" 형식으로 입력하면 ERP에 고객사 자동 등록 시 편리해요',
       '시간은 "시작 - 종료" 형식으로 작성해 주세요 (예: 10:00 - 18:00)',
@@ -584,7 +594,7 @@ export default function GuideModal({ onClose }: { onClose: () => void }) {
                             <span className="font-bold text-gray-800">{t.title}</span>
                             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${t.tagColor}`}>{t.tag}</span>
                           </div>
-                          <CopyButton text={t.template} />
+                          <CopyButton text={'copyText' in t && t.copyText ? String(t.copyText) : t.template} />
                         </div>
                         <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans leading-relaxed bg-white/60 rounded-lg px-4 py-3 border border-white/80">
                           {t.template}
