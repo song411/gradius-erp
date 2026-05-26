@@ -144,6 +144,32 @@ export default function EstimatesContent() {
       // 문의 상태 → 체결
       if (est.inquiry_id) {
         await db.update('inquiries', est.inquiry_id, { status: '체결' })
+
+        // 구글 캘린더 자동 등록
+        try {
+          const inq = est.inquiries
+          const res = await fetch('/api/calendar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              event_name:   inq?.event_name   || est.site_name   || '',
+              company_name: inq?.company_name || est.company_name || '',
+              event_start:  inq?.event_start  || null,
+              event_end:    inq?.event_end    || null,
+              phone:        inq?.phone        || null,
+              memo:         inq?.memo         || null,
+            }),
+          })
+          if (res.ok) {
+            toast.success('✅ 구글 캘린더에 일정이 등록되었습니다.')
+          } else {
+            const err = await res.json()
+            toast.error(`캘린더 등록 실패: ${err.error || '알 수 없는 오류'}`)
+          }
+        } catch (calErr) {
+          console.error('캘린더 API 오류:', calErr)
+          toast.error('캘린더 등록 중 오류가 발생했습니다.')
+        }
       }
 
       // settlements 레코드 자동 생성 (이미 있으면 스킵)
