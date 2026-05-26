@@ -370,34 +370,25 @@ export default function EstimateBuilder({
     if (!previewRef.current) return
     setExporting(true)
     try {
-      const { toPng } = await import('html-to-image')
-      const FIXED_WIDTH = 794
-      const clone = previewRef.current.cloneNode(true) as HTMLElement
-      clone.style.cssText = [
-        'position:fixed', 'top:-9999px', 'left:-9999px',
-        `width:${FIXED_WIDTH}px`, 'max-width:none', 'overflow:visible',
-        'background:#fff', 'z-index:-1', 'line-height:1.5',
-      ].join(';')
-      document.body.appendChild(clone)
-      await new Promise(r => setTimeout(r, 150))
-
-      clone.querySelectorAll<HTMLElement>('th, td').forEach(el => {
-        el.style.lineHeight = '1.2'
-        el.style.verticalAlign = 'middle'
-      })
-
-      const captureHeight = Math.max(clone.scrollHeight, clone.offsetHeight, 100)
-      const dataUrl = await toPng(clone, {
-        pixelRatio: 2,
+      const h2c = (await import('html2canvas')).default
+      const canvas = await h2c(previewRef.current, {
+        scale: 2,
+        useCORS: true,
         backgroundColor: '#fff',
-        width: FIXED_WIDTH,
-        height: captureHeight,
+        logging: false,
+        onclone: (_doc: Document, el: HTMLElement) => {
+          // 클론에서 테이블 셀 수직 정렬 강제 적용
+          el.querySelectorAll<HTMLElement>('th, td').forEach(cell => {
+            cell.style.verticalAlign = 'middle'
+            cell.style.lineHeight = '1.2'
+            cell.style.paddingTop = '8px'
+            cell.style.paddingBottom = '8px'
+          })
+        },
       })
-      document.body.removeChild(clone)
-
       const link = document.createElement('a')
       link.download = `견적서_${selectedInq?.company_name || ''}_${new Date().toISOString().slice(0, 10)}.png`
-      link.href = dataUrl; link.click()
+      link.href = canvas.toDataURL('image/png'); link.click()
     } catch (err) {
       console.error('견적서 저장 오류:', err)
       toast.error('이미지 저장에 실패했습니다.')
@@ -408,39 +399,29 @@ export default function EstimateBuilder({
     if (!reportRef.current) return
     setExporting(true)
     try {
-      const { toPng } = await import('html-to-image')
-      const FIXED_WIDTH = 920
-      const clone = reportRef.current.cloneNode(true) as HTMLElement
-      clone.style.cssText = [
-        'position:fixed', 'top:-9999px', 'left:-9999px',
-        `width:${FIXED_WIDTH}px`, 'max-width:none', 'overflow:visible',
-        'background:#f9fafb', 'z-index:-1',
-      ].join(';')
-      // DOM에 먼저 추가해야 getComputedStyle이 정상 동작
-      document.body.appendChild(clone)
-      await new Promise(r => setTimeout(r, 150))
+      const h2c = (await import('html2canvas')).default
+      // overflow-x-auto 요소 임시 해제 → 우측 잘림 방지
+      const overflowEls = reportRef.current.querySelectorAll<HTMLElement>('.overflow-x-auto, .overflow-hidden')
+      overflowEls.forEach(e => { e.dataset.origOv = e.style.overflow; e.style.overflow = 'visible' })
+      const origMaxW = reportRef.current.style.maxWidth
+      reportRef.current.style.maxWidth = 'none'
 
-      // overflow 요소 해제 (DOM 추가 후에 처리)
-      clone.querySelectorAll<HTMLElement>('*').forEach(e => {
-        const ov = e.style.overflow || e.style.overflowX
-        if (ov === 'auto' || ov === 'hidden' || e.classList.contains('overflow-x-auto') || e.classList.contains('overflow-hidden')) {
-          e.style.overflow = 'visible'
-          e.style.overflowX = 'visible'
-        }
-      })
-
-      const captureHeight = Math.max(clone.scrollHeight, clone.offsetHeight, 100)
-      const dataUrl = await toPng(clone, {
-        pixelRatio: 2,
+      const canvas = await h2c(reportRef.current, {
+        scale: 2,
+        useCORS: true,
         backgroundColor: '#f9fafb',
-        width: FIXED_WIDTH,
-        height: captureHeight,
+        logging: false,
+        width: reportRef.current.scrollWidth,
+        height: reportRef.current.scrollHeight,
       })
-      document.body.removeChild(clone)
+
+      // 원복
+      overflowEls.forEach(e => { e.style.overflow = e.dataset.origOv || '' })
+      reportRef.current.style.maxWidth = origMaxW
 
       const link = document.createElement('a')
       link.download = `수익리포트_${selectedInq?.company_name || ''}_${new Date().toISOString().slice(0, 10)}.png`
-      link.href = dataUrl; link.click()
+      link.href = canvas.toDataURL('image/png'); link.click()
     } catch (err) {
       console.error('리포트 저장 오류:', err)
       toast.error('리포트 이미지 저장에 실패했습니다.')
