@@ -129,14 +129,37 @@ export default function PaymentTab({ data }: { data: CeoData }) {
     })
   }
 
+  // paid_at 컬럼이 있으면 함께 업데이트, 없으면 status만 업데이트 (fallback)
+  async function updatePayoutStatus(
+    payoutId: string,
+    status: string,
+    paidAt: string | null,
+  ) {
+    const payload: Record<string, unknown> = { status }
+    if (paidAt !== undefined) payload.paid_at = paidAt
+
+    try {
+      await db.update('payouts', payoutId, payload)
+    } catch (firstErr) {
+      // paid_at 컬럼이 없어서 실패했을 경우 status만 재시도
+      const msg = firstErr instanceof Error ? firstErr.message : ''
+      if (msg.includes('paid_at') || msg.includes('column')) {
+        await db.update('payouts', payoutId, { status })
+      } else {
+        throw firstErr
+      }
+    }
+  }
+
   async function handleMarkPaid(payoutId: string) {
     setProcessing(payoutId)
     try {
-      await db.update('payouts', payoutId, { status: '지급완료', paid_at: new Date().toISOString() })
+      await updatePayoutStatus(payoutId, '지급완료', new Date().toISOString())
       toast.success('지급완료로 처리되었습니다.')
       reload()
-    } catch {
-      toast.error('처리 중 오류가 발생했습니다.')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '알 수 없는 오류'
+      toast.error(`처리 중 오류: ${msg}`)
     } finally {
       setProcessing(null)
     }
@@ -146,11 +169,12 @@ export default function PaymentTab({ data }: { data: CeoData }) {
     if (!confirm(`"${staffName}" 지급완료를 검토완료로 되돌리겠습니까?`)) return
     setProcessing(payoutId)
     try {
-      await db.update('payouts', payoutId, { status: '검토완료', paid_at: null })
+      await updatePayoutStatus(payoutId, '검토완료', null)
       toast.success('검토완료로 되돌렸습니다.')
       reload()
-    } catch {
-      toast.error('처리 중 오류가 발생했습니다.')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '알 수 없는 오류'
+      toast.error(`처리 중 오류: ${msg}`)
     } finally {
       setProcessing(null)
     }
