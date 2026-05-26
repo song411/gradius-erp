@@ -162,7 +162,9 @@ function ToolModal({ toolId, onClose }: { toolId: string; onClose: () => void })
   // AI 모달은 자체 오버레이를 포함하므로 별도 처리
   if (toolId === 'ai')    return <AiModal    onClose={onClose} />
   if (toolId === 'guide') return <GuideModal onClose={onClose} />
-  if (toolId === 'kit')   return <KitModal   onClose={onClose} />
+
+  // kit은 넓은 모달이 필요하므로 별도 max-w 적용
+  const isWide = toolId === 'kit'
 
   return (
     <AnimatePresence>
@@ -170,7 +172,7 @@ function ToolModal({ toolId, onClose }: { toolId: string; onClose: () => void })
         <motion.div className="absolute inset-0 bg-black/50 backdrop-blur-sm"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           onClick={onClose} />
-        <motion.div className="relative z-10 w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden"
+        <motion.div className={`relative z-10 w-full ${isWide ? 'max-w-2xl' : 'max-w-2xl'} bg-white rounded-2xl shadow-2xl overflow-hidden`}
           initial={{ opacity: 0, scale: 0.94, y: 16 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.96, y: 8 }}
@@ -180,6 +182,7 @@ function ToolModal({ toolId, onClose }: { toolId: string; onClose: () => void })
           {toolId === 'taxcalc'   && <TaxCalcModal  onClose={onClose} />}
           {toolId === 'tarot'     && <TarotModal    onClose={onClose} />}
           {toolId === 'quote'     && <QuoteModal    onClose={onClose} />}
+          {toolId === 'kit'       && <KitModal      onClose={onClose} />}
         </motion.div>
       </div>
     </AnimatePresence>
