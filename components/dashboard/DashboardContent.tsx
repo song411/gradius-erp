@@ -123,6 +123,14 @@ export default function DashboardContent() {
   // payouts 테이블에 실제 데이터가 있는지 여부
   const hasRealPayoutData = payouts.length > 0
 
+  // inquiry당 settlement 중복 제거: inquiry_id별 첫 번째 settlement만 사용
+  const dedupedSettlements = Array.from(
+    settlements.reduce<Map<string, Settlement>>((m, s) => {
+      if (s.inquiry_id && !m.has(s.inquiry_id)) m.set(s.inquiry_id, s)
+      return m
+    }, new Map()).values()
+  )
+
   // 이번달 체결 매출 (event_start 기준, inquiry당 중복 제거)
   const thisMonthInqIds = new Set(
     inquiries.filter(i => i.event_start?.startsWith(thisMonth)).map(i => i.id)
@@ -180,14 +188,6 @@ export default function DashboardContent() {
   )
 
   // 연도 기준 1~12월 고정 차트 (rev2026와 범위 일치)
-  // inquiry당 settlement 중복 제거: inquiry_id별 첫 번째 settlement만 사용
-  const dedupedSettlements = Array.from(
-    settlements.reduce<Map<string, Settlement>>((m, s) => {
-      if (s.inquiry_id && !m.has(s.inquiry_id)) m.set(s.inquiry_id, s)
-      return m
-    }, new Map()).values()
-  )
-
   const monthlyChart = Array.from({ length: 12 }, (_, i) => {
     const month = String(i + 1).padStart(2, '0')
     const key   = `${now.getFullYear()}-${month}`
@@ -456,7 +456,7 @@ function OverviewTab({
           <CardHeader>
             <CardTitle className="text-sm">
               월별 매출 · 수익 추이
-              <span className="text-xs font-normal text-gray-400 ml-2">{YEAR}년 1~12월 · 행사 시작일 기준</span>
+              <span className="text-xs font-normal text-gray-400 ml-2">{year}년 1~12월 · 행사 시작일 기준</span>
             </CardTitle>
           </CardHeader>
           <CardContent>
