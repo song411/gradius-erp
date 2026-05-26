@@ -371,21 +371,25 @@ export default function EstimateBuilder({
     setExporting(true)
     try {
       const h2c = (await import('html2canvas')).default
-      // html2canvas의 Korean 폰트 렌더링 편향 보정:
-      // 실제 셀 높이를 측정 후 (cellH - fontSize) / 2 로 정확한 paddingTop을 계산
+      // paddingBottom 유지(셀 높이 변경 없음), paddingTop만 측정값으로 보정
       const cells = Array.from(previewRef.current.querySelectorAll<HTMLElement>('th, td'))
       const origStyles = cells.map(c => c.getAttribute('style') || '')
 
       cells.forEach(c => {
-        const cellH  = c.offsetHeight
-        const fsize  = parseFloat(window.getComputedStyle(c).fontSize) || 11
-        const idealPt = Math.max(4, Math.round((cellH - fsize) / 2))
-        c.style.verticalAlign  = 'top'
-        c.style.lineHeight     = '1'
-        c.style.paddingTop     = `${idealPt}px`
-        c.style.paddingBottom  = '0px'
-        c.style.paddingLeft    = '8px'
-        c.style.paddingRight   = '8px'
+        const cellH   = c.offsetHeight
+        const fsize   = parseFloat(window.getComputedStyle(c).fontSize) || 11
+        const origPb  = parseFloat(window.getComputedStyle(c).paddingBottom) || 8
+        const origPl  = window.getComputedStyle(c).paddingLeft  || '8px'
+        const origPr  = window.getComputedStyle(c).paddingRight || '8px'
+        // verticalAlign: top 기준으로 텍스트가 중앙에 오려면:
+        //   paddingTop = cellH - fsize - paddingBottom
+        const idealPt = Math.max(2, Math.round(cellH - fsize - origPb))
+        c.style.verticalAlign = 'top'
+        c.style.lineHeight    = '1'
+        c.style.paddingTop    = `${idealPt}px`
+        c.style.paddingLeft   = origPl
+        c.style.paddingRight  = origPr
+        // paddingBottom은 변경하지 않아 셀 높이 유지
       })
 
       const canvas = await h2c(previewRef.current, {
@@ -409,36 +413,26 @@ export default function EstimateBuilder({
     try {
       const h2c = (await import('html2canvas')).default
 
-      // reportRef의 부모 스크롤 컨테이너들을 찾아 overflow 해제 (html2canvas가 잘리는 원인)
-      const scrollParents: { el: HTMLElement; origStyle: string }[] = []
-      let cur = reportRef.current.parentElement
-      while (cur && cur !== document.body) {
-        const ov = window.getComputedStyle(cur).overflow
-        const ovY = window.getComputedStyle(cur).overflowY
-        if (ov.includes('auto') || ov.includes('scroll') || ov.includes('hidden') ||
-            ovY.includes('auto') || ovY.includes('scroll') || ovY.includes('hidden')) {
-          scrollParents.push({ el: cur, origStyle: cur.getAttribute('style') || '' })
-          cur.style.overflow = 'visible'
-          cur.style.height = 'auto'
-          cur.style.maxHeight = 'none'
-        }
-        cur = cur.parentElement
-      }
-
-      // 내부 overflow 요소도 해제
-      const innerEls = Array.from(reportRef.current.querySelectorAll<HTMLElement>('[class*="overflow"]'))
-      const origInner = innerEls.map(e => e.getAttribute('style') || '')
-      innerEls.forEach(e => { e.style.overflow = 'visible' })
-
       const canvas = await h2c(reportRef.current, {
         scale: 2, useCORS: true, allowTaint: true,
         backgroundColor: '#f9fafb', logging: false,
         windowWidth: 1200,
+        onclone: (_clonedDoc: Document, element: HTMLElement) => {
+          // 클론에서만 overflow 해제 (라이브 DOM 무변경)
+          const walker = document.createTreeWalker(element, NodeFilter.SHOW_ELEMENT)
+          let node = walker.nextNode()
+          while (node) {
+            const el = node as HTMLElement
+            const st = window.getComputedStyle(el)
+            if (st.overflow !== 'visible' || st.overflowY !== 'visible') {
+              el.style.overflow = 'visible'
+              el.style.height   = 'auto'
+              el.style.maxHeight = 'none'
+            }
+            node = walker.nextNode()
+          }
+        },
       })
-
-      // 원복
-      scrollParents.forEach(({ el, origStyle }) => el.setAttribute('style', origStyle))
-      innerEls.forEach((e, i) => e.setAttribute('style', origInner[i]))
 
       const link = document.createElement('a')
       link.download = `수익리포트_${selectedInq?.company_name || ''}_${new Date().toISOString().slice(0, 10)}.png`
