@@ -135,7 +135,7 @@ export default function EstimateBuilder({
       setForm({
         inquiry_id: editTarget.inquiry_id || '',
         site_name: editTarget.site_name || '', manager: editTarget.manager || '',
-        contact_phone: '', site_address: editTarget.site_address || '',
+        contact_phone: inq?.phone || '', site_address: editTarget.site_address || '',
         attire: editTarget.attire || '', meal: editTarget.meal || '',
         parking: editTarget.parking || '', notes: editTarget.notes || '',
         extra_cost: editTarget.extra_cost || 0, include_vat: editTarget.vat > 0,
@@ -380,12 +380,26 @@ export default function EstimateBuilder({
     if (!reportRef.current) return
     setExporting(true)
     try {
-      // html-to-image: oklch 등 최신 CSS 색상 함수를 올바르게 처리함
       const { toPng } = await import('html-to-image')
-      const dataUrl = await toPng(reportRef.current, {
+      const el = reportRef.current
+      // overflow-x-auto 임시 제거 → 테이블 우측 잘림 방지
+      const overflowEls = el.querySelectorAll<HTMLElement>('.overflow-x-auto')
+      overflowEls.forEach(e => { e.dataset.origOv = e.style.overflow; e.style.overflow = 'visible' })
+      // max-w 제한도 임시 해제
+      const origMaxW = el.style.maxWidth
+      el.style.maxWidth = 'none'
+
+      const dataUrl = await toPng(el, {
         pixelRatio: 2,
         backgroundColor: '#f9fafb',
+        width: el.scrollWidth,
+        height: el.scrollHeight,
       })
+
+      // 원복
+      overflowEls.forEach(e => { e.style.overflow = e.dataset.origOv || '' })
+      el.style.maxWidth = origMaxW
+
       const link = document.createElement('a')
       link.download = `수익리포트_${selectedInq?.company_name || ''}_${new Date().toISOString().slice(0, 10)}.png`
       link.href = dataUrl; link.click()
@@ -674,10 +688,10 @@ export default function EstimateBuilder({
                 ref={previewRef}
                 style={{
                   width: '794px', minHeight: '1123px', margin: '0 auto',
-                  padding: '40px 48px', backgroundColor: '#fff',
+                  padding: '48px 56px', backgroundColor: '#fff',
                   boxShadow: '0 4px 32px rgba(0,0,0,0.18)', borderRadius: '4px',
                   fontFamily: "'Malgun Gothic','맑은 고딕',sans-serif",
-                  fontSize: '12px', color: '#1a1a1a', lineHeight: '1.5',
+                  fontSize: '12px', color: '#1a1a1a', lineHeight: '1.6',
                 }}
               >
                 <A4Preview
@@ -1094,11 +1108,178 @@ function A4Preview({
 }) {
   return (
     <>
-      {/* 제목 + 하단 굵은 이중선 */}
-      <div style={{ textAlign: 'center', marginBottom: '20px', paddingBottom: '14px', borderBottom: '4px solid #111' }}>
-        <div style={{ fontSize: '32px', fontWeight: '900', letterSpacing: '14px', color: '#111', marginBottom: '2px' }}>견 적 서</div>
-        <div style={{ height: '1.5px', backgroundColor: '#111', marginTop: '8px' }} />
+      {/* 제목 */}
+      <div style={{ textAlign: 'center', marginBottom: '24px', paddingBottom: '16px', borderBottom: '3px solid #1e3a5f' }}>
+        <div style={{ fontSize: '34px', fontWeight: '900', letterSpacing: '16px', color: '#1e3a5f', marginBottom: '4px' }}>견 적 서</div>
+        <div style={{ fontSize: '11px', color: '#9ca3af', letterSpacing: '2px' }}>QUOTATION</div>
       </div>
+
+      {/* 공급받는자 / 공급자 테이블 */}
+      <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '18px', fontSize: '11px' }}>
+        <tbody>
+          <tr>
+            <td style={{ verticalAlign: 'top', width: '50%', paddingRight: '10px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid #1e3a5f' }}>
+                <tbody>
+                  <TblHeader label="공급받는자" />
+                  <TblRow2 l1="상호" v1={selectedInq?.company_name || '(업체명)'} l2="담당" v2={form.manager || ''} />
+                  <TblRow2 l1="연락처" v1={form.contact_phone || ''} l2="" v2="" />
+                  <TblRow2 l1="주소" v1={form.site_address || ''} l2="" v2="" />
+                  <TblRow2 l1="행사일시" v1={eventPeriod} l2="" v2="" />
+                </tbody>
+              </table>
+            </td>
+            <td style={{ verticalAlign: 'top', width: '50%', paddingLeft: '10px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid #1e3a5f' }}>
+                <tbody>
+                  <TblHeader label="공급자" />
+                  <TblRow2 l1="등록번호" v1={CO.regNo} l2="" v2="" />
+                  <TblRow2 l1="상호" v1={CO.name} l2="성명" v2={CO.ceo} />
+                  <TblRow2 l1="주소" v1={CO.address} l2="" v2="" />
+                  <TblRow2 l1="전화" v1={CO.phone} l2="견적일" v2={today} />
+                </tbody>
+              </table>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      {/* 합계금액 한글 */}
+      <div style={{
+        textAlign: 'center', margin: '0 0 18px',
+        padding: '13px 0', fontSize: '14px', fontWeight: '800', color: '#1e3a5f',
+        border: '2px solid #1e3a5f', borderRadius: '6px', backgroundColor: '#f0f4ff',
+      }}>
+        합계금액 : 일금&nbsp;
+        <span style={{ textDecoration: 'underline', color: '#dc2626', fontWeight: '900' }}>
+          {supplyPrice > 0 ? toKoreanAmount(finalTotal) : '( 품목 입력 후 자동 표시 )'}
+        </span>
+        &nbsp;<span style={{ color: '#6b7280', fontWeight: '400', fontSize: '11px' }}>
+          {form.include_vat ? '(부가세 포함)' : '(부가세 별도)'}
+        </span>
+      </div>
+
+      {/* 결제 / 계약 안내 */}
+      <div style={{ marginBottom: '18px', border: '1px solid #d1d5db', borderRadius: '4px', overflow: 'hidden', fontSize: '10.5px' }}>
+        <div style={{ backgroundColor: '#f3f4f6', padding: '6px 12px', fontWeight: '700', borderBottom: '1px solid #d1d5db' }}>1. 결제사항</div>
+        <div style={{ padding: '8px 12px', lineHeight: '1.9' }}>
+          <div>행사시작 2주 전 선금 50% | 행사 종료 후 1주 이내 잔금 50%</div>
+          <div style={{ color: '#6b7280' }}>※ 견적은 상황에 따라 변동될 수 있습니다.</div>
+        </div>
+        <div style={{ backgroundColor: '#f3f4f6', padding: '6px 12px', fontWeight: '700', borderTop: '1px solid #d1d5db', borderBottom: '1px solid #d1d5db' }}>2. 계약 확정 안내</div>
+        <div style={{ padding: '8px 12px', lineHeight: '1.9' }}>
+          <div>우수한 인력 확보 및 행사 품질 유지를 위해 행사일 기준 <strong>3주 전 계약을 권장</strong>합니다.</div>
+          <div style={{ color: '#6b7280' }}>※ 부득이한 경우라도 최소 2주 전까지는 저희 쪽에 통지해 주시기 바랍니다.</div>
+        </div>
+      </div>
+
+      {/* 품목 테이블 */}
+      <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '14px', fontSize: '11px' }}>
+        <thead>
+          <tr style={{ backgroundColor: '#1e3a5f', color: '#fff' }}>
+            {['품명', '시간/규격', '수량', '일수', '단가', '금액', '비고'].map((h, i) => (
+              <th key={h} style={{ padding: '9px 8px', textAlign: i < 2 ? 'left' : 'right', fontWeight: '700', fontSize: '11px', border: '1px solid #2d4a7a' }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {staffItems.filter(r => r.role_name).map((row, idx) => {
+            const amt = row.quantity * row.days * row.unit_price
+            return (
+              <tr key={row.key} style={{ backgroundColor: idx % 2 === 0 ? '#fff' : '#f8fafc', borderBottom: '1px solid #e5e7eb' }}>
+                <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', fontWeight: row.is_leader ? '700' : '500' }}>{row.is_leader ? '★ ' : ''}{row.role_name}</td>
+                <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', color: '#4b5563', fontSize: '10px' }}>{row.work_time}</td>
+                <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'right' }}>{row.quantity}명</td>
+                <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'right' }}>{row.days}일</td>
+                <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'right' }}>{row.unit_price.toLocaleString()}</td>
+                <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'right', fontWeight: '700', color: '#1e3a5f' }}>{amt.toLocaleString()}</td>
+                <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', fontSize: '10px', color: '#6b7280' }}>{row.spec}</td>
+              </tr>
+            )
+          })}
+          {staffItems.filter(r => r.role_name).length > 0 && (
+            <tr style={{ backgroundColor: '#eef2ff' }}>
+              <td colSpan={5} style={{ padding: '7px 8px', textAlign: 'right', fontWeight: '700', border: '1px solid #c7d2fe', color: '#3730a3' }}>소계</td>
+              <td style={{ padding: '7px 8px', textAlign: 'right', fontWeight: '800', border: '1px solid #c7d2fe', color: '#1e40af', fontSize: '12px' }}>{staffSubtotal.toLocaleString()}</td>
+              <td style={{ border: '1px solid #c7d2fe' }} />
+            </tr>
+          )}
+          {extraItems.filter(r => r.role_name).map((row) => {
+            const amt = row.quantity * row.days * row.unit_price
+            return (
+              <tr key={row.key} style={{ backgroundColor: '#fef9c3', borderBottom: '1px solid #fde68a' }}>
+                <td style={{ padding: '8px 8px', border: '1px solid #fde68a', fontWeight: '600', color: '#92400e' }}>{row.role_name || row.item_type}</td>
+                <td style={{ padding: '8px 8px', border: '1px solid #fde68a', color: '#92400e', fontSize: '10px' }}>{row.work_time}</td>
+                <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'right' }}>{row.quantity}명</td>
+                <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'right' }}>{row.days}일</td>
+                <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'right' }}>{row.unit_price > 0 ? row.unit_price.toLocaleString() : '-'}</td>
+                <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'right', fontWeight: '700' }}>{amt > 0 ? amt.toLocaleString() : '-'}</td>
+                <td style={{ padding: '8px 8px', border: '1px solid #fde68a', fontSize: '10px', color: '#92400e' }}>{row.spec}</td>
+              </tr>
+            )
+          })}
+          {extraItems.filter(r => r.role_name).length > 0 && (
+            <tr style={{ backgroundColor: '#fef3c7' }}>
+              <td colSpan={5} style={{ padding: '7px 8px', textAlign: 'right', fontWeight: '700', border: '1px solid #fde68a', color: '#92400e' }}>부대비용 합계</td>
+              <td style={{ padding: '7px 8px', textAlign: 'right', fontWeight: '800', border: '1px solid #fde68a', color: '#92400e' }}>{extraSubtotal.toLocaleString()}</td>
+              <td style={{ border: '1px solid #fde68a' }} />
+            </tr>
+          )}
+          {supportItems.filter(r => r.role_name).map((row) => (
+            <tr key={row.key} style={{ backgroundColor: '#e0f2fe', borderBottom: '1px solid #bae6fd' }}>
+              <td style={{ padding: '8px 8px', border: '1px solid #bae6fd', color: '#0369a1' }}>
+                <span style={{ fontSize: '9px', backgroundColor: '#0284c7', color: '#fff', padding: '1px 5px', borderRadius: '3px', marginRight: '5px' }}>지원</span>
+                {row.role_name}
+              </td>
+              <td style={{ padding: '8px 8px', border: '1px solid #bae6fd', fontSize: '10px', color: '#0369a1' }}>{row.work_time}</td>
+              <td style={{ padding: '8px 8px', border: '1px solid #bae6fd', textAlign: 'right', color: '#0369a1' }}>{row.quantity}명</td>
+              <td style={{ padding: '8px 8px', border: '1px solid #bae6fd', textAlign: 'right', color: '#0369a1' }}>{row.days}일</td>
+              <td style={{ padding: '8px 8px', border: '1px solid #bae6fd', textAlign: 'right', color: '#0369a1' }}>-</td>
+              <td style={{ padding: '8px 8px', border: '1px solid #bae6fd', textAlign: 'right', fontWeight: '600', color: '#0369a1' }}>-</td>
+              <td style={{ padding: '8px 8px', border: '1px solid #bae6fd', fontSize: '10px', color: '#0369a1' }}>{row.spec || '본사 지원'}</td>
+            </tr>
+          ))}
+          <tr style={{ backgroundColor: '#1e3a5f' }}>
+            <td colSpan={5} style={{ padding: '10px 8px', textAlign: 'right', fontWeight: '800', color: '#fff', fontSize: '12px', border: '1px solid #2d4a7a' }}>총 합계</td>
+            <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: '900', color: '#fff', fontSize: '13px', border: '1px solid #2d4a7a' }}>{supplyPrice.toLocaleString()}</td>
+            <td style={{ border: '1px solid #2d4a7a' }} />
+          </tr>
+        </tbody>
+      </table>
+
+      {/* 하단: 근무비용 + 금액계산 */}
+      <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
+        <div style={{ flex: 1, border: '1px solid #d1d5db', borderRadius: '4px', overflow: 'hidden', fontSize: '10.5px' }}>
+          <div style={{ backgroundColor: '#f3f4f6', padding: '6px 12px', fontWeight: '700', fontSize: '11px', borderBottom: '1px solid #d1d5db' }}>3. 근무 비용 및 기준</div>
+          <div style={{ padding: '9px 12px', lineHeight: '1.9', color: '#374151' }}>
+            <p>- 계약시급 기준 / 계약 이후 추가시간 발생 시 시간당 추가 금액 별도 청구</p>
+            <p>- 경호원 &amp; 경비지도사 : 30,000원 (VAT 별도) · STAFF : 20,000원 (VAT 별도)</p>
+            <p>- 복리후생비, 일반관리비, 직책수당 단가 포함</p>
+          </div>
+        </div>
+        <div style={{ width: '210px', border: '2px solid #1e3a5f', borderRadius: '4px', overflow: 'hidden' }}>
+          <DocSumRow label="공급가액" value={supplyPrice.toLocaleString()} />
+          <DocSumRow label="부 가 세" value={form.include_vat ? vat.toLocaleString() : '별도'} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 14px', backgroundColor: '#1e3a5f', color: '#fff', fontWeight: '900', fontSize: '14px' }}>
+            <span>합 계</span><span>{finalTotal.toLocaleString()}</span>
+          </div>
+        </div>
+      </div>
+      {form.notes && (
+        <div style={{ marginBottom: '16px', border: '1px solid #fde68a', borderRadius: '4px', backgroundColor: '#fffbeb', padding: '10px 14px', fontSize: '11px' }}>
+          <div style={{ fontWeight: '700', marginBottom: '5px', color: '#92400e' }}>※ 특이사항</div>
+          <div style={{ color: '#451a03', whiteSpace: 'pre-wrap', lineHeight: '1.8' }}>{form.notes}</div>
+        </div>
+      )}
+      <div style={{ textAlign: 'center', padding: '10px 16px', border: '2px solid #1e40af', borderRadius: '6px', backgroundColor: '#eff6ff', fontSize: '12px', fontWeight: '700', color: '#1e40af', marginBottom: '18px' }}>
+        입금계좌: {CO.bank} {CO.bankAccount} (예금주: {CO.bankHolder})
+      </div>
+      <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '12px' }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/banner.png" alt="배너" crossOrigin="anonymous" style={{ width: '100%', height: 'auto', display: 'block', borderRadius: '4px' }} />
+      </div>
+    </>
+  )
 
       {/* 공급받는자 / 공급자 테이블 */}
       <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '16px', fontSize: '11px' }}>
@@ -1266,28 +1447,28 @@ function A4Preview({
 // A4 전용 미니 컴포넌트
 function TblHeader({ label }: { label: string }) {
   return (
-    <tr style={{ backgroundColor: '#374151', color: '#fff' }}>
-      <td colSpan={4} style={{ padding: '5px 8px', fontWeight: '700', fontSize: '11px', textAlign: 'center', border: '1px solid #374151' }}>{label}</td>
+    <tr style={{ backgroundColor: '#1e3a5f', color: '#fff' }}>
+      <td colSpan={4} style={{ padding: '6px 10px', fontWeight: '700', fontSize: '11px', textAlign: 'center', border: '1px solid #2d4a7a', letterSpacing: '1px' }}>{label}</td>
     </tr>
   )
 }
 function TblRow2({ l1, v1, l2, v2 }: { l1: string; v1: string; l2: string; v2: string }) {
   return (
     <tr>
-      <td style={{ padding: '4px 6px', backgroundColor: '#f3f4f6', fontWeight: '600', fontSize: '10px', border: '1px solid #d1d5db', whiteSpace: 'nowrap', width: '55px' }}>{l1}</td>
-      <td style={{ padding: '4px 6px', fontSize: '10px', border: '1px solid #d1d5db', color: '#111827' }} colSpan={l2 ? 1 : 3}>{v1}</td>
+      <td style={{ padding: '5px 8px', backgroundColor: '#f3f4f6', fontWeight: '600', fontSize: '10px', border: '1px solid #d1d5db', whiteSpace: 'nowrap', width: '58px', color: '#374151' }}>{l1}</td>
+      <td style={{ padding: '5px 8px', fontSize: '10.5px', border: '1px solid #d1d5db', color: '#111827' }} colSpan={l2 ? 1 : 3}>{v1}</td>
       {l2 && <>
-        <td style={{ padding: '4px 6px', backgroundColor: '#f3f4f6', fontWeight: '600', fontSize: '10px', border: '1px solid #d1d5db', whiteSpace: 'nowrap', width: '48px' }}>{l2}</td>
-        <td style={{ padding: '4px 6px', fontSize: '10px', border: '1px solid #d1d5db', color: '#111827' }}>{v2}</td>
+        <td style={{ padding: '5px 8px', backgroundColor: '#f3f4f6', fontWeight: '600', fontSize: '10px', border: '1px solid #d1d5db', whiteSpace: 'nowrap', width: '50px', color: '#374151' }}>{l2}</td>
+        <td style={{ padding: '5px 8px', fontSize: '10.5px', border: '1px solid #d1d5db', color: '#111827' }}>{v2}</td>
       </>}
     </tr>
   )
 }
 function DocSumRow({ label, value }: { label: string; value: string }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 12px', borderBottom: '1px solid #f1f5f9', fontSize: '12px' }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 14px', borderBottom: '1px solid #e5e7eb', fontSize: '12px' }}>
       <span style={{ color: '#6b7280' }}>{label}</span>
-      <span style={{ fontWeight: '600', color: '#111827' }}>{value}</span>
+      <span style={{ fontWeight: '700', color: '#111827' }}>{value}</span>
     </div>
   )
 }
