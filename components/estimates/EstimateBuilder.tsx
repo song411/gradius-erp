@@ -396,28 +396,21 @@ export default function EstimateBuilder({
     setExporting(true)
     try {
       const h2c = (await import('html2canvas')).default
-
       const canvas = await h2c(reportRef.current, {
         scale: 2, useCORS: true, allowTaint: true,
         backgroundColor: '#f9fafb', logging: false,
-        windowWidth: 1200,
         onclone: (_clonedDoc: Document, element: HTMLElement) => {
-          // 클론에서만 overflow 해제 (라이브 DOM 무변경)
-          const walker = document.createTreeWalker(element, NodeFilter.SHOW_ELEMENT)
-          let node = walker.nextNode()
-          while (node) {
-            const el = node as HTMLElement
-            const st = window.getComputedStyle(el)
-            if (st.overflow !== 'visible' || st.overflowY !== 'visible') {
-              el.style.overflow = 'visible'
-              el.style.height   = 'auto'
-              el.style.maxHeight = 'none'
-            }
-            node = walker.nextNode()
+          // 클론의 부모 컨테이너들 overflow 해제 (캡처 잘림 방지)
+          let p = element.parentElement
+          while (p && p.tagName !== 'BODY') {
+            p.style.overflow  = 'visible'
+            p.style.height    = 'auto'
+            p.style.maxHeight = 'none'
+            p.style.minHeight = '0'
+            p = p.parentElement
           }
         },
       })
-
       const link = document.createElement('a')
       link.download = `수익리포트_${selectedInq?.company_name || ''}_${new Date().toISOString().slice(0, 10)}.png`
       link.href = canvas.toDataURL('image/png'); link.click()
