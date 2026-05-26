@@ -366,68 +366,68 @@ export default function EstimateBuilder({
     }
   }
 
+  // 공통 캡처 헬퍼: clone-to-body + html-to-image(SVG foreignObject 방식)
+  // skipFonts:true → 시스템 폰트 HTTP fetch 시도 안 함 (이전 흰 화면 원인 차단)
+  async function captureElement(
+    source: HTMLElement,
+    wrapCss: string,
+    bgColor: string,
+  ): Promise<string> {
+    const { toPng } = await import('html-to-image')
+    const wrap = document.createElement('div')
+    wrap.style.cssText = wrapCss
+    const cloned = source.cloneNode(true) as HTMLElement
+    wrap.appendChild(cloned)
+    document.body.appendChild(wrap)
+    // 브라우저가 클론을 실제 렌더링할 때까지 두 프레임 대기
+    await new Promise(r => requestAnimationFrame(r))
+    await new Promise(r => requestAnimationFrame(r))
+    try {
+      return await toPng(wrap, {
+        pixelRatio: 2,
+        backgroundColor: bgColor,
+        skipFonts: true,
+        cacheBust: true,
+      })
+    } finally {
+      if (document.body.contains(wrap)) document.body.removeChild(wrap)
+    }
+  }
+
   async function handleDownloadImage() {
     if (!previewRef.current) return
     setExporting(true)
-    let tempWrap: HTMLDivElement | null = null
     try {
-      const h2c = (await import('html2canvas')).default
-
-      // 스크롤/overflow 영향 차단: body에 클론을 직접 붙여 있는 그대로 캡처
-      tempWrap = document.createElement('div')
-      tempWrap.style.cssText = 'position:fixed;top:-9999px;left:0;width:794px;background:#fff;'
-      const cloned = previewRef.current.cloneNode(true) as HTMLElement
-      cloned.style.width = '794px'
-      tempWrap.appendChild(cloned)
-      document.body.appendChild(tempWrap)
-
-      const canvas = await h2c(tempWrap, {
-        scale: 2, useCORS: true, allowTaint: true,
-        backgroundColor: '#fff', logging: false,
-      })
-
+      const dataUrl = await captureElement(
+        previewRef.current,
+        'position:fixed;top:-9999px;left:0;width:794px;background:#fff;',
+        '#ffffff',
+      )
       const link = document.createElement('a')
       link.download = `견적서_${selectedInq?.company_name || ''}_${new Date().toISOString().slice(0, 10)}.png`
-      link.href = canvas.toDataURL('image/png'); link.click()
+      link.href = dataUrl; link.click()
     } catch (err) {
       console.error('견적서 저장 오류:', err)
       toast.error('이미지 저장에 실패했습니다.')
-    } finally {
-      if (tempWrap && document.body.contains(tempWrap)) document.body.removeChild(tempWrap)
-      setExporting(false)
-    }
+    } finally { setExporting(false) }
   }
 
   async function handleDownloadReport() {
     if (!reportRef.current) return
     setExporting(true)
-    let tempWrap: HTMLDivElement | null = null
     try {
-      const h2c = (await import('html2canvas')).default
-
-      // overflow 클리핑 우회: body에 클론을 직접 붙여 캡처
-      tempWrap = document.createElement('div')
-      tempWrap.style.cssText = 'position:fixed;top:-9999px;left:0;width:800px;padding:24px;box-sizing:border-box;background:#f9fafb;'
-      const cloned = reportRef.current.cloneNode(true) as HTMLElement
-      cloned.style.width = '100%'
-      tempWrap.appendChild(cloned)
-      document.body.appendChild(tempWrap)
-
-      const canvas = await h2c(tempWrap, {
-        scale: 2, useCORS: true, allowTaint: true,
-        backgroundColor: '#f9fafb', logging: false,
-      })
-
+      const dataUrl = await captureElement(
+        reportRef.current,
+        'position:fixed;top:-9999px;left:0;width:800px;padding:24px;box-sizing:border-box;background:#f9fafb;',
+        '#f9fafb',
+      )
       const link = document.createElement('a')
       link.download = `수익리포트_${selectedInq?.company_name || ''}_${new Date().toISOString().slice(0, 10)}.png`
-      link.href = canvas.toDataURL('image/png'); link.click()
+      link.href = dataUrl; link.click()
     } catch (err) {
       console.error('리포트 저장 오류:', err)
       toast.error('리포트 이미지 저장에 실패했습니다.')
-    } finally {
-      if (tempWrap && document.body.contains(tempWrap)) document.body.removeChild(tempWrap)
-      setExporting(false)
-    }
+    } finally { setExporting(false) }
   }
 
   function handlePrint() {

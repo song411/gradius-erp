@@ -78,24 +78,21 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
     setExporting(true)
     let tempWrap: HTMLDivElement | null = null
     try {
-      const h2c = (await import('html2canvas')).default
-
-      // 스크롤/overflow 영향 차단: body에 클론을 직접 붙여 있는 그대로 캡처
+      const { toPng } = await import('html-to-image')
       tempWrap = document.createElement('div')
       tempWrap.style.cssText = 'position:fixed;top:-9999px;left:0;width:794px;background:#fff;'
       const cloned = docRef.current.cloneNode(true) as HTMLElement
-      cloned.style.width = '794px'
       tempWrap.appendChild(cloned)
       document.body.appendChild(tempWrap)
-
-      const canvas = await h2c(tempWrap, {
-        scale: 2, useCORS: true, allowTaint: true,
-        backgroundColor: '#fff', logging: false,
+      await new Promise(r => requestAnimationFrame(r))
+      await new Promise(r => requestAnimationFrame(r))
+      const dataUrl = await toPng(tempWrap, {
+        pixelRatio: 2, backgroundColor: '#ffffff',
+        skipFonts: true, cacheBust: true,
       })
-
       const link = document.createElement('a')
       link.download = `견적서_${estimate?.company_name || ''}_${estimate?.estimate_code || ''}.png`
-      link.href = canvas.toDataURL('image/png'); link.click()
+      link.href = dataUrl; link.click()
     } catch (err) {
       console.error('견적서 저장 오류:', err)
       toast.error('이미지 저장에 실패했습니다.')
