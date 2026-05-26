@@ -247,7 +247,7 @@ export default function EstimateBuilder({
   }
   function addMeal(variant: 'provided' | 'cost') {
     const overrides = variant === 'provided'
-      ? { role_name: '식비', work_time: '1인 1식', spec: '의뢰사 제공 / 미청구시 1만원 추가 청구', unit_price: 0, pay_unit_price: 0 }
+      ? { role_name: '식비', work_time: '1인 1식', spec: '의뢰사 제공 [미제공시 1만원 추가 청구]', unit_price: 0, pay_unit_price: 0 }
       : { role_name: '식비', work_time: '1인 1식', unit_price: 10000, pay_unit_price: 10000 }
     addRow('식비', overrides)
   }
