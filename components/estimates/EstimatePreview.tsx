@@ -76,20 +76,21 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
   async function handleSaveImage() {
     if (!docRef.current) return
     setExporting(true)
-    let tempWrap: HTMLDivElement | null = null
+    let wrap: HTMLDivElement | null = null
     try {
       const { toPng } = await import('html-to-image')
-      tempWrap = document.createElement('div')
-      tempWrap.style.cssText = 'position:fixed;top:-9999px;left:0;width:794px;background:#fff;'
+      wrap = document.createElement('div')
+      wrap.style.cssText = 'position:fixed;top:-9999px;left:0;width:794px;background:#fff;'
       const cloned = docRef.current.cloneNode(true) as HTMLElement
-      tempWrap.appendChild(cloned)
-      document.body.appendChild(tempWrap)
+      cloned.style.width = '794px'
+      wrap.appendChild(cloned)
+      document.body.appendChild(wrap)
       await new Promise(r => requestAnimationFrame(r))
       await new Promise(r => requestAnimationFrame(r))
-      const dataUrl = await toPng(tempWrap, {
-        pixelRatio: 2, backgroundColor: '#ffffff',
-        skipFonts: true, cacheBust: true,
-      })
+      const opts = { pixelRatio: 2, backgroundColor: '#ffffff', skipFonts: true, cacheBust: true }
+      await toPng(cloned, opts) // 워밍업 1
+      await toPng(cloned, opts) // 워밍업 2
+      const dataUrl = await toPng(cloned, opts)
       const link = document.createElement('a')
       link.download = `견적서_${estimate?.company_name || ''}_${estimate?.estimate_code || ''}.png`
       link.href = dataUrl; link.click()
@@ -97,7 +98,7 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
       console.error('견적서 저장 오류:', err)
       toast.error('이미지 저장에 실패했습니다.')
     } finally {
-      if (tempWrap && document.body.contains(tempWrap)) document.body.removeChild(tempWrap)
+      if (wrap && document.body.contains(wrap)) document.body.removeChild(wrap)
       setExporting(false)
     }
   }

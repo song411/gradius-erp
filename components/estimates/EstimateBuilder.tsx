@@ -366,29 +366,30 @@ export default function EstimateBuilder({
     }
   }
 
-  // 공통 캡처 헬퍼: clone-to-body + html-to-image(SVG foreignObject 방식)
-  // skipFonts:true → 시스템 폰트 HTTP fetch 시도 안 함 (이전 흰 화면 원인 차단)
+  // 공통 캡처 헬퍼
+  // 흰 화면 원인 1: position:fixed 래퍼가 SVG에 직렬화되면 캔버스 밖으로 밀림
+  //   → toPng 대상을 내부 cloned 요소로 지정 (래퍼 아님)
+  // 흰 화면 원인 2: 첫 호출 시 이미지/리소스가 SVG 컨텍스트에 미로드
+  //   → toPng 3회 호출, 1~2번째 워밍업 후 3번째 결과 사용
   async function captureElement(
     source: HTMLElement,
-    wrapCss: string,
     bgColor: string,
+    width: number,
   ): Promise<string> {
     const { toPng } = await import('html-to-image')
     const wrap = document.createElement('div')
-    wrap.style.cssText = wrapCss
+    wrap.style.cssText = `position:fixed;top:-9999px;left:0;width:${width}px;background:${bgColor};`
     const cloned = source.cloneNode(true) as HTMLElement
+    cloned.style.width = `${width}px`
     wrap.appendChild(cloned)
     document.body.appendChild(wrap)
-    // 브라우저가 클론을 실제 렌더링할 때까지 두 프레임 대기
     await new Promise(r => requestAnimationFrame(r))
     await new Promise(r => requestAnimationFrame(r))
     try {
-      return await toPng(wrap, {
-        pixelRatio: 2,
-        backgroundColor: bgColor,
-        skipFonts: true,
-        cacheBust: true,
-      })
+      const opts = { pixelRatio: 2, backgroundColor: bgColor, skipFonts: true, cacheBust: true }
+      await toPng(cloned, opts) // 워밍업 1
+      await toPng(cloned, opts) // 워밍업 2
+      return await toPng(cloned, opts) // 실제 결과
     } finally {
       if (document.body.contains(wrap)) document.body.removeChild(wrap)
     }
@@ -398,11 +399,7 @@ export default function EstimateBuilder({
     if (!previewRef.current) return
     setExporting(true)
     try {
-      const dataUrl = await captureElement(
-        previewRef.current,
-        'position:fixed;top:-9999px;left:0;width:794px;background:#fff;',
-        '#ffffff',
-      )
+      const dataUrl = await captureElement(previewRef.current, '#ffffff', 794)
       const link = document.createElement('a')
       link.download = `견적서_${selectedInq?.company_name || ''}_${new Date().toISOString().slice(0, 10)}.png`
       link.href = dataUrl; link.click()
@@ -416,11 +413,7 @@ export default function EstimateBuilder({
     if (!reportRef.current) return
     setExporting(true)
     try {
-      const dataUrl = await captureElement(
-        reportRef.current,
-        'position:fixed;top:-9999px;left:0;width:800px;padding:24px;box-sizing:border-box;background:#f9fafb;',
-        '#f9fafb',
-      )
+      const dataUrl = await captureElement(reportRef.current, '#f9fafb', 800)
       const link = document.createElement('a')
       link.download = `수익리포트_${selectedInq?.company_name || ''}_${new Date().toISOString().slice(0, 10)}.png`
       link.href = dataUrl; link.click()
