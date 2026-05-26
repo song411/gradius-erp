@@ -123,14 +123,14 @@ export default function DashboardContent() {
   // payouts 테이블에 실제 데이터가 있는지 여부
   const hasRealPayoutData = payouts.length > 0
 
-  // 이번달 체결 매출 (event_start 기준, 전체 settlement 합산)
+  // 이번달 체결 매출 (event_start 기준, inquiry당 중복 제거)
   const thisMonthInqIds = new Set(
-    inquiries.filter(i => i.event_start && toYM(i.event_start) === thisMonth).map(i => i.id)
+    inquiries.filter(i => i.event_start?.startsWith(thisMonth)).map(i => i.id)
   )
-  const thisMonthSetts = settlements.filter(s => s.inquiry_id && thisMonthInqIds.has(s.inquiry_id))
+  const thisMonthSetts = dedupedSettlements.filter(s => s.inquiry_id && thisMonthInqIds.has(s.inquiry_id))
   const monthlyRevenue = thisMonthSetts.reduce((s, r) => s + (r.supply_price || 0), 0)
   // 이번달 총청구액 (VAT 포함)
-  const monthlyInvoice = thisMonthSetts.reduce((s, r) => s + (r.invoice_amount || r.supply_price + r.vat || 0), 0)
+  const monthlyInvoice = thisMonthSetts.reduce((s, r) => s + (r.invoice_amount || (r.supply_price || 0) + (r.vat || 0)), 0)
   // 이번달 수익: 공급가액 - 실제지급액(payouts 우선)
   const monthlyPayout  = thisMonthSetts.reduce((s, r) => s + getActualPayout(r.inquiry_id, r.payout_amount), 0)
   const monthlyProfit  = monthlyRevenue - monthlyPayout
@@ -143,13 +143,13 @@ export default function DashboardContent() {
 
   const activeInquiries = inquiries.filter(i => ['접수','견적','체결','배정완료','진행중'].includes(i.status))
 
-  // ── 2026년 연간 KPI (event_start 기준)
+  // ── 연간 KPI (event_start 기준, inquiry당 settlement 중복 제거)
   const YEAR = String(now.getFullYear())
-  const inqsYear  = inquiries.filter(i => i.event_start?.startsWith(YEAR))
+  const inqsYear   = inquiries.filter(i => i.event_start?.startsWith(YEAR))
   const yearInqIds = new Set(inqsYear.map(i => i.id))
-  const settsYear  = settlements.filter(s => s.inquiry_id && yearInqIds.has(s.inquiry_id))
+  // dedupedSettlements 재활용 (위에서 이미 선언)
+  const settsYear  = dedupedSettlements.filter(s => s.inquiry_id && yearInqIds.has(s.inquiry_id))
   const rev2026    = settsYear.reduce((s, r) => s + (r.supply_price || 0), 0)
-  // 연간 지급액: payouts 우선, 없으면 settlement.payout_amount
   const payout2026 = settsYear.reduce((s, r) => s + getActualPayout(r.inquiry_id, r.payout_amount), 0)
   const profit2026 = rev2026 - payout2026
   // 체결율: 체결 이상 / 전체 문의
@@ -179,19 +179,27 @@ export default function DashboardContent() {
     ['체결', '배정완료'].includes(i.status) && (assignCountMap.get(i.id) || 0) === 0
   )
 
-  // 12개월 차트 (event_start 기준)
+  // 연도 기준 1~12월 고정 차트 (rev2026와 범위 일치)
+  // inquiry당 settlement 중복 제거: inquiry_id별 첫 번째 settlement만 사용
+  const dedupedSettlements = Array.from(
+    settlements.reduce<Map<string, Settlement>>((m, s) => {
+      if (s.inquiry_id && !m.has(s.inquiry_id)) m.set(s.inquiry_id, s)
+      return m
+    }, new Map()).values()
+  )
+
   const monthlyChart = Array.from({ length: 12 }, (_, i) => {
-    const d   = new Date(now.getFullYear(), now.getMonth() - 11 + i, 1)
-    const key = toYM(d.toISOString())
-    const label = `${d.getMonth() + 1}월`
+    const month = String(i + 1).padStart(2, '0')
+    const key   = `${now.getFullYear()}-${month}`
+    const label = `${i + 1}월`
+    // event_start 기준 (행사 시작일이 해당 월인 문의만)
     const monthInqIds = new Set(
-      inquiries.filter(inq => inq.event_start && toYM(inq.event_start) === key).map(inq => inq.id)
+      inquiries.filter(inq => inq.event_start?.startsWith(key)).map(inq => inq.id)
     )
-    const sInMonth = settlements.filter(s => s.inquiry_id && monthInqIds.has(s.inquiry_id))
+    const sInMonth  = dedupedSettlements.filter(s => s.inquiry_id && monthInqIds.has(s.inquiry_id))
     const revenue   = sInMonth.reduce((s, r) => s + (r.supply_price || 0), 0)
     const payoutAmt = sInMonth.reduce((s, r) => s + getActualPayout(r.inquiry_id, r.payout_amount), 0)
     const profit    = revenue - payoutAmt
-    // 지급액이 0이면 수익률 계산 제외 (이관 데이터 오염 방지)
     const hasData   = payoutAmt > 0
     return { label, revenue, profit, profitRate: (revenue > 0 && hasData) ? Math.round((profit / revenue) * 100) : 0 }
   })
@@ -448,7 +456,7 @@ function OverviewTab({
           <CardHeader>
             <CardTitle className="text-sm">
               월별 매출 · 수익 추이
-              <span className="text-xs font-normal text-gray-400 ml-2">행사 시작일 기준 12개월</span>
+              <span className="text-xs font-normal text-gray-400 ml-2">{YEAR}년 1~12월 · 행사 시작일 기준</span>
             </CardTitle>
           </CardHeader>
           <CardContent>
