@@ -413,7 +413,7 @@ export default function EstimateBuilder({
     if (!reportRef.current) return
     setExporting(true)
     try {
-      const dataUrl = await captureElement(reportRef.current, '#f9fafb', 800)
+      const dataUrl = await captureElement(reportRef.current, '#f9fafb', 900)
       const link = document.createElement('a')
       link.download = `수익리포트_${selectedInq?.company_name || ''}_${new Date().toISOString().slice(0, 10)}.png`
       link.href = dataUrl; link.click()
