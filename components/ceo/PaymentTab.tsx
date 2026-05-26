@@ -129,25 +129,31 @@ export default function PaymentTab({ data }: { data: CeoData }) {
     })
   }
 
-  // paid_at 컬럼이 있으면 함께 업데이트, 없으면 status만 업데이트 (fallback)
+  // 지급 상태 전용 API 호출 (/api/payouts/[id])
+  // status 업데이트는 항상 동작, paid_at은 컬럼 없어도 graceful 처리
   async function updatePayoutStatus(
     payoutId: string,
     status: string,
-    paidAt: string | null,
+    paidAt: string | null | undefined,
   ) {
     const payload: Record<string, unknown> = { status }
     if (paidAt !== undefined) payload.paid_at = paidAt
 
-    try {
-      await db.update('payouts', payoutId, payload)
-    } catch (firstErr) {
-      // paid_at 컬럼이 없어서 실패했을 경우 status만 재시도
-      const msg = firstErr instanceof Error ? firstErr.message : ''
-      if (msg.includes('paid_at') || msg.includes('column')) {
-        await db.update('payouts', payoutId, { status })
-      } else {
-        throw firstErr
-      }
+    const res = await fetch(`/api/payouts/${payoutId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+
+    const json = await res.json()
+
+    if (!res.ok) {
+      throw new Error(json.error || '업데이트 실패')
+    }
+
+    // warning이 있으면 콘솔에 기록 (paid_at 미반영 등)
+    if (json.warning) {
+      console.warn('[PaymentTab]', json.warning)
     }
   }
 
