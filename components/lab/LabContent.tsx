@@ -9,6 +9,7 @@ import TarotModal from './tools/TarotModal'
 import QuoteModal from './tools/QuoteModal'
 import AiModal from './tools/AiModal'
 import GuideModal from './tools/GuideModal'
+import KitModal from './tools/KitModal'
 
 // ───────── 도구 정의 ─────────
 type ToolStatus = 'ready' | 'beta' | 'soon'
@@ -33,6 +34,15 @@ const TOOLS: Tool[] = [
     category: '가이드 & 도구',
     status: 'ready',
     gradient: 'from-amber-500 to-orange-600',
+  },
+  {
+    id: 'kit',
+    emoji: '🛠️',
+    name: 'ERP 고도화 준비키트',
+    desc: '피드백 · 기획서 · 데이터점검 · 리서치 — 개선 아이디어를 체계적으로 기록하고 관리',
+    category: '가이드 & 도구',
+    status: 'ready',
+    gradient: 'from-violet-500 to-purple-700',
   },
   // 경비업무
   {
@@ -152,6 +162,7 @@ function ToolModal({ toolId, onClose }: { toolId: string; onClose: () => void })
   // AI 모달은 자체 오버레이를 포함하므로 별도 처리
   if (toolId === 'ai')    return <AiModal    onClose={onClose} />
   if (toolId === 'guide') return <GuideModal onClose={onClose} />
+  if (toolId === 'kit')   return <KitModal   onClose={onClose} />
 
   return (
     <AnimatePresence>

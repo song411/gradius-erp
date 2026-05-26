@@ -6,7 +6,7 @@ const ALLOWED_TABLES = [
   'inquiries', 'customers', 'estimates', 'estimate_items',
   'assignments', 'settlements', 'staff', 'attendances',
   'payouts', 'evaluations', 'roles', 'factors', 'guides',
-  'estimate_versions', 'closings',
+  'estimate_versions', 'closings', 'improvement_notes',
 ]
 
 export async function GET(
