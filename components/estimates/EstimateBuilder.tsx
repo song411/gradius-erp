@@ -371,35 +371,36 @@ export default function EstimateBuilder({
     setExporting(true)
     try {
       const { toPng } = await import('html-to-image')
-      // 고정 A4 너비 클론 — 화면 줌/스크롤/lineHeight 상속 무관하게 일정한 결과
       const FIXED_WIDTH = 794
       const clone = previewRef.current.cloneNode(true) as HTMLElement
       clone.style.cssText = [
         'position:fixed', 'top:-9999px', 'left:-9999px',
         `width:${FIXED_WIDTH}px`, 'max-width:none', 'overflow:visible',
-        'background:#fff', 'z-index:-1',
-        // 부모 lineHeight 초기화 → 테이블 셀 수직 정렬에 영향 차단
-        'line-height:1.5',
+        'background:#fff', 'z-index:-1', 'line-height:1.5',
       ].join(';')
-      // 테이블 셀 lineHeight 명시 보강
+      document.body.appendChild(clone)
+      await new Promise(r => setTimeout(r, 150))
+
       clone.querySelectorAll<HTMLElement>('th, td').forEach(el => {
         el.style.lineHeight = '1.2'
         el.style.verticalAlign = 'middle'
       })
-      document.body.appendChild(clone)
-      await new Promise(r => setTimeout(r, 150))
 
+      const captureHeight = Math.max(clone.scrollHeight, clone.offsetHeight, 100)
       const dataUrl = await toPng(clone, {
         pixelRatio: 2,
         backgroundColor: '#fff',
         width: FIXED_WIDTH,
-        height: clone.scrollHeight,
+        height: captureHeight,
       })
       document.body.removeChild(clone)
 
       const link = document.createElement('a')
       link.download = `견적서_${selectedInq?.company_name || ''}_${new Date().toISOString().slice(0, 10)}.png`
       link.href = dataUrl; link.click()
+    } catch (err) {
+      console.error('견적서 저장 오류:', err)
+      toast.error('이미지 저장에 실패했습니다.')
     } finally { setExporting(false) }
   }
 
@@ -408,7 +409,6 @@ export default function EstimateBuilder({
     setExporting(true)
     try {
       const { toPng } = await import('html-to-image')
-      // 고정 너비 클론을 화면 밖에 붙여서 캡처 → 줌/해상도 무관하게 항상 동일한 결과
       const FIXED_WIDTH = 920
       const clone = reportRef.current.cloneNode(true) as HTMLElement
       clone.style.cssText = [
@@ -416,27 +416,34 @@ export default function EstimateBuilder({
         `width:${FIXED_WIDTH}px`, 'max-width:none', 'overflow:visible',
         'background:#f9fafb', 'z-index:-1',
       ].join(';')
-      // 하위 overflow 요소도 모두 해제
-      clone.querySelectorAll<HTMLElement>('*').forEach(e => {
-        if (getComputedStyle(e).overflow === 'auto' || e.classList.contains('overflow-x-auto')) {
-          e.style.overflow = 'visible'
-        }
-      })
+      // DOM에 먼저 추가해야 getComputedStyle이 정상 동작
       document.body.appendChild(clone)
-      // 레이아웃 확정 대기
       await new Promise(r => setTimeout(r, 150))
 
+      // overflow 요소 해제 (DOM 추가 후에 처리)
+      clone.querySelectorAll<HTMLElement>('*').forEach(e => {
+        const ov = e.style.overflow || e.style.overflowX
+        if (ov === 'auto' || ov === 'hidden' || e.classList.contains('overflow-x-auto') || e.classList.contains('overflow-hidden')) {
+          e.style.overflow = 'visible'
+          e.style.overflowX = 'visible'
+        }
+      })
+
+      const captureHeight = Math.max(clone.scrollHeight, clone.offsetHeight, 100)
       const dataUrl = await toPng(clone, {
         pixelRatio: 2,
         backgroundColor: '#f9fafb',
         width: FIXED_WIDTH,
-        height: clone.scrollHeight,
+        height: captureHeight,
       })
       document.body.removeChild(clone)
 
       const link = document.createElement('a')
       link.download = `수익리포트_${selectedInq?.company_name || ''}_${new Date().toISOString().slice(0, 10)}.png`
       link.href = dataUrl; link.click()
+    } catch (err) {
+      console.error('리포트 저장 오류:', err)
+      toast.error('리포트 이미지 저장에 실패했습니다.')
     } finally { setExporting(false) }
   }
 

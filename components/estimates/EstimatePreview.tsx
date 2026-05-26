@@ -85,24 +85,29 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
         `width:${FIXED_WIDTH}px`, 'max-width:none', 'overflow:visible',
         'background:#fff', 'z-index:-1', 'line-height:1.5',
       ].join(';')
+      document.body.appendChild(clone)
+      await new Promise(r => setTimeout(r, 150))
+
       clone.querySelectorAll<HTMLElement>('th, td').forEach(el => {
         el.style.lineHeight = '1.2'
         el.style.verticalAlign = 'middle'
       })
-      document.body.appendChild(clone)
-      await new Promise(r => setTimeout(r, 150))
 
+      const captureHeight = Math.max(clone.scrollHeight, clone.offsetHeight, 100)
       const dataUrl = await toPng(clone, {
         pixelRatio: 2,
         backgroundColor: '#fff',
         width: FIXED_WIDTH,
-        height: clone.scrollHeight,
+        height: captureHeight,
       })
       document.body.removeChild(clone)
 
       const link = document.createElement('a')
       link.download = `견적서_${estimate?.company_name || ''}_${estimate?.estimate_code || ''}.png`
       link.href = dataUrl; link.click()
+    } catch (err) {
+      console.error('견적서 저장 오류:', err)
+      toast.error('이미지 저장에 실패했습니다.')
     } finally { setExporting(false) }
   }
 
