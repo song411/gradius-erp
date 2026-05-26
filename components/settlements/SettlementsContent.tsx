@@ -51,6 +51,10 @@ export default function SettlementsContent() {
   const [memoEditId, setMemoEditId]     = useState<string | null>(null)
   const [memoValue, setMemoValue]       = useState('')
 
+  // 인라인 금액 수정 (연장/변경 대응)
+  const [amtEditId, setAmtEditId]       = useState<string | null>(null)
+  const [amtSupply, setAmtSupply]       = useState('')
+
   const [form, setForm] = useState({
     inquiry_id: '',
     company_name: '',
@@ -202,6 +206,23 @@ export default function SettlementsContent() {
     load()
   }
 
+  // ── 인라인 금액 수정 (연장/변경) ──
+  async function handleAmtSave(s: Settlement) {
+    const supply = Number(amtSupply)
+    if (isNaN(supply) || supply <= 0) { toast.error('올바른 금액을 입력해주세요.'); return }
+    const vat = Math.floor(supply * 0.1)
+    try {
+      await db.update('settlements', s.id, {
+        supply_price: supply,
+        vat,
+        invoice_amount: supply + vat,
+      })
+      toast.success(`청구금액이 ${formatKRW(supply + vat)}으로 수정되었습니다.`)
+      setAmtEditId(null)
+      load()
+    } catch (e) { toast.error('수정 실패: ' + (e as Error).message) }
+  }
+
   // ── 빠른 입금 처리 ──
   async function handleQuickDeposit(s: Settlement, type: '50%' | '전액') {
     const invoiceAmt = s.invoice_amount || (s.supply_price + s.vat)
@@ -332,6 +353,10 @@ export default function SettlementsContent() {
                       const profitRate   = calcProfitRate(s.supply_price, s.payout_amount)
                       const isMemoEditing = memoEditId === s.id
 
+                      const isAmtEditing = amtEditId === s.id
+                      const previewVat   = Math.floor((Number(amtSupply) || 0) * 0.1)
+                      const previewTotal = (Number(amtSupply) || 0) + previewVat
+
                       return (
                         <tr key={s.id} className="align-top">
                           {/* 업체명 */}
@@ -339,12 +364,45 @@ export default function SettlementsContent() {
                           {/* 현장명 */}
                           <td className="text-sm">{s.site_name || '-'}</td>
 
-                          {/* 총청구금액 */}
+                          {/* 총청구금액 — 클릭하면 인라인 수정 */}
                           <td>
-                            <span className="font-semibold">{formatKRW(invoiceAmt)}</span>
-                            <p className="text-[10px] text-gray-400 mt-0.5">
-                              공급 {formatKRW(s.supply_price)} + VAT {formatKRW(s.vat)}
-                            </p>
+                            {isAmtEditing ? (
+                              <div className="flex flex-col gap-1 min-w-[160px]">
+                                <div className="flex items-center gap-1">
+                                  <Input
+                                    type="number"
+                                    value={amtSupply}
+                                    onChange={e => setAmtSupply(e.target.value)}
+                                    className="h-7 text-xs w-28"
+                                    placeholder="공급가액"
+                                    autoFocus
+                                  />
+                                  <span className="text-[10px] text-gray-400">원</span>
+                                </div>
+                                {Number(amtSupply) > 0 && (
+                                  <p className="text-[10px] text-blue-600 font-semibold">
+                                    청구 {formatKRW(previewTotal)} (VAT {formatKRW(previewVat)})
+                                  </p>
+                                )}
+                                <div className="flex gap-1">
+                                  <button onClick={() => handleAmtSave(s)} className="text-[10px] bg-blue-600 text-white rounded px-2 py-0.5 hover:bg-blue-700">저장</button>
+                                  <button onClick={() => setAmtEditId(null)} className="text-[10px] bg-gray-100 text-gray-600 rounded px-2 py-0.5">취소</button>
+                                </div>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => { setAmtEditId(s.id); setAmtSupply(String(s.supply_price || '')) }}
+                                className="text-left group"
+                                title="클릭하여 금액 수정"
+                              >
+                                <span className="font-semibold group-hover:text-blue-600 group-hover:underline transition-colors">
+                                  {formatKRW(invoiceAmt)}
+                                </span>
+                                <p className="text-[10px] text-gray-400 mt-0.5">
+                                  공급 {formatKRW(s.supply_price)} + VAT {formatKRW(s.vat)}
+                                </p>
+                              </button>
+                            )}
                           </td>
 
                           {/* 받은금액 */}
