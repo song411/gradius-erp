@@ -3,7 +3,61 @@
 import { useState, useEffect, useCallback } from 'react'
 import { db } from '@/lib/supabase/api'
 import { toast } from 'sonner'
-import { RefreshCw, Save, X, Trash2, AlertTriangle, ChevronDown } from 'lucide-react'
+import { RefreshCw, Save, X, Trash2, AlertTriangle, ChevronDown, Lock, ShieldCheck } from 'lucide-react'
+
+const ADMIN_CODE = process.env.NEXT_PUBLIC_ADMIN_CODE || 'GUARDIUS2026'
+const SESSION_KEY = 'erp_admin_unlocked'
+
+// ── 패스코드 잠금 화면 ─────────────────────────────────────
+function AdminLockScreen({ onUnlock }: { onUnlock: () => void }) {
+  const [code, setCode]       = useState('')
+  const [error, setError]     = useState(false)
+  const [shaking, setShaking] = useState(false)
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (code === ADMIN_CODE) {
+      sessionStorage.setItem(SESSION_KEY, '1')
+      onUnlock()
+    } else {
+      setError(true)
+      setShaking(true)
+      setCode('')
+      setTimeout(() => setShaking(false), 500)
+    }
+  }
+
+  return (
+    <div className="flex items-center justify-center h-full min-h-[60vh]">
+      <div className={`bg-white rounded-2xl shadow-2xl border-2 border-gray-100 p-10 w-full max-w-sm text-center transition-all ${shaking ? 'animate-bounce' : ''}`}>
+        <div className="w-16 h-16 bg-gray-900 rounded-2xl flex items-center justify-center mx-auto mb-6">
+          <Lock className="h-8 w-8 text-white" />
+        </div>
+        <h2 className="text-xl font-bold text-gray-900 mb-1">DB 관리자 접근</h2>
+        <p className="text-sm text-gray-400 mb-6">관리자 코드를 입력하세요</p>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <input
+            type="password"
+            value={code}
+            onChange={e => { setCode(e.target.value); setError(false) }}
+            placeholder="관리자 코드 입력"
+            autoFocus
+            className={`w-full border-2 rounded-xl px-4 py-3 text-center text-lg tracking-widest font-mono focus:outline-none transition-colors ${
+              error ? 'border-red-400 bg-red-50 text-red-700' : 'border-gray-200 focus:border-gray-900'
+            }`}
+          />
+          {error && <p className="text-sm text-red-500 font-medium">코드가 올바르지 않습니다.</p>}
+          <button
+            type="submit"
+            className="w-full bg-gray-900 text-white font-semibold py-3 rounded-xl hover:bg-gray-700 transition-colors"
+          >
+            확인
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
 
 // 관리 가능한 테이블 목록 (표시명 + 테이블명)
 const TABLES = [
@@ -41,6 +95,19 @@ function formatCell(val: unknown): string {
 }
 
 export default function AdminContent() {
+  const [unlocked, setUnlocked] = useState(false)
+
+  // 세션에 잠금 해제 여부 확인
+  useEffect(() => {
+    if (sessionStorage.getItem(SESSION_KEY) === '1') setUnlocked(true)
+  }, [])
+
+  if (!unlocked) return <AdminLockScreen onUnlock={() => setUnlocked(true)} />
+
+  return <AdminInner />
+}
+
+function AdminInner() {
   const [selectedTable, setSelectedTable] = useState(TABLES[0].id)
   const [rows, setRows]           = useState<Row[]>([])
   const [columns, setColumns]     = useState<string[]>([])
