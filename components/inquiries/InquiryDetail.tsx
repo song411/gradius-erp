@@ -8,6 +8,7 @@ import {
 } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
@@ -107,6 +108,34 @@ export default function InquiryDetail({ id }: { id: string }) {
     if (!inquiry) return
     await db.update('inquiries', id, { status })
     setInquiry(prev => prev ? { ...prev, status } : prev)
+
+    // 체결 시 구글 캘린더 자동 등록
+    if (status === '체결') {
+      try {
+        const res = await fetch('/api/calendar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            event_name:   inquiry.event_name,
+            company_name: inquiry.company_name,
+            event_start:  inquiry.event_start,
+            event_end:    inquiry.event_end,
+            phone:        inquiry.phone,
+            memo:         inquiry.memo,
+          }),
+        })
+        if (res.ok) {
+          toast.success('구글 캘린더에 일정이 등록되었습니다.')
+        } else {
+          const err = await res.json()
+          console.error('캘린더 등록 실패:', err)
+          toast.warning('체결 완료. 구글 캘린더 등록에 실패했습니다.')
+        }
+      } catch {
+        console.error('캘린더 API 호출 오류')
+        toast.warning('체결 완료. 구글 캘린더 등록에 실패했습니다.')
+      }
+    }
   }
 
   // ── 견적 저장 ─────────────────────────────────────────────────
