@@ -42,14 +42,19 @@ export default function DepositTab({ data }: { data: CeoData }) {
       })
   }, [settlements, inquiries, filter])
 
-  // 요약 — 청구금액(invoice_amount || supply_price) 기준
+  // 요약
   const billed = (s: Settlement) => s.invoice_amount || s.supply_price || 0
   const unpaid   = settlements.filter(s => s.deposit_status === '미입금')
   const partial  = settlements.filter(s => s.deposit_status === '부분입금')
   const complete = settlements.filter(s => s.deposit_status === '입금완료')
-  const totalUnpaid   = unpaid.reduce((acc, r)  => acc + billed(r), 0)
-  const totalPartial  = partial.reduce((acc, r)  => acc + billed(r), 0)
+  // 미입금: 청구금액 합계 (못 받은 총액)
+  const totalUnpaid   = unpaid.reduce((acc, r) => acc + billed(r), 0)
+  // 부분입금: 실제 받은금액 합계
+  const totalPartialReceived = partial.reduce((acc, r) => acc + (r.received_amount || 0), 0)
+  // 입금완료: 청구금액 합계 (완납 총액)
   const totalComplete = complete.reduce((acc, r) => acc + billed(r), 0)
+  // 전체 실수령액: 부분입금 받은금액 + 입금완료 청구금액
+  const totalReceived = totalPartialReceived + totalComplete
 
   async function handleSaveAmount(sett: Settlement) {
     const amt = Number(editAmt)
@@ -111,7 +116,7 @@ export default function DepositTab({ data }: { data: CeoData }) {
             <span className="text-xs font-bold">부분입금</span>
           </div>
           <p className="text-2xl font-extrabold text-yellow-700">{partial.length}<span className="text-sm font-normal ml-0.5">건</span></p>
-          <p className="text-xs text-yellow-600 font-semibold mt-0.5">{formatKRW(totalPartial)}</p>
+          <p className="text-xs text-yellow-600 font-semibold mt-0.5">수령 {formatKRW(totalPartialReceived)}</p>
         </div>
         <div className="bg-green-50 border-2 border-green-300 rounded-xl p-4 shadow-sm">
           <div className="flex items-center gap-2 text-green-700 mb-1">
@@ -124,9 +129,10 @@ export default function DepositTab({ data }: { data: CeoData }) {
         <div className="bg-blue-50 border-2 border-blue-300 rounded-xl p-4 shadow-sm">
           <div className="flex items-center gap-2 text-blue-700 mb-1">
             <Building2 className="h-4 w-4" />
-            <span className="text-xs font-bold">전체</span>
+            <span className="text-xs font-bold">전체 실수령</span>
           </div>
           <p className="text-2xl font-extrabold text-blue-700">{settlements.length}<span className="text-sm font-normal ml-0.5">건</span></p>
+          <p className="text-xs text-blue-600 font-semibold mt-0.5">{formatKRW(totalReceived)}</p>
         </div>
       </div>
 
