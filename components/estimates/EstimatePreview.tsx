@@ -78,20 +78,17 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
     setExporting(true)
     try {
       const h2c = (await import('html2canvas')).default
-      const canvas = await h2c(docRef.current, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#fff',
-        logging: false,
-        onclone: (_doc: Document, el: HTMLElement) => {
-          el.querySelectorAll<HTMLElement>('th, td').forEach(cell => {
-            cell.style.verticalAlign = 'middle'
-            cell.style.lineHeight = '1.2'
-            cell.style.paddingTop = '8px'
-            cell.style.paddingBottom = '8px'
-          })
-        },
+      const cells = Array.from(docRef.current.querySelectorAll<HTMLElement>('th, td'))
+      const origStyles = cells.map(c => c.getAttribute('style') || '')
+      cells.forEach(c => {
+        c.style.verticalAlign = 'middle'
+        c.style.lineHeight = '1'
       })
+      const canvas = await h2c(docRef.current, {
+        scale: 2, useCORS: true, allowTaint: true,
+        backgroundColor: '#fff', logging: false,
+      })
+      cells.forEach((c, i) => c.setAttribute('style', origStyles[i]))
       const link = document.createElement('a')
       link.download = `견적서_${estimate?.company_name || ''}_${estimate?.estimate_code || ''}.png`
       link.href = canvas.toDataURL('image/png'); link.click()
@@ -263,8 +260,8 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
                 })}
                 {staffItems.filter(r => r.role_name).length > 0 && (
                   <tr style={{ backgroundColor: '#eef2ff' }}>
-                    <td colSpan={5} style={{ padding: '7px 8px', textAlign: 'right', fontWeight: '700', border: '1px solid #c7d2fe', color: '#3730a3' }}>소계</td>
-                    <td style={{ padding: '7px 8px', textAlign: 'right', fontWeight: '800', border: '1px solid #c7d2fe', color: '#1e40af', fontSize: '12px' }}>{staffSubtotal.toLocaleString()}</td>
+                    <td colSpan={5} style={{ padding: '7px 8px', textAlign: 'center', fontWeight: '700', border: '1px solid #c7d2fe', color: '#3730a3' }}>소계</td>
+                    <td style={{ padding: '7px 8px', textAlign: 'center', fontWeight: '800', border: '1px solid #c7d2fe', color: '#1e40af', fontSize: '12px' }}>{staffSubtotal.toLocaleString()}</td>
                     <td style={{ border: '1px solid #c7d2fe' }} />
                   </tr>
                 )}
@@ -284,8 +281,8 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
                 })}
                 {extraItems.filter(r => r.role_name).length > 0 && (
                   <tr style={{ backgroundColor: '#fef3c7' }}>
-                    <td colSpan={5} style={{ padding: '7px 8px', textAlign: 'right', fontWeight: '700', border: '1px solid #fde68a', color: '#92400e' }}>부대비용 합계</td>
-                    <td style={{ padding: '7px 8px', textAlign: 'right', fontWeight: '800', border: '1px solid #fde68a', color: '#92400e' }}>{extraSubtotal.toLocaleString()}</td>
+                    <td colSpan={5} style={{ padding: '7px 8px', textAlign: 'center', fontWeight: '700', border: '1px solid #fde68a', color: '#92400e' }}>부대비용 합계</td>
+                    <td style={{ padding: '7px 8px', textAlign: 'center', fontWeight: '800', border: '1px solid #fde68a', color: '#92400e' }}>{extraSubtotal.toLocaleString()}</td>
                     <td style={{ border: '1px solid #fde68a' }} />
                   </tr>
                 )}
@@ -305,8 +302,8 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
                 ))}
                 {/* 총 합계 */}
                 <tr style={{ backgroundColor: '#1e3a5f' }}>
-                  <td colSpan={5} style={{ padding: '9px 8px', textAlign: 'right', fontWeight: '800', color: '#fff', fontSize: '13px', border: '1px solid #1e3a5f' }}>총 합계</td>
-                  <td style={{ padding: '9px 8px', textAlign: 'right', fontWeight: '800', color: '#fbbf24', fontSize: '13px', border: '1px solid #1e3a5f' }}>{supplyPrice.toLocaleString()}</td>
+                  <td colSpan={5} style={{ padding: '9px 8px', textAlign: 'center', fontWeight: '800', color: '#fff', fontSize: '13px', border: '1px solid #1e3a5f' }}>총 합계</td>
+                  <td style={{ padding: '9px 8px', textAlign: 'center', fontWeight: '800', color: '#fbbf24', fontSize: '13px', border: '1px solid #1e3a5f' }}>{supplyPrice.toLocaleString()}</td>
                   <td style={{ border: '1px solid #1e3a5f' }} />
                 </tr>
               </tbody>

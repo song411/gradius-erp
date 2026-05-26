@@ -371,21 +371,19 @@ export default function EstimateBuilder({
     setExporting(true)
     try {
       const h2c = (await import('html2canvas')).default
-      const canvas = await h2c(previewRef.current, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#fff',
-        logging: false,
-        onclone: (_doc: Document, el: HTMLElement) => {
-          // 클론에서 테이블 셀 수직 정렬 강제 적용
-          el.querySelectorAll<HTMLElement>('th, td').forEach(cell => {
-            cell.style.verticalAlign = 'middle'
-            cell.style.lineHeight = '1.2'
-            cell.style.paddingTop = '8px'
-            cell.style.paddingBottom = '8px'
-          })
-        },
+      // 캡처 직전 셀 스타일 직접 수정 → html2canvas가 수정된 상태를 그대로 캡처
+      const cells = Array.from(previewRef.current.querySelectorAll<HTMLElement>('th, td'))
+      const origStyles = cells.map(c => c.getAttribute('style') || '')
+      cells.forEach(c => {
+        c.style.verticalAlign = 'middle'
+        c.style.lineHeight = '1'
       })
+      const canvas = await h2c(previewRef.current, {
+        scale: 2, useCORS: true, allowTaint: true,
+        backgroundColor: '#fff', logging: false,
+      })
+      // 원복
+      cells.forEach((c, i) => c.setAttribute('style', origStyles[i]))
       const link = document.createElement('a')
       link.download = `견적서_${selectedInq?.company_name || ''}_${new Date().toISOString().slice(0, 10)}.png`
       link.href = canvas.toDataURL('image/png'); link.click()
@@ -400,24 +398,17 @@ export default function EstimateBuilder({
     setExporting(true)
     try {
       const h2c = (await import('html2canvas')).default
-      // overflow-x-auto 요소 임시 해제 → 우측 잘림 방지
-      const overflowEls = reportRef.current.querySelectorAll<HTMLElement>('.overflow-x-auto, .overflow-hidden')
-      overflowEls.forEach(e => { e.dataset.origOv = e.style.overflow; e.style.overflow = 'visible' })
-      const origMaxW = reportRef.current.style.maxWidth
-      reportRef.current.style.maxWidth = 'none'
+      // overflow 임시 해제
+      const overflowEls = Array.from(reportRef.current.querySelectorAll<HTMLElement>('.overflow-x-auto, .overflow-hidden'))
+      const origOvStyles = overflowEls.map(e => e.getAttribute('style') || '')
+      overflowEls.forEach(e => { e.style.overflow = 'visible' })
 
       const canvas = await h2c(reportRef.current, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#f9fafb',
-        logging: false,
-        width: reportRef.current.scrollWidth,
-        height: reportRef.current.scrollHeight,
+        scale: 2, useCORS: true, allowTaint: true,
+        backgroundColor: '#f9fafb', logging: false,
       })
-
       // 원복
-      overflowEls.forEach(e => { e.style.overflow = e.dataset.origOv || '' })
-      reportRef.current.style.maxWidth = origMaxW
+      overflowEls.forEach((e, i) => e.setAttribute('style', origOvStyles[i]))
 
       const link = document.createElement('a')
       link.download = `수익리포트_${selectedInq?.company_name || ''}_${new Date().toISOString().slice(0, 10)}.png`
@@ -1221,8 +1212,8 @@ function A4Preview({
           })}
           {staffItems.filter(r => r.role_name).length > 0 && (
             <tr style={{ backgroundColor: '#eef2ff' }}>
-              <td colSpan={5} style={{ padding: '7px 8px', textAlign: 'right', fontWeight: '700', border: '1px solid #c7d2fe', color: '#3730a3' }}>소계</td>
-              <td style={{ padding: '7px 8px', textAlign: 'right', fontWeight: '800', border: '1px solid #c7d2fe', color: '#1e40af', fontSize: '12px' }}>{staffSubtotal.toLocaleString()}</td>
+              <td colSpan={5} style={{ padding: '7px 8px', textAlign: 'center', fontWeight: '700', border: '1px solid #c7d2fe', color: '#3730a3' }}>소계</td>
+              <td style={{ padding: '7px 8px', textAlign: 'center', fontWeight: '800', border: '1px solid #c7d2fe', color: '#1e40af', fontSize: '12px' }}>{staffSubtotal.toLocaleString()}</td>
               <td style={{ border: '1px solid #c7d2fe' }} />
             </tr>
           )}
@@ -1242,8 +1233,8 @@ function A4Preview({
           })}
           {extraItems.filter(r => r.role_name).length > 0 && (
             <tr style={{ backgroundColor: '#fef3c7' }}>
-              <td colSpan={5} style={{ padding: '7px 8px', textAlign: 'right', fontWeight: '700', border: '1px solid #fde68a', color: '#92400e' }}>부대비용 합계</td>
-              <td style={{ padding: '7px 8px', textAlign: 'right', fontWeight: '800', border: '1px solid #fde68a', color: '#92400e' }}>{extraSubtotal.toLocaleString()}</td>
+              <td colSpan={5} style={{ padding: '7px 8px', textAlign: 'center', fontWeight: '700', border: '1px solid #fde68a', color: '#92400e' }}>부대비용 합계</td>
+              <td style={{ padding: '7px 8px', textAlign: 'center', fontWeight: '800', border: '1px solid #fde68a', color: '#92400e' }}>{extraSubtotal.toLocaleString()}</td>
               <td style={{ border: '1px solid #fde68a' }} />
             </tr>
           )}
@@ -1262,8 +1253,8 @@ function A4Preview({
             </tr>
           ))}
           <tr style={{ backgroundColor: '#1e3a5f' }}>
-            <td colSpan={5} style={{ padding: '10px 8px', textAlign: 'right', fontWeight: '800', color: '#fff', fontSize: '12px', border: '1px solid #2d4a7a' }}>총 합계</td>
-            <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: '900', color: '#fff', fontSize: '13px', border: '1px solid #2d4a7a' }}>{supplyPrice.toLocaleString()}</td>
+            <td colSpan={5} style={{ padding: '10px 8px', textAlign: 'center', fontWeight: '800', color: '#fff', fontSize: '12px', border: '1px solid #2d4a7a' }}>총 합계</td>
+            <td style={{ padding: '10px 8px', textAlign: 'center', fontWeight: '900', color: '#fff', fontSize: '13px', border: '1px solid #2d4a7a' }}>{supplyPrice.toLocaleString()}</td>
             <td style={{ border: '1px solid #2d4a7a' }} />
           </tr>
         </tbody>
