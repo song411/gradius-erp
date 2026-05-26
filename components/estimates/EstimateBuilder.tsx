@@ -146,8 +146,11 @@ export default function EstimateBuilder({
         key: makeKey(), role_id: '', role_name: item.role_name || '',
         quantity: item.quantity, days: item.days,
         unit_price: item.unit_price, pay_unit_price: item.pay_unit_price,
-        work_time: item.spec || '', is_leader: item.is_leader,
-        item_type: (item.item_type as ItemType) || '인력', spec: '',
+        // DB spec 필드는 "work_time / spec" 형태로 저장되므로 첫 번째 ' / ' 기준으로 분리
+        work_time: item.spec?.split(' / ')[0] || '',
+        spec: item.spec?.split(' / ').slice(1).join(' / ') || '',
+        is_leader: item.is_leader,
+        item_type: (item.item_type as ItemType) || '인력',
         selectedFactors: [], _basePrice: item.unit_price, _basePayPrice: item.pay_unit_price,
       }))
       setItems(rows.length > 0 ? rows : [emptyRow()])
@@ -1188,12 +1191,12 @@ function A4Preview({
             return (
               <tr key={row.key} style={{ backgroundColor: idx % 2 === 0 ? '#fff' : '#f8fafc', borderBottom: '1px solid #e5e7eb' }}>
                 <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', fontWeight: row.is_leader ? '700' : '500' }}>{row.is_leader ? '★ ' : ''}{row.role_name}</td>
-                <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', color: '#4b5563', fontSize: '10px' }}>{row.work_time}</td>
-                <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'right' }}>{row.quantity}명</td>
-                <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'right' }}>{row.days}일</td>
-                <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'right' }}>{row.unit_price.toLocaleString()}</td>
-                <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'right', fontWeight: '700', color: '#1e3a5f' }}>{amt.toLocaleString()}</td>
-                <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', fontSize: '10px', color: '#6b7280' }}>{row.spec}</td>
+                <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', color: '#4b5563', fontSize: '10px', textAlign: 'center' }}>{row.work_time}</td>
+                <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'center' }}>{row.quantity}명</td>
+                <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'center' }}>{row.days}일</td>
+                <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'center' }}>{row.unit_price.toLocaleString()}</td>
+                <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'center', fontWeight: '700', color: '#1e3a5f' }}>{amt.toLocaleString()}</td>
+                <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', fontSize: '10px', color: '#6b7280', textAlign: 'center' }}>{row.spec}</td>
               </tr>
             )
           })}
@@ -1209,12 +1212,12 @@ function A4Preview({
             return (
               <tr key={row.key} style={{ backgroundColor: '#fef9c3', borderBottom: '1px solid #fde68a' }}>
                 <td style={{ padding: '8px 8px', border: '1px solid #fde68a', fontWeight: '600', color: '#92400e' }}>{row.role_name || row.item_type}</td>
-                <td style={{ padding: '8px 8px', border: '1px solid #fde68a', color: '#92400e', fontSize: '10px' }}>{row.work_time}</td>
-                <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'right' }}>{row.quantity}명</td>
-                <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'right' }}>{row.days}일</td>
-                <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'right' }}>{row.unit_price > 0 ? row.unit_price.toLocaleString() : '-'}</td>
-                <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'right', fontWeight: '700' }}>{amt > 0 ? amt.toLocaleString() : '-'}</td>
-                <td style={{ padding: '8px 8px', border: '1px solid #fde68a', fontSize: '10px', color: '#92400e' }}>{row.spec}</td>
+                <td style={{ padding: '8px 8px', border: '1px solid #fde68a', color: '#92400e', fontSize: '10px', textAlign: 'center' }}>{row.work_time}</td>
+                <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'center' }}>{row.quantity}명</td>
+                <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'center' }}>{row.days}일</td>
+                <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'center' }}>{row.unit_price > 0 ? row.unit_price.toLocaleString() : '-'}</td>
+                <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'center', fontWeight: '700' }}>{amt > 0 ? amt.toLocaleString() : '-'}</td>
+                <td style={{ padding: '8px 8px', border: '1px solid #fde68a', fontSize: '10px', color: '#92400e', textAlign: 'center' }}>{row.spec}</td>
               </tr>
             )
           })}
@@ -1231,12 +1234,12 @@ function A4Preview({
                 <span style={{ fontSize: '9px', backgroundColor: '#0284c7', color: '#fff', padding: '1px 5px', borderRadius: '3px', marginRight: '5px' }}>지원</span>
                 {row.role_name}
               </td>
-              <td style={{ padding: '8px 8px', border: '1px solid #bae6fd', fontSize: '10px', color: '#0369a1' }}>{row.work_time}</td>
-              <td style={{ padding: '8px 8px', border: '1px solid #bae6fd', textAlign: 'right', color: '#0369a1' }}>{row.quantity}명</td>
-              <td style={{ padding: '8px 8px', border: '1px solid #bae6fd', textAlign: 'right', color: '#0369a1' }}>{row.days}일</td>
-              <td style={{ padding: '8px 8px', border: '1px solid #bae6fd', textAlign: 'right', color: '#0369a1' }}>-</td>
-              <td style={{ padding: '8px 8px', border: '1px solid #bae6fd', textAlign: 'right', fontWeight: '600', color: '#0369a1' }}>-</td>
-              <td style={{ padding: '8px 8px', border: '1px solid #bae6fd', fontSize: '10px', color: '#0369a1' }}>{row.spec || '본사 지원'}</td>
+              <td style={{ padding: '8px 8px', border: '1px solid #bae6fd', fontSize: '10px', color: '#0369a1', textAlign: 'center' }}>{row.work_time}</td>
+              <td style={{ padding: '8px 8px', border: '1px solid #bae6fd', textAlign: 'center', color: '#0369a1' }}>{row.quantity}명</td>
+              <td style={{ padding: '8px 8px', border: '1px solid #bae6fd', textAlign: 'center', color: '#0369a1' }}>{row.days}일</td>
+              <td style={{ padding: '8px 8px', border: '1px solid #bae6fd', textAlign: 'center', color: '#0369a1' }}>-</td>
+              <td style={{ padding: '8px 8px', border: '1px solid #bae6fd', textAlign: 'center', fontWeight: '600', color: '#0369a1' }}>-</td>
+              <td style={{ padding: '8px 8px', border: '1px solid #bae6fd', fontSize: '10px', color: '#0369a1', textAlign: 'center' }}>{row.spec || '본사 지원'}</td>
             </tr>
           ))}
           <tr style={{ backgroundColor: '#1e3a5f' }}>

@@ -240,12 +240,12 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
                   return (
                     <tr key={row.id} style={{ backgroundColor: idx % 2 === 0 ? '#fff' : '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
                       <td style={{ padding: '7px 6px', border: '1px solid #e5e7eb', fontWeight: row.is_leader ? '700' : '500' }}>{row.is_leader ? '★ ' : ''}{row.role_name}</td>
-                      <td style={{ padding: '7px 6px', border: '1px solid #e5e7eb', color: '#6b7280', fontSize: '10px' }}>{row.work_time}</td>
-                      <td style={{ padding: '7px 6px', border: '1px solid #e5e7eb', textAlign: 'right' }}>{row.quantity}명</td>
-                      <td style={{ padding: '7px 6px', border: '1px solid #e5e7eb', textAlign: 'right' }}>{row.days}일</td>
-                      <td style={{ padding: '7px 6px', border: '1px solid #e5e7eb', textAlign: 'right' }}>{row.unit_price.toLocaleString()}</td>
-                      <td style={{ padding: '7px 6px', border: '1px solid #e5e7eb', textAlign: 'right', fontWeight: '600' }}>{amt.toLocaleString()}</td>
-                      <td style={{ padding: '7px 6px', border: '1px solid #e5e7eb', fontSize: '10px', color: '#6b7280' }}>{row.spec}</td>
+                      <td style={{ padding: '7px 6px', border: '1px solid #e5e7eb', color: '#6b7280', fontSize: '10px', textAlign: 'center' }}>{row.work_time}</td>
+                      <td style={{ padding: '7px 6px', border: '1px solid #e5e7eb', textAlign: 'center' }}>{row.quantity}명</td>
+                      <td style={{ padding: '7px 6px', border: '1px solid #e5e7eb', textAlign: 'center' }}>{row.days}일</td>
+                      <td style={{ padding: '7px 6px', border: '1px solid #e5e7eb', textAlign: 'center' }}>{row.unit_price.toLocaleString()}</td>
+                      <td style={{ padding: '7px 6px', border: '1px solid #e5e7eb', textAlign: 'center', fontWeight: '600' }}>{amt.toLocaleString()}</td>
+                      <td style={{ padding: '7px 6px', border: '1px solid #e5e7eb', fontSize: '10px', color: '#6b7280', textAlign: 'center' }}>{row.spec}</td>
                     </tr>
                   )
                 })}
@@ -262,12 +262,12 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
                   return (
                     <tr key={row.id} style={{ backgroundColor: '#fef9c3', borderBottom: '1px solid #fde68a' }}>
                       <td style={{ padding: '7px 6px', border: '1px solid #fde68a', fontWeight: '600', color: '#92400e' }}>{row.role_name || row.item_type}</td>
-                      <td style={{ padding: '7px 6px', border: '1px solid #fde68a', color: '#92400e', fontSize: '10px' }}>{row.work_time}</td>
-                      <td style={{ padding: '7px 6px', border: '1px solid #fde68a', textAlign: 'right' }}>{row.quantity}명</td>
-                      <td style={{ padding: '7px 6px', border: '1px solid #fde68a', textAlign: 'right' }}>{row.days}일</td>
-                      <td style={{ padding: '7px 6px', border: '1px solid #fde68a', textAlign: 'right' }}>{row.unit_price > 0 ? row.unit_price.toLocaleString() : '-'}</td>
-                      <td style={{ padding: '7px 6px', border: '1px solid #fde68a', textAlign: 'right', fontWeight: '600' }}>{amt > 0 ? amt.toLocaleString() : '-'}</td>
-                      <td style={{ padding: '7px 6px', border: '1px solid #fde68a', fontSize: '10px', color: '#92400e' }}>{row.spec}</td>
+                      <td style={{ padding: '7px 6px', border: '1px solid #fde68a', color: '#92400e', fontSize: '10px', textAlign: 'center' }}>{row.work_time}</td>
+                      <td style={{ padding: '7px 6px', border: '1px solid #fde68a', textAlign: 'center' }}>{row.quantity}명</td>
+                      <td style={{ padding: '7px 6px', border: '1px solid #fde68a', textAlign: 'center' }}>{row.days}일</td>
+                      <td style={{ padding: '7px 6px', border: '1px solid #fde68a', textAlign: 'center' }}>{row.unit_price > 0 ? row.unit_price.toLocaleString() : '-'}</td>
+                      <td style={{ padding: '7px 6px', border: '1px solid #fde68a', textAlign: 'center', fontWeight: '600' }}>{amt > 0 ? amt.toLocaleString() : '-'}</td>
+                      <td style={{ padding: '7px 6px', border: '1px solid #fde68a', fontSize: '10px', color: '#92400e', textAlign: 'center' }}>{row.spec}</td>
                     </tr>
                   )
                 })}
@@ -285,12 +285,12 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
                       <span style={{ fontSize: '9px', backgroundColor: '#0284c7', color: '#fff', padding: '1px 4px', borderRadius: '3px', marginRight: '4px' }}>지원</span>
                       {row.role_name}
                     </td>
-                    <td style={{ padding: '7px 6px', border: '1px solid #bae6fd', fontSize: '10px', color: '#0369a1' }}>{row.work_time}</td>
-                    <td style={{ padding: '7px 6px', border: '1px solid #bae6fd', textAlign: 'right', color: '#0369a1' }}>{row.quantity}명</td>
-                    <td style={{ padding: '7px 6px', border: '1px solid #bae6fd', textAlign: 'right', color: '#0369a1' }}>{row.days}일</td>
-                    <td style={{ padding: '7px 6px', border: '1px solid #bae6fd', textAlign: 'right', color: '#0369a1' }}>-</td>
-                    <td style={{ padding: '7px 6px', border: '1px solid #bae6fd', textAlign: 'right', color: '#0369a1', fontWeight: '600' }}>-</td>
-                    <td style={{ padding: '7px 6px', border: '1px solid #bae6fd', fontSize: '10px', color: '#0369a1' }}>{row.spec || '본사 지원'}</td>
+                    <td style={{ padding: '7px 6px', border: '1px solid #bae6fd', fontSize: '10px', color: '#0369a1', textAlign: 'center' }}>{row.work_time}</td>
+                    <td style={{ padding: '7px 6px', border: '1px solid #bae6fd', textAlign: 'center', color: '#0369a1' }}>{row.quantity}명</td>
+                    <td style={{ padding: '7px 6px', border: '1px solid #bae6fd', textAlign: 'center', color: '#0369a1' }}>{row.days}일</td>
+                    <td style={{ padding: '7px 6px', border: '1px solid #bae6fd', textAlign: 'center', color: '#0369a1' }}>-</td>
+                    <td style={{ padding: '7px 6px', border: '1px solid #bae6fd', textAlign: 'center', color: '#0369a1', fontWeight: '600' }}>-</td>
+                    <td style={{ padding: '7px 6px', border: '1px solid #bae6fd', fontSize: '10px', color: '#0369a1', textAlign: 'center' }}>{row.spec || '본사 지원'}</td>
                   </tr>
                 ))}
                 {/* 총 합계 */}
