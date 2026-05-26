@@ -129,22 +129,31 @@ export default function PaymentTab({ data }: { data: CeoData }) {
     })
   }
 
+  // 디버그용 직접 fetch - 정확한 에러 메시지 파악
+  async function patchPayoutStatus(payoutId: string, status: string) {
+    const res = await fetch(`/api/db/payouts?id=${encodeURIComponent(payoutId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    })
+    const text = await res.text()
+    if (!res.ok) {
+      let detail = text
+      try { detail = JSON.parse(text).error || text } catch { /* 무시 */ }
+      throw new Error(`HTTP ${res.status}: ${detail}`)
+    }
+    return text
+  }
+
   async function handleMarkPaid(payoutId: string) {
     setProcessing(payoutId)
     try {
-      // PayoutsContent 검증값과 동일하게 '완료' 사용
-      await db.update('payouts', payoutId, { status: '완료' })
-      // paid_at 별도 시도 - 컬럼 없어도 위 업데이트는 이미 완료
-      try {
-        await db.update('payouts', payoutId, { paid_at: new Date().toISOString() })
-      } catch {
-        console.warn('[PaymentTab] paid_at 컬럼 없음 - 무시')
-      }
+      await patchPayoutStatus(payoutId, '완료')
       toast.success('지급완료로 처리되었습니다.')
       reload()
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '알 수 없는 오류'
-      toast.error(`처리 중 오류: ${msg}`)
+      const msg = err instanceof Error ? err.message : String(err)
+      toast.error(`지급완료 오류: ${msg}`, { duration: 10000 })
     } finally {
       setProcessing(null)
     }
@@ -154,18 +163,12 @@ export default function PaymentTab({ data }: { data: CeoData }) {
     if (!confirm(`"${staffName}" 지급완료를 검토완료로 되돌리겠습니까?`)) return
     setProcessing(payoutId)
     try {
-      // PayoutsContent 검증값과 동일하게 '확인완료' 사용
-      await db.update('payouts', payoutId, { status: '확인완료' })
-      try {
-        await db.update('payouts', payoutId, { paid_at: null })
-      } catch {
-        console.warn('[PaymentTab] paid_at 초기화 실패 - 무시')
-      }
+      await patchPayoutStatus(payoutId, '확인완료')
       toast.success('검토완료로 되돌렸습니다.')
       reload()
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '알 수 없는 오류'
-      toast.error(`처리 중 오류: ${msg}`)
+      const msg = err instanceof Error ? err.message : String(err)
+      toast.error(`되돌리기 오류: ${msg}`, { duration: 10000 })
     } finally {
       setProcessing(null)
     }
