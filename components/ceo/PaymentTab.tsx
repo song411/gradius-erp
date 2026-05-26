@@ -129,9 +129,9 @@ export default function PaymentTab({ data }: { data: CeoData }) {
     })
   }
 
-  // 디버그용 직접 fetch - 정확한 에러 메시지 파악
+  // 지급 상태 업데이트 - ENUM에 허용된 값만 사용
   async function patchPayoutStatus(payoutId: string, status: string) {
-    const res = await fetch(`/api/db/payouts?id=${encodeURIComponent(payoutId)}`, {
+    const res = await fetch(`/api/db/payouts?id=${payoutId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status }),
@@ -148,12 +148,12 @@ export default function PaymentTab({ data }: { data: CeoData }) {
   async function handleMarkPaid(payoutId: string) {
     setProcessing(payoutId)
     try {
-      await patchPayoutStatus(payoutId, '완료')
+      await patchPayoutStatus(payoutId, '지급완료')
       toast.success('지급완료로 처리되었습니다.')
       reload()
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      toast.error(`지급완료 오류: ${msg}`, { duration: 10000 })
+      toast.error(`지급완료 오류: ${msg}`, { duration: 8000 })
     } finally {
       setProcessing(null)
     }
@@ -163,12 +163,12 @@ export default function PaymentTab({ data }: { data: CeoData }) {
     if (!confirm(`"${staffName}" 지급완료를 검토완료로 되돌리겠습니까?`)) return
     setProcessing(payoutId)
     try {
-      await patchPayoutStatus(payoutId, '확인완료')
+      await patchPayoutStatus(payoutId, '검토완료')
       toast.success('검토완료로 되돌렸습니다.')
       reload()
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      toast.error(`되돌리기 오류: ${msg}`, { duration: 10000 })
+      toast.error(`되돌리기 오류: ${msg}`, { duration: 8000 })
     } finally {
       setProcessing(null)
     }
