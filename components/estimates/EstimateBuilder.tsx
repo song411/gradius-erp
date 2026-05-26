@@ -371,33 +371,17 @@ export default function EstimateBuilder({
     setExporting(true)
     try {
       const h2c = (await import('html2canvas')).default
-      // paddingBottom 유지(셀 높이 변경 없음), paddingTop만 측정값으로 보정
-      const cells = Array.from(previewRef.current.querySelectorAll<HTMLElement>('th, td'))
-      const origStyles = cells.map(c => c.getAttribute('style') || '')
-
-      cells.forEach(c => {
-        const cellH   = c.offsetHeight
-        const fsize   = parseFloat(window.getComputedStyle(c).fontSize) || 11
-        const origPb  = parseFloat(window.getComputedStyle(c).paddingBottom) || 8
-        const origPl  = window.getComputedStyle(c).paddingLeft  || '8px'
-        const origPr  = window.getComputedStyle(c).paddingRight || '8px'
-        // verticalAlign: top 기준으로 텍스트가 중앙에 오려면:
-        //   paddingTop = cellH - fsize - paddingBottom
-        const idealPt = Math.max(2, Math.round(cellH - fsize - origPb))
-        c.style.verticalAlign = 'top'
-        c.style.lineHeight    = '1'
-        c.style.paddingTop    = `${idealPt}px`
-        c.style.paddingLeft   = origPl
-        c.style.paddingRight  = origPr
-        // paddingBottom은 변경하지 않아 셀 높이 유지
-      })
-
       const canvas = await h2c(previewRef.current, {
         scale: 2, useCORS: true, allowTaint: true,
         backgroundColor: '#fff', logging: false,
+        // onclone: 라이브 DOM 불변, 복사본에서만 스타일 조정
+        onclone: (_doc: Document, el: HTMLElement) => {
+          el.querySelectorAll<HTMLElement>('th, td').forEach(cell => {
+            cell.style.verticalAlign = 'middle'
+            cell.style.lineHeight    = '1.2'
+          })
+        },
       })
-      cells.forEach((c, i) => c.setAttribute('style', origStyles[i]))
-
       const link = document.createElement('a')
       link.download = `견적서_${selectedInq?.company_name || ''}_${new Date().toISOString().slice(0, 10)}.png`
       link.href = canvas.toDataURL('image/png'); link.click()

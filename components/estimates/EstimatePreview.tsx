@@ -78,29 +78,16 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
     setExporting(true)
     try {
       const h2c = (await import('html2canvas')).default
-      const cells = Array.from(docRef.current.querySelectorAll<HTMLElement>('th, td'))
-      const origStyles = cells.map(c => c.getAttribute('style') || '')
-
-      cells.forEach(c => {
-        const cellH   = c.offsetHeight
-        const fsize   = parseFloat(window.getComputedStyle(c).fontSize) || 11
-        const origPb  = parseFloat(window.getComputedStyle(c).paddingBottom) || 8
-        const origPl  = window.getComputedStyle(c).paddingLeft  || '8px'
-        const origPr  = window.getComputedStyle(c).paddingRight || '8px'
-        const idealPt = Math.max(2, Math.round(cellH - fsize - origPb))
-        c.style.verticalAlign = 'top'
-        c.style.lineHeight    = '1'
-        c.style.paddingTop    = `${idealPt}px`
-        c.style.paddingLeft   = origPl
-        c.style.paddingRight  = origPr
-      })
-
       const canvas = await h2c(docRef.current, {
         scale: 2, useCORS: true, allowTaint: true,
         backgroundColor: '#fff', logging: false,
+        onclone: (_doc: Document, el: HTMLElement) => {
+          el.querySelectorAll<HTMLElement>('th, td').forEach(cell => {
+            cell.style.verticalAlign = 'middle'
+            cell.style.lineHeight    = '1.2'
+          })
+        },
       })
-      cells.forEach((c, i) => c.setAttribute('style', origStyles[i]))
-
       const link = document.createElement('a')
       link.download = `견적서_${estimate?.company_name || ''}_${estimate?.estimate_code || ''}.png`
       link.href = canvas.toDataURL('image/png'); link.click()
