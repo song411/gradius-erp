@@ -76,25 +76,33 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
   async function handleSaveImage() {
     if (!docRef.current) return
     setExporting(true)
+    let tempWrap: HTMLDivElement | null = null
     try {
       const h2c = (await import('html2canvas')).default
-      const canvas = await h2c(docRef.current, {
+
+      // 스크롤/overflow 영향 차단: body에 클론을 직접 붙여 있는 그대로 캡처
+      tempWrap = document.createElement('div')
+      tempWrap.style.cssText = 'position:fixed;top:-9999px;left:0;width:794px;background:#fff;'
+      const cloned = docRef.current.cloneNode(true) as HTMLElement
+      cloned.style.width = '794px'
+      tempWrap.appendChild(cloned)
+      document.body.appendChild(tempWrap)
+
+      const canvas = await h2c(tempWrap, {
         scale: 2, useCORS: true, allowTaint: true,
         backgroundColor: '#fff', logging: false,
-        onclone: (_doc: Document, el: HTMLElement) => {
-          el.querySelectorAll<HTMLElement>('th, td').forEach(cell => {
-            cell.style.verticalAlign = 'middle'
-            cell.style.lineHeight    = '1.2'
-          })
-        },
       })
+
       const link = document.createElement('a')
       link.download = `견적서_${estimate?.company_name || ''}_${estimate?.estimate_code || ''}.png`
       link.href = canvas.toDataURL('image/png'); link.click()
     } catch (err) {
       console.error('견적서 저장 오류:', err)
       toast.error('이미지 저장에 실패했습니다.')
-    } finally { setExporting(false) }
+    } finally {
+      if (tempWrap && document.body.contains(tempWrap)) document.body.removeChild(tempWrap)
+      setExporting(false)
+    }
   }
 
   // ── 인쇄 ───────────────────────────────────────────────

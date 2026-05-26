@@ -369,26 +369,33 @@ export default function EstimateBuilder({
   async function handleDownloadImage() {
     if (!previewRef.current) return
     setExporting(true)
+    let tempWrap: HTMLDivElement | null = null
     try {
       const h2c = (await import('html2canvas')).default
-      const canvas = await h2c(previewRef.current, {
+
+      // 스크롤/overflow 영향 차단: body에 클론을 직접 붙여 있는 그대로 캡처
+      tempWrap = document.createElement('div')
+      tempWrap.style.cssText = 'position:fixed;top:-9999px;left:0;width:794px;background:#fff;'
+      const cloned = previewRef.current.cloneNode(true) as HTMLElement
+      cloned.style.width = '794px'
+      tempWrap.appendChild(cloned)
+      document.body.appendChild(tempWrap)
+
+      const canvas = await h2c(tempWrap, {
         scale: 2, useCORS: true, allowTaint: true,
         backgroundColor: '#fff', logging: false,
-        // onclone: 라이브 DOM 불변, 복사본에서만 스타일 조정
-        onclone: (_doc: Document, el: HTMLElement) => {
-          el.querySelectorAll<HTMLElement>('th, td').forEach(cell => {
-            cell.style.verticalAlign = 'middle'
-            cell.style.lineHeight    = '1.2'
-          })
-        },
       })
+
       const link = document.createElement('a')
       link.download = `견적서_${selectedInq?.company_name || ''}_${new Date().toISOString().slice(0, 10)}.png`
       link.href = canvas.toDataURL('image/png'); link.click()
     } catch (err) {
       console.error('견적서 저장 오류:', err)
       toast.error('이미지 저장에 실패했습니다.')
-    } finally { setExporting(false) }
+    } finally {
+      if (tempWrap && document.body.contains(tempWrap)) document.body.removeChild(tempWrap)
+      setExporting(false)
+    }
   }
 
   async function handleDownloadReport() {
@@ -398,16 +405,11 @@ export default function EstimateBuilder({
     try {
       const h2c = (await import('html2canvas')).default
 
-      // overflow 클리핑 우회: 독립 컨테이너에 클론을 붙여 캡처
+      // overflow 클리핑 우회: body에 클론을 직접 붙여 캡처
       tempWrap = document.createElement('div')
-      tempWrap.style.cssText = [
-        'position:absolute', 'top:0', 'left:0',
-        'width:800px', 'padding:24px', 'box-sizing:border-box',
-        'background:#f9fafb', 'z-index:-9999',
-        'opacity:0.001', 'pointer-events:none',
-      ].join(';')
+      tempWrap.style.cssText = 'position:fixed;top:-9999px;left:0;width:800px;padding:24px;box-sizing:border-box;background:#f9fafb;'
       const cloned = reportRef.current.cloneNode(true) as HTMLElement
-      cloned.style.cssText += ';overflow:visible;height:auto;max-height:none;'
+      cloned.style.width = '100%'
       tempWrap.appendChild(cloned)
       document.body.appendChild(tempWrap)
 
@@ -423,7 +425,7 @@ export default function EstimateBuilder({
       console.error('리포트 저장 오류:', err)
       toast.error('리포트 이미지 저장에 실패했습니다.')
     } finally {
-      if (tempWrap) document.body.removeChild(tempWrap)
+      if (tempWrap && document.body.contains(tempWrap)) document.body.removeChild(tempWrap)
       setExporting(false)
     }
   }
