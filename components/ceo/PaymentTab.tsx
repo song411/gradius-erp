@@ -132,13 +132,13 @@ export default function PaymentTab({ data }: { data: CeoData }) {
   async function handleMarkPaid(payoutId: string) {
     setProcessing(payoutId)
     try {
-      // PayoutsContent와 동일한 검증된 방식: status만 먼저 업데이트
-      await db.update('payouts', payoutId, { status: '지급완료' })
-      // paid_at은 별도로 시도 - 컬럼 없어도 status 업데이트는 이미 완료됨
+      // PayoutsContent 검증값과 동일하게 '완료' 사용
+      await db.update('payouts', payoutId, { status: '완료' })
+      // paid_at 별도 시도 - 컬럼 없어도 위 업데이트는 이미 완료
       try {
         await db.update('payouts', payoutId, { paid_at: new Date().toISOString() })
       } catch {
-        console.warn('[PaymentTab] paid_at 컬럼 없음 - 무시하고 계속')
+        console.warn('[PaymentTab] paid_at 컬럼 없음 - 무시')
       }
       toast.success('지급완료로 처리되었습니다.')
       reload()
@@ -154,12 +154,12 @@ export default function PaymentTab({ data }: { data: CeoData }) {
     if (!confirm(`"${staffName}" 지급완료를 검토완료로 되돌리겠습니까?`)) return
     setProcessing(payoutId)
     try {
-      await db.update('payouts', payoutId, { status: '검토완료' })
-      // paid_at 초기화도 시도 - 실패해도 무시
+      // PayoutsContent 검증값과 동일하게 '확인완료' 사용
+      await db.update('payouts', payoutId, { status: '확인완료' })
       try {
         await db.update('payouts', payoutId, { paid_at: null })
       } catch {
-        console.warn('[PaymentTab] paid_at 초기화 실패 - 무시하고 계속')
+        console.warn('[PaymentTab] paid_at 초기화 실패 - 무시')
       }
       toast.success('검토완료로 되돌렸습니다.')
       reload()
