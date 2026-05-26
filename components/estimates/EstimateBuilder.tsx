@@ -371,31 +371,28 @@ export default function EstimateBuilder({
     setExporting(true)
     try {
       const h2c = (await import('html2canvas')).default
-      // html2canvas는 Korean 폰트(Malgun Gothic) descender 때문에 텍스트가 아래로 치우침
-      // vertical-align 대신 padding 보정으로 강제 중앙 배치
-      const ths = Array.from(previewRef.current.querySelectorAll<HTMLElement>('th'))
-      const tds = Array.from(previewRef.current.querySelectorAll<HTMLElement>('td'))
-      const allCells = [...ths, ...tds]
-      const origStyles = allCells.map(c => c.getAttribute('style') || '')
+      // html2canvas의 Korean 폰트 렌더링 편향 보정:
+      // 실제 셀 높이를 측정 후 (cellH - fontSize) / 2 로 정확한 paddingTop을 계산
+      const cells = Array.from(previewRef.current.querySelectorAll<HTMLElement>('th, td'))
+      const origStyles = cells.map(c => c.getAttribute('style') || '')
 
-      ths.forEach(c => {
-        c.style.verticalAlign = 'top'
-        c.style.lineHeight = '1'
-        c.style.paddingTop = '12px'
-        c.style.paddingBottom = '4px'
-      })
-      tds.forEach(c => {
-        c.style.verticalAlign = 'top'
-        c.style.lineHeight = '1'
-        c.style.paddingTop = '11px'
-        c.style.paddingBottom = '4px'
+      cells.forEach(c => {
+        const cellH  = c.offsetHeight
+        const fsize  = parseFloat(window.getComputedStyle(c).fontSize) || 11
+        const idealPt = Math.max(4, Math.round((cellH - fsize) / 2))
+        c.style.verticalAlign  = 'top'
+        c.style.lineHeight     = '1'
+        c.style.paddingTop     = `${idealPt}px`
+        c.style.paddingBottom  = '0px'
+        c.style.paddingLeft    = '8px'
+        c.style.paddingRight   = '8px'
       })
 
       const canvas = await h2c(previewRef.current, {
         scale: 2, useCORS: true, allowTaint: true,
         backgroundColor: '#fff', logging: false,
       })
-      allCells.forEach((c, i) => c.setAttribute('style', origStyles[i]))
+      cells.forEach((c, i) => c.setAttribute('style', origStyles[i]))
 
       const link = document.createElement('a')
       link.download = `견적서_${selectedInq?.company_name || ''}_${new Date().toISOString().slice(0, 10)}.png`
