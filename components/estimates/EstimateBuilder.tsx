@@ -411,17 +411,37 @@ export default function EstimateBuilder({
     setExporting(true)
     try {
       const h2c = (await import('html2canvas')).default
-      // overflow 임시 해제
-      const overflowEls = Array.from(reportRef.current.querySelectorAll<HTMLElement>('.overflow-x-auto, .overflow-hidden'))
-      const origOvStyles = overflowEls.map(e => e.getAttribute('style') || '')
-      overflowEls.forEach(e => { e.style.overflow = 'visible' })
+
+      // reportRef의 부모 스크롤 컨테이너들을 찾아 overflow 해제 (html2canvas가 잘리는 원인)
+      const scrollParents: { el: HTMLElement; origStyle: string }[] = []
+      let cur = reportRef.current.parentElement
+      while (cur && cur !== document.body) {
+        const ov = window.getComputedStyle(cur).overflow
+        const ovY = window.getComputedStyle(cur).overflowY
+        if (ov.includes('auto') || ov.includes('scroll') || ov.includes('hidden') ||
+            ovY.includes('auto') || ovY.includes('scroll') || ovY.includes('hidden')) {
+          scrollParents.push({ el: cur, origStyle: cur.getAttribute('style') || '' })
+          cur.style.overflow = 'visible'
+          cur.style.height = 'auto'
+          cur.style.maxHeight = 'none'
+        }
+        cur = cur.parentElement
+      }
+
+      // 내부 overflow 요소도 해제
+      const innerEls = Array.from(reportRef.current.querySelectorAll<HTMLElement>('[class*="overflow"]'))
+      const origInner = innerEls.map(e => e.getAttribute('style') || '')
+      innerEls.forEach(e => { e.style.overflow = 'visible' })
 
       const canvas = await h2c(reportRef.current, {
         scale: 2, useCORS: true, allowTaint: true,
         backgroundColor: '#f9fafb', logging: false,
+        windowWidth: 1200,
       })
+
       // 원복
-      overflowEls.forEach((e, i) => e.setAttribute('style', origOvStyles[i]))
+      scrollParents.forEach(({ el, origStyle }) => el.setAttribute('style', origStyle))
+      innerEls.forEach((e, i) => e.setAttribute('style', origInner[i]))
 
       const link = document.createElement('a')
       link.download = `수익리포트_${selectedInq?.company_name || ''}_${new Date().toISOString().slice(0, 10)}.png`
