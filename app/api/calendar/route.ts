@@ -5,7 +5,11 @@ import { google } from 'googleapis'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { event_name, company_name, event_start, event_end, phone, memo } = body
+    const {
+      event_name, company_name, event_start, event_end,
+      phone, location, event_time, required_staff, memo,
+      supply_price, total_price, version_label,
+    } = body
 
     // Vercel 환경변수에서 \n을 실제 줄바꿈으로 변환 (두 가지 케이스 모두 처리)
     const rawKey = process.env.GOOGLE_PRIVATE_KEY || ''
@@ -40,13 +44,30 @@ export async function POST(request: NextRequest) {
       ? new Date(new Date(event_end).getTime() + 86400000).toISOString().split('T')[0] // 종료일 +1일 (구글 캘린더 종일 이벤트 규칙)
       : new Date(new Date(startDate).getTime() + 86400000).toISOString().split('T')[0]
 
+    const fmt = (n: number) => n ? n.toLocaleString('ko-KR') + '원' : '-'
+
     const description = [
-      `고객사: ${company_name || '-'}`,
-      phone ? `담당자 연락처: ${phone}` : null,
-      memo  ? `메모: ${memo}`          : null,
+      '━━━━━━━━━━━━━━━━━━━━',
+      '📋 행사 정보',
+      '━━━━━━━━━━━━━━━━━━━━',
+      `🏢 고객사: ${company_name || '-'}`,
+      location       ? `📍 장소: ${location}`             : null,
+      event_time     ? `🕐 행사 시간: ${event_time}`       : null,
+      required_staff ? `👥 필요 인원: ${required_staff}명` : null,
+      phone          ? `📞 연락처: ${phone}`               : null,
       '',
+      '━━━━━━━━━━━━━━━━━━━━',
+      '💰 견적 정보',
+      '━━━━━━━━━━━━━━━━━━━━',
+      version_label  ? `📄 확정 견적: ${version_label}`   : null,
+      supply_price   ? `공급가액: ${fmt(supply_price)}`    : null,
+      total_price    ? `총 청구금액 (VAT포함): ${fmt(total_price)}` : null,
+      '',
+      memo ? `📝 메모: ${memo}` : null,
+      '',
+      '━━━━━━━━━━━━━━━━━━━━',
       '※ GUARDIUS ERP에서 자동 등록된 일정입니다.',
-    ].filter(Boolean).join('\n')
+    ].filter(v => v !== null).join('\n')
 
     const event = await calendar.events.insert({
       calendarId,

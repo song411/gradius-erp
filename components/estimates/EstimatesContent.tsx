@@ -64,7 +64,7 @@ export default function EstimatesContent() {
     const [ests, inqsForEst, allInqs] = await Promise.all([
       // 견적: 문의ID로 품목을 조회하기 위해 inquiry_id도 필요
       db.list<EstimateRow>('estimates', {
-        select: '*, inquiries(id, event_name, company_name, status, event_start, event_end, phone)',
+        select: '*, inquiries(id, event_name, company_name, status, event_start, event_end, phone, location, event_time, required_staff, memo)',
         order: 'created_at', asc: false,
       }),
       // 견적 대기: '접수' 상태 문의
@@ -152,12 +152,18 @@ export default function EstimatesContent() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              event_name:   inq?.event_name   || est.site_name   || '',
-              company_name: inq?.company_name || est.company_name || '',
-              event_start:  inq?.event_start  || null,
-              event_end:    inq?.event_end    || null,
-              phone:        inq?.phone        || null,
-              memo:         inq?.memo         || null,
+              event_name:     inq?.event_name     || est.site_name    || '',
+              company_name:   inq?.company_name   || est.company_name || '',
+              event_start:    inq?.event_start    || null,
+              event_end:      inq?.event_end      || null,
+              phone:          inq?.phone          || null,
+              location:       (inq as any)?.location     || null,
+              event_time:     (inq as any)?.event_time   || null,
+              required_staff: (inq as any)?.required_staff || null,
+              memo:           (inq as any)?.memo          || null,
+              supply_price:   est.supply_price    || 0,
+              total_price:    est.total_price     || 0,
+              version_label:  est.version_label   || 'A안',
             }),
           })
           if (res.ok) {
