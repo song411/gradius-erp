@@ -34,11 +34,24 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
 
   if (!estimate) return null
 
-  // ── 품목 분류 ──────────────────────────────────────────
-  const allItems   = estimate.estimate_items || []
-  const staffItems  = allItems.filter(i => !EXTRA_TYPES.includes(i.item_type || '') && !SUPPORT_TYPES.includes(i.item_type || ''))
-  const extraItems  = allItems.filter(i =>  EXTRA_TYPES.includes(i.item_type || ''))
-  const supportItems = allItems.filter(i => SUPPORT_TYPES.includes(i.item_type || ''))
+  // ── 빌더와 동일한 방식으로 품목 데이터 변환 ─────────────
+  // 빌더 로딩 로직(line 149): work_time = item.spec, spec = ''
+  // → 시간/규격 열에 저장된 spec 전체 표시, 비고 열은 비움
+  const allItems = estimate.estimate_items || []
+  const toRow = (item: EstimateItem) => ({
+    id:            item.id,
+    role_name:     item.role_name || '',
+    quantity:      item.quantity,
+    days:          item.days,
+    unit_price:    item.unit_price,
+    is_leader:     item.is_leader,
+    item_type:     item.item_type || '인력',
+    work_time:     item.spec || '',   // 빌더와 동일: spec 전체를 work_time으로 사용
+    spec:          '',                // 비고 열은 비움 (빌더 로딩 방식과 동일)
+  })
+  const staffItems   = allItems.filter(i => !EXTRA_TYPES.includes(i.item_type || '') && !SUPPORT_TYPES.includes(i.item_type || '')).map(toRow)
+  const extraItems   = allItems.filter(i => EXTRA_TYPES.includes(i.item_type || '')).map(toRow)
+  const supportItems = allItems.filter(i => SUPPORT_TYPES.includes(i.item_type || '')).map(toRow)
 
   // ── 금액 ───────────────────────────────────────────────
   const supplyPrice   = estimate.supply_price || 0
@@ -160,9 +173,9 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
                     <table style={{ width: '100%', borderCollapse: 'collapse', border: '1.5px solid #374151' }}>
                       <tbody>
                         <TblHeader label="공급받는자" />
-                        <TblRow2 l1="상호"   v1={estimate.company_name || '(업체명)'} l2="참조"  v2={estimate.manager || ''} />
-                        <TblRow2 l1="연락처" v1={''} l2="" v2="" />
-                        <TblRow2 l1="주소"   v1={estimate.site_address || ''} l2="" v2="" />
+                        <TblRow2 l1="상호"    v1={estimate.company_name || '(업체명)'} l2="참조" v2={estimate.manager || ''} />
+                        <TblRow2 l1="연락처"  v1={inq?.phone || ''} l2="" v2="" />
+                        <TblRow2 l1="주소"    v1={estimate.site_address || ''} l2="" v2="" />
                         <TblRow2 l1="행사일시" v1={eventPeriod} l2="" v2="" />
                       </tbody>
                     </table>
@@ -221,21 +234,18 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
                 </tr>
               </thead>
               <tbody>
-                {/* 인력 품목 */}
-                {staffItems.filter(r => r.role_name).map((item, idx) => {
-                  const amt = item.quantity * item.days * item.unit_price
-                  // spec = "work_time / 비고" 형식으로 저장됨
-                  const [workTime, ...specRest] = (item.spec || '').split(' / ')
-                  const note = specRest.join(' / ')
+                {/* 인력 품목 — 빌더 A4Preview와 동일한 렌더링 */}
+                {staffItems.filter(r => r.role_name).map((row, idx) => {
+                  const amt = row.quantity * row.days * row.unit_price
                   return (
-                    <tr key={item.id || idx} style={{ backgroundColor: idx % 2 === 0 ? '#fff' : '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
-                      <td style={{ padding: '7px 6px', border: '1px solid #e5e7eb', fontWeight: item.is_leader ? '700' : '500' }}>{item.is_leader ? '★ ' : ''}{item.role_name}</td>
-                      <td style={{ padding: '7px 6px', border: '1px solid #e5e7eb', color: '#6b7280', fontSize: '10px' }}>{workTime}</td>
-                      <td style={{ padding: '7px 6px', border: '1px solid #e5e7eb', textAlign: 'right' }}>{item.quantity}명</td>
-                      <td style={{ padding: '7px 6px', border: '1px solid #e5e7eb', textAlign: 'right' }}>{item.days}일</td>
-                      <td style={{ padding: '7px 6px', border: '1px solid #e5e7eb', textAlign: 'right' }}>{item.unit_price.toLocaleString()}</td>
+                    <tr key={row.id} style={{ backgroundColor: idx % 2 === 0 ? '#fff' : '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+                      <td style={{ padding: '7px 6px', border: '1px solid #e5e7eb', fontWeight: row.is_leader ? '700' : '500' }}>{row.is_leader ? '★ ' : ''}{row.role_name}</td>
+                      <td style={{ padding: '7px 6px', border: '1px solid #e5e7eb', color: '#6b7280', fontSize: '10px' }}>{row.work_time}</td>
+                      <td style={{ padding: '7px 6px', border: '1px solid #e5e7eb', textAlign: 'right' }}>{row.quantity}명</td>
+                      <td style={{ padding: '7px 6px', border: '1px solid #e5e7eb', textAlign: 'right' }}>{row.days}일</td>
+                      <td style={{ padding: '7px 6px', border: '1px solid #e5e7eb', textAlign: 'right' }}>{row.unit_price.toLocaleString()}</td>
                       <td style={{ padding: '7px 6px', border: '1px solid #e5e7eb', textAlign: 'right', fontWeight: '600' }}>{amt.toLocaleString()}</td>
-                      <td style={{ padding: '7px 6px', border: '1px solid #e5e7eb', fontSize: '10px', color: '#6b7280' }}>{note}</td>
+                      <td style={{ padding: '7px 6px', border: '1px solid #e5e7eb', fontSize: '10px', color: '#6b7280' }}>{row.spec}</td>
                     </tr>
                   )
                 })}
@@ -247,19 +257,17 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
                   </tr>
                 )}
                 {/* 부대비용 (노란 배경) */}
-                {extraItems.filter(r => r.role_name).map((item) => {
-                  const amt = item.quantity * item.days * item.unit_price
-                  const [workTime, ...specRest] = (item.spec || '').split(' / ')
-                  const note = specRest.join(' / ')
+                {extraItems.filter(r => r.role_name).map((row) => {
+                  const amt = row.quantity * row.days * row.unit_price
                   return (
-                    <tr key={item.id} style={{ backgroundColor: '#fef9c3', borderBottom: '1px solid #fde68a' }}>
-                      <td style={{ padding: '7px 6px', border: '1px solid #fde68a', fontWeight: '600', color: '#92400e' }}>{item.role_name}</td>
-                      <td style={{ padding: '7px 6px', border: '1px solid #fde68a', fontSize: '10px', color: '#92400e' }}>{workTime}</td>
-                      <td style={{ padding: '7px 6px', border: '1px solid #fde68a', textAlign: 'right' }}>{item.quantity}명</td>
-                      <td style={{ padding: '7px 6px', border: '1px solid #fde68a', textAlign: 'right' }}>{item.days}일</td>
-                      <td style={{ padding: '7px 6px', border: '1px solid #fde68a', textAlign: 'right' }}>{item.unit_price > 0 ? item.unit_price.toLocaleString() : '-'}</td>
+                    <tr key={row.id} style={{ backgroundColor: '#fef9c3', borderBottom: '1px solid #fde68a' }}>
+                      <td style={{ padding: '7px 6px', border: '1px solid #fde68a', fontWeight: '600', color: '#92400e' }}>{row.role_name || row.item_type}</td>
+                      <td style={{ padding: '7px 6px', border: '1px solid #fde68a', color: '#92400e', fontSize: '10px' }}>{row.work_time}</td>
+                      <td style={{ padding: '7px 6px', border: '1px solid #fde68a', textAlign: 'right' }}>{row.quantity}명</td>
+                      <td style={{ padding: '7px 6px', border: '1px solid #fde68a', textAlign: 'right' }}>{row.days}일</td>
+                      <td style={{ padding: '7px 6px', border: '1px solid #fde68a', textAlign: 'right' }}>{row.unit_price > 0 ? row.unit_price.toLocaleString() : '-'}</td>
                       <td style={{ padding: '7px 6px', border: '1px solid #fde68a', textAlign: 'right', fontWeight: '600' }}>{amt > 0 ? amt.toLocaleString() : '-'}</td>
-                      <td style={{ padding: '7px 6px', border: '1px solid #fde68a', fontSize: '10px', color: '#92400e' }}>{note}</td>
+                      <td style={{ padding: '7px 6px', border: '1px solid #fde68a', fontSize: '10px', color: '#92400e' }}>{row.spec}</td>
                     </tr>
                   )
                 })}
@@ -271,18 +279,18 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
                   </tr>
                 )}
                 {/* 지원품목 (파란 배경) */}
-                {supportItems.filter(r => r.role_name).map((item) => (
-                  <tr key={item.id} style={{ backgroundColor: '#e0f2fe', borderBottom: '1px solid #bae6fd' }}>
+                {supportItems.filter(r => r.role_name).map((row) => (
+                  <tr key={row.id} style={{ backgroundColor: '#e0f2fe', borderBottom: '1px solid #bae6fd' }}>
                     <td style={{ padding: '7px 6px', border: '1px solid #bae6fd', color: '#0369a1' }}>
                       <span style={{ fontSize: '9px', backgroundColor: '#0284c7', color: '#fff', padding: '1px 4px', borderRadius: '3px', marginRight: '4px' }}>지원</span>
-                      {item.role_name}
+                      {row.role_name}
                     </td>
-                    <td style={{ padding: '7px 6px', border: '1px solid #bae6fd', fontSize: '10px', color: '#0369a1' }}>{item.spec}</td>
-                    <td style={{ padding: '7px 6px', border: '1px solid #bae6fd', textAlign: 'right', color: '#0369a1' }}>{item.quantity}명</td>
-                    <td style={{ padding: '7px 6px', border: '1px solid #bae6fd', textAlign: 'right', color: '#0369a1' }}>{item.days}일</td>
+                    <td style={{ padding: '7px 6px', border: '1px solid #bae6fd', fontSize: '10px', color: '#0369a1' }}>{row.work_time}</td>
+                    <td style={{ padding: '7px 6px', border: '1px solid #bae6fd', textAlign: 'right', color: '#0369a1' }}>{row.quantity}명</td>
+                    <td style={{ padding: '7px 6px', border: '1px solid #bae6fd', textAlign: 'right', color: '#0369a1' }}>{row.days}일</td>
                     <td style={{ padding: '7px 6px', border: '1px solid #bae6fd', textAlign: 'right', color: '#0369a1' }}>-</td>
                     <td style={{ padding: '7px 6px', border: '1px solid #bae6fd', textAlign: 'right', color: '#0369a1', fontWeight: '600' }}>-</td>
-                    <td style={{ padding: '7px 6px', border: '1px solid #bae6fd', fontSize: '10px', color: '#0369a1' }}>본사 지원</td>
+                    <td style={{ padding: '7px 6px', border: '1px solid #bae6fd', fontSize: '10px', color: '#0369a1' }}>{row.spec || '본사 지원'}</td>
                   </tr>
                 ))}
                 {/* 총 합계 */}

@@ -64,7 +64,7 @@ export default function EstimatesContent() {
     const [ests, inqsForEst, allInqs] = await Promise.all([
       // 견적: 문의ID로 품목을 조회하기 위해 inquiry_id도 필요
       db.list<EstimateRow>('estimates', {
-        select: '*, inquiries(id, event_name, company_name, status, event_start, event_end)',
+        select: '*, inquiries(id, event_name, company_name, status, event_start, event_end, phone)',
         order: 'created_at', asc: false,
       }),
       // 견적 대기: '접수' 상태 문의
