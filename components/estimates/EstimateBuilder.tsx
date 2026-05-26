@@ -394,30 +394,38 @@ export default function EstimateBuilder({
   async function handleDownloadReport() {
     if (!reportRef.current) return
     setExporting(true)
+    let tempWrap: HTMLDivElement | null = null
     try {
       const h2c = (await import('html2canvas')).default
-      const canvas = await h2c(reportRef.current, {
+
+      // overflow 클리핑 우회: 독립 컨테이너에 클론을 붙여 캡처
+      tempWrap = document.createElement('div')
+      tempWrap.style.cssText = [
+        'position:absolute', 'top:0', 'left:0',
+        'width:800px', 'padding:24px', 'box-sizing:border-box',
+        'background:#f9fafb', 'z-index:-9999',
+        'opacity:0.001', 'pointer-events:none',
+      ].join(';')
+      const cloned = reportRef.current.cloneNode(true) as HTMLElement
+      cloned.style.cssText += ';overflow:visible;height:auto;max-height:none;'
+      tempWrap.appendChild(cloned)
+      document.body.appendChild(tempWrap)
+
+      const canvas = await h2c(tempWrap, {
         scale: 2, useCORS: true, allowTaint: true,
         backgroundColor: '#f9fafb', logging: false,
-        onclone: (_clonedDoc: Document, element: HTMLElement) => {
-          // 클론의 부모 컨테이너들 overflow 해제 (캡처 잘림 방지)
-          let p = element.parentElement
-          while (p && p.tagName !== 'BODY') {
-            p.style.overflow  = 'visible'
-            p.style.height    = 'auto'
-            p.style.maxHeight = 'none'
-            p.style.minHeight = '0'
-            p = p.parentElement
-          }
-        },
       })
+
       const link = document.createElement('a')
       link.download = `수익리포트_${selectedInq?.company_name || ''}_${new Date().toISOString().slice(0, 10)}.png`
       link.href = canvas.toDataURL('image/png'); link.click()
     } catch (err) {
       console.error('리포트 저장 오류:', err)
       toast.error('리포트 이미지 저장에 실패했습니다.')
-    } finally { setExporting(false) }
+    } finally {
+      if (tempWrap) document.body.removeChild(tempWrap)
+      setExporting(false)
+    }
   }
 
   function handlePrint() {
