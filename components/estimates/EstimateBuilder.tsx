@@ -384,24 +384,31 @@ export default function EstimateBuilder({
     setExporting(true)
     try {
       const { toPng } = await import('html-to-image')
-      const el = reportRef.current
-      // overflow-x-auto 임시 제거 → 테이블 우측 잘림 방지
-      const overflowEls = el.querySelectorAll<HTMLElement>('.overflow-x-auto')
-      overflowEls.forEach(e => { e.dataset.origOv = e.style.overflow; e.style.overflow = 'visible' })
-      // max-w 제한도 임시 해제
-      const origMaxW = el.style.maxWidth
-      el.style.maxWidth = 'none'
+      // 고정 너비 클론을 화면 밖에 붙여서 캡처 → 줌/해상도 무관하게 항상 동일한 결과
+      const FIXED_WIDTH = 920
+      const clone = reportRef.current.cloneNode(true) as HTMLElement
+      clone.style.cssText = [
+        'position:fixed', 'top:-9999px', 'left:-9999px',
+        `width:${FIXED_WIDTH}px`, 'max-width:none', 'overflow:visible',
+        'background:#f9fafb', 'z-index:-1',
+      ].join(';')
+      // 하위 overflow 요소도 모두 해제
+      clone.querySelectorAll<HTMLElement>('*').forEach(e => {
+        if (getComputedStyle(e).overflow === 'auto' || e.classList.contains('overflow-x-auto')) {
+          e.style.overflow = 'visible'
+        }
+      })
+      document.body.appendChild(clone)
+      // 레이아웃 확정 대기
+      await new Promise(r => setTimeout(r, 150))
 
-      const dataUrl = await toPng(el, {
+      const dataUrl = await toPng(clone, {
         pixelRatio: 2,
         backgroundColor: '#f9fafb',
-        width: el.scrollWidth,
-        height: el.scrollHeight,
+        width: FIXED_WIDTH,
+        height: clone.scrollHeight,
       })
-
-      // 원복
-      overflowEls.forEach(e => { e.style.overflow = e.dataset.origOv || '' })
-      el.style.maxWidth = origMaxW
+      document.body.removeChild(clone)
 
       const link = document.createElement('a')
       link.download = `수익리포트_${selectedInq?.company_name || ''}_${new Date().toISOString().slice(0, 10)}.png`
