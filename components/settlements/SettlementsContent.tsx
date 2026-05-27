@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dialog'
 import {
   Plus, Search, Edit2, CheckCircle, AlertCircle,
-  BadgePercent, StickyNote, Banknote, ChevronDown,
+  BadgePercent, StickyNote, Banknote, ChevronDown, Sparkles,
 } from 'lucide-react'
 import type { Settlement, DepositStatus, ProjectProgress, Inquiry } from '@/lib/supabase/types'
 import { toast } from 'sonner'
@@ -80,8 +80,16 @@ export default function SettlementsContent() {
     corp_name: '',
     item_description: '',
     contact_phone: '',
-    invoice_request: '',   // 메모/입금예정일 메모
+    biz_address: '',       // 사업장주소 (세금계산서용 — 현장주소와 다름!)
+    invoice_request: '',
   })
+
+  // 이전 발행 정보 자동완성용
+  const [prevBizInfo, setPrevBizInfo] = useState<{
+    biz_number?: string; corp_name?: string; rep_name?: string
+    email?: string; contact_phone?: string; biz_address?: string
+    company_name?: string
+  } | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -116,13 +124,14 @@ export default function SettlementsContent() {
 
   function openCreate() {
     setEditTarget(null)
+    setPrevBizInfo(null)
     setForm({
       inquiry_id: '', company_name: '', site_name: '', dispatch_period: '',
       manager: '', site_address: '', supply_price: '', vat: '', received_amount: '',
       payout_amount: '', base_pay: '', meal_pay: '', overtime_pay: '', transport_pay: '',
       progress: '계약체결', deposit_status: '미입금', tax_invoice_issued: false,
       category: '', biz_number: '', rep_name: '', email: '', corp_name: '',
-      item_description: '', contact_phone: '', invoice_request: '',
+      item_description: '', contact_phone: '', biz_address: '', invoice_request: '',
     })
     setError('')
     setShowModal(true)
@@ -130,6 +139,7 @@ export default function SettlementsContent() {
 
   function openEdit(s: Settlement) {
     setEditTarget(s)
+    setPrevBizInfo(null)
     setForm({
       inquiry_id: s.inquiry_id || '',
       company_name: s.company_name || '',
@@ -152,10 +162,53 @@ export default function SettlementsContent() {
       corp_name: s.corp_name || '',
       item_description: s.item_description || '',
       contact_phone: s.contact_phone || '',
+      biz_address: (s as Settlement & { biz_address?: string }).biz_address || '',
       invoice_request: s.invoice_request || '',
     })
     setError('')
     setShowModal(true)
+  }
+
+  // 문의 선택 시 같은 업체의 이전 발행 정보 조회
+  async function handleInquirySelect(inquiryId: string) {
+    const inq = inquiries.find(i => i.id === inquiryId)
+    const companyName = inq?.company_name || ''
+    setForm(f => ({ ...f, inquiry_id: inquiryId, company_name: companyName }))
+    setPrevBizInfo(null)
+    if (!companyName) return
+
+    // 같은 업체명의 정산 건 중 사업자번호가 있는 가장 최근 건 조회
+    const prev = settlements.find(s =>
+      s.id !== editTarget?.id &&
+      (s.company_name || '') === companyName &&
+      s.biz_number
+    )
+    if (prev) {
+      setPrevBizInfo({
+        biz_number:    prev.biz_number,
+        corp_name:     prev.corp_name,
+        rep_name:      prev.rep_name,
+        email:         prev.email,
+        contact_phone: prev.contact_phone,
+        biz_address:   (prev as Settlement & { biz_address?: string }).biz_address,
+        company_name:  prev.company_name,
+      })
+    }
+  }
+
+  // 이전 발행 정보 자동완성 (청구금액·현장주소는 건드리지 않음)
+  function applyPrevBizInfo() {
+    if (!prevBizInfo) return
+    setForm(f => ({
+      ...f,
+      biz_number:    prevBizInfo.biz_number    || f.biz_number,
+      corp_name:     prevBizInfo.corp_name     || f.corp_name,
+      rep_name:      prevBizInfo.rep_name      || f.rep_name,
+      email:         prevBizInfo.email         || f.email,
+      contact_phone: prevBizInfo.contact_phone || f.contact_phone,
+      biz_address:   prevBizInfo.biz_address   || f.biz_address,
+    }))
+    setPrevBizInfo(null)
   }
 
   async function handleSave() {
@@ -187,6 +240,7 @@ export default function SettlementsContent() {
       corp_name: form.corp_name || null,
       item_description: form.item_description || null,
       contact_phone: form.contact_phone || null,
+      biz_address: form.biz_address || null,
       invoice_request: form.invoice_request || null,
     }
     try {
@@ -548,10 +602,7 @@ export default function SettlementsContent() {
               <label className="text-xs font-medium text-gray-600 mb-1 block">연결 문의 *</label>
               <Select
                 value={form.inquiry_id}
-                onChange={e => {
-                  const inq = inquiries.find(i => i.id === e.target.value)
-                  setForm(f => ({ ...f, inquiry_id: e.target.value, company_name: inq?.company_name || f.company_name }))
-                }}
+                onChange={e => handleInquirySelect(e.target.value)}
               >
                 <option value="">문의 선택</option>
                 {inquiries.map(i => (
@@ -690,13 +741,55 @@ export default function SettlementsContent() {
               />
             </div>
 
+            {/* 세금계산서 발행 정보 */}
+            <div className="col-span-2">
+              <div className="flex items-center justify-between border-t pt-3 mt-1 mb-2">
+                <h4 className="text-xs font-semibold text-gray-700">세금계산서 발행 정보</h4>
+                {prevBizInfo && (
+                  <button
+                    type="button"
+                    onClick={applyPrevBizInfo}
+                    className="flex items-center gap-1.5 text-xs bg-amber-50 text-amber-700 border border-amber-300 rounded-lg px-3 py-1.5 hover:bg-amber-100 transition-colors font-semibold"
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    이전 발행 정보 불러오기 ({prevBizInfo.company_name})
+                  </button>
+                )}
+              </div>
+              <p className="text-[11px] text-gray-400 mb-3">
+                ※ 사업장주소는 세금계산서용 등록 주소입니다. 행사 현장주소와 다를 수 있습니다.
+              </p>
+            </div>
+
             <div>
               <label className="text-xs font-medium text-gray-600 mb-1 block">사업자번호</label>
-              <Input value={form.biz_number} onChange={e => setForm(f => ({ ...f, biz_number: e.target.value }))} />
+              <Input value={form.biz_number} onChange={e => setForm(f => ({ ...f, biz_number: e.target.value }))} placeholder="000-00-00000" />
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-600 mb-1 block">법인명</label>
+              <label className="text-xs font-medium text-gray-600 mb-1 block">법인명 (상호)</label>
               <Input value={form.corp_name} onChange={e => setForm(f => ({ ...f, corp_name: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-1 block">대표자</label>
+              <Input value={form.rep_name} onChange={e => setForm(f => ({ ...f, rep_name: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-1 block">이메일 (전자세금계산서 수신)</label>
+              <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="tax@company.com" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-1 block">연락처</label>
+              <Input value={form.contact_phone} onChange={e => setForm(f => ({ ...f, contact_phone: e.target.value }))} placeholder="02-0000-0000" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-1 block">품목</label>
+              <Input value={form.item_description} onChange={e => setForm(f => ({ ...f, item_description: e.target.value }))} placeholder="용역비 등" />
+            </div>
+            <div className="col-span-2">
+              <label className="text-xs font-medium text-gray-600 mb-1 block">
+                사업장주소 <span className="text-amber-600 font-normal">(세금계산서 등록 주소 — 현장주소 아님)</span>
+              </label>
+              <Input value={form.biz_address} onChange={e => setForm(f => ({ ...f, biz_address: e.target.value }))} placeholder="서울시 강남구 ..." />
             </div>
           </div>
         </DialogContent>
