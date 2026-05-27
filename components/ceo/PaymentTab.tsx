@@ -129,12 +129,12 @@ export default function PaymentTab({ data }: { data: CeoData }) {
     })
   }
 
-  // 지급 상태 업데이트 - ENUM에 허용된 값만 사용
-  async function patchPayoutStatus(payoutId: string, status: string) {
-    const res = await fetch(`/api/db/payouts?id=${payoutId}`, {
+  // 지급 상태 업데이트 — paid_at 전용 라우트(/api/payouts/[id]) 사용
+  async function patchPayoutStatus(payoutId: string, status: string, extra?: Record<string, unknown>) {
+    const res = await fetch(`/api/payouts/${payoutId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status, ...extra }),
     })
     const text = await res.text()
     if (!res.ok) {
@@ -148,7 +148,8 @@ export default function PaymentTab({ data }: { data: CeoData }) {
   async function handleMarkPaid(payoutId: string) {
     setProcessing(payoutId)
     try {
-      await patchPayoutStatus(payoutId, '지급완료')
+      // 지급완료 처리 시 현재 시각을 paid_at 으로 함께 기록
+      await patchPayoutStatus(payoutId, '지급완료', { paid_at: new Date().toISOString() })
       toast.success('지급완료로 처리되었습니다.')
       reload()
     } catch (err) {
@@ -163,7 +164,8 @@ export default function PaymentTab({ data }: { data: CeoData }) {
     if (!confirm(`"${staffName}" 지급완료를 검토완료로 되돌리겠습니까?`)) return
     setProcessing(payoutId)
     try {
-      await patchPayoutStatus(payoutId, '검토완료')
+      // 되돌리기 시 paid_at 초기화
+      await patchPayoutStatus(payoutId, '검토완료', { paid_at: null })
       toast.success('검토완료로 되돌렸습니다.')
       reload()
     } catch (err) {
