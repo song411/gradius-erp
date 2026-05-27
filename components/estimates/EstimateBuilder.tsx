@@ -107,9 +107,13 @@ export default function EstimateBuilder({
     inquiry_id: '', site_name: '', manager: '', contact_phone: '',
     site_address: '', attire: '', meal: '', parking: '',
     notes: '', extra_cost: 0, include_vat: true,
-    event_days: 1,   // 전역 행사 일수
-    days_mode: 'auto' as 'auto' | 'manual',  // 자동(문의기준) or 수동
-    version_label: 'A안',  // 견적 버전 라벨
+    event_days: 1,
+    days_mode: 'auto' as 'auto' | 'manual',
+    version_label: 'A안',
+    event_start: '',    // 견적서에서 직접 수정 가능한 날짜
+    event_end: '',
+    date_memo: '',      // 비정기/미정 일정 텍스트
+    date_undecided: false,
   })
   const [items, setItems] = useState<ItemRow[]>([emptyRow()])
 
@@ -132,6 +136,7 @@ export default function EstimateBuilder({
     if (editTarget) {
       const inq = inquiries.find(i => i.id === editTarget.inquiry_id)
       const days = calcDays(inq?.event_start, inq?.event_end)
+      const hasDate = !!inq?.event_start
       setForm({
         inquiry_id: editTarget.inquiry_id || '',
         site_name: editTarget.site_name || '', manager: editTarget.manager || '',
@@ -141,6 +146,10 @@ export default function EstimateBuilder({
         extra_cost: editTarget.extra_cost || 0, include_vat: editTarget.vat > 0,
         event_days: days, days_mode: 'auto',
         version_label: editTarget.version_label || 'A안',
+        event_start: inq?.event_start?.slice(0, 10) || '',
+        event_end:   inq?.event_end?.slice(0, 10)   || '',
+        date_memo:   (inq as any)?.date_memo || '',
+        date_undecided: !hasDate,
       })
       const rows: ItemRow[] = (editTarget.estimate_items || []).map(item => ({
         key: makeKey(), role_id: '', role_name: item.role_name || '',
@@ -156,6 +165,7 @@ export default function EstimateBuilder({
       setItems(rows.length > 0 ? rows : [emptyRow()])
     } else {
       const preInq = preselectedInquiryId ? inquiries.find(i => i.id === preselectedInquiryId) : null
+      const hasDate = !!preInq?.event_start
       const days = calcDays(preInq?.event_start, preInq?.event_end)
       setForm({
         inquiry_id: preselectedInquiryId || '',
@@ -163,8 +173,13 @@ export default function EstimateBuilder({
         contact_phone: preInq?.phone || '', site_address: preInq?.location || '',
         attire: preInq?.attire || '', meal: preInq?.meal || '',
         parking: preInq?.parking || '', notes: '',
-        extra_cost: 0, include_vat: true, event_days: days, days_mode: 'auto',
+        extra_cost: 0, include_vat: true, event_days: days,
+        days_mode: hasDate ? 'auto' : 'manual',
         version_label: defaultVersionLabel || 'A안',
+        event_start: preInq?.event_start?.slice(0, 10) || '',
+        event_end:   preInq?.event_end?.slice(0, 10)   || '',
+        date_memo:   (preInq as any)?.date_memo || '',
+        date_undecided: !hasDate,
       })
       const wt = preInq?.event_time || ''
       setItems([{ ...emptyRow('인력', wt), days }])
@@ -178,7 +193,6 @@ export default function EstimateBuilder({
     const hasDate = !!inq?.event_start
     const days = hasDate ? calcDays(inq?.event_start, inq?.event_end) : 1
     const wt = inq?.event_time || ''
-    // 날짜 미정 문의: 수동 모드로 자동 전환 (일수 직접 입력 유도)
     const newDaysMode = hasDate ? 'auto' : 'manual'
     setForm(f => ({
       ...f, inquiry_id: inqId,
@@ -190,13 +204,16 @@ export default function EstimateBuilder({
       meal: f.meal || inq?.meal || '',
       parking: f.parking || inq?.parking || '',
       event_days: days, days_mode: newDaysMode,
+      event_start: inq?.event_start?.slice(0, 10) || '',
+      event_end:   inq?.event_end?.slice(0, 10)   || '',
+      date_memo:   (inq as any)?.date_memo || '',
+      date_undecided: !hasDate,
     }))
     if (!hasDate) {
       const dateMemo = (inq as any)?.date_memo
       if (dateMemo) toast.info(`날짜 미정 문의입니다. 일정: ${dateMemo} — 일수를 직접 입력해 주세요.`)
       else toast.info('날짜 미정 문의입니다. 행사 일수를 직접 입력해 주세요.')
     }
-    // 기존 인력 항목의 work_time / days 를 문의 데이터로 채움
     if (wt) {
       setItems(prev => prev.map(r => ({
         ...r,
@@ -442,10 +459,15 @@ export default function EstimateBuilder({
   if (!open) return null
 
   const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '.').replace(/\.$/, '')
-  const eventStart  = selectedInq?.event_start?.slice(0, 10) || ''
-  const eventEnd    = selectedInq?.event_end?.slice(0, 10) || ''
-  const eventPeriod = eventStart ? (eventEnd && eventEnd !== eventStart ? `${eventStart} ~ ${eventEnd}` : eventStart) : '-'
-  const autoDays    = calcDays(selectedInq?.event_start, selectedInq?.event_end)
+  // 미리보기/출력에 사용할 날짜: form에서 직접 관리 (문의와 독립적으로 수정 가능)
+  const eventStart  = form.event_start || ''
+  const eventEnd    = form.event_end   || ''
+  const eventPeriod = form.date_undecided
+    ? (form.date_memo || '미정')
+    : eventStart
+      ? (eventEnd && eventEnd !== eventStart ? `${eventStart} ~ ${eventEnd}` : eventStart)
+      : (form.date_memo || '-')
+  const autoDays = calcDays(selectedInq?.event_start, selectedInq?.event_end)
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-gray-100">
@@ -541,7 +563,64 @@ export default function EstimateBuilder({
 
             {/* 행사 일수 전역 설정 */}
             <section>
-              <SectionTitle step={3} label="행사 일수 설정" />
+              <SectionTitle step={3} label="행사 일정 설정" />
+
+              {/* 날짜 직접 편집 */}
+              <div className="mb-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-500 font-medium">행사 날짜</span>
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={form.date_undecided}
+                      onChange={e => setForm(f => ({
+                        ...f,
+                        date_undecided: e.target.checked,
+                        event_start: e.target.checked ? '' : f.event_start,
+                        event_end:   e.target.checked ? '' : f.event_end,
+                      }))}
+                      className="w-3.5 h-3.5 rounded"
+                    />
+                    <span className="text-xs text-gray-500">날짜 미정 / 비정기</span>
+                  </label>
+                </div>
+                {form.date_undecided ? (
+                  <input
+                    value={form.date_memo}
+                    onChange={e => setForm(f => ({ ...f, date_memo: e.target.value }))}
+                    placeholder="예: 5월 5일, 5월 7일 / 6월 중순 예정"
+                    className="w-full h-8 border border-amber-300 rounded-lg px-3 text-xs bg-amber-50 focus:outline-none focus:ring-1 focus:ring-amber-400"
+                  />
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      value={form.event_start}
+                      onChange={e => {
+                        const s = e.target.value
+                        const days = calcDays(s, form.event_end)
+                        setForm(f => ({ ...f, event_start: s, event_days: days, days_mode: 'auto' }))
+                        setItems(prev => prev.map(r => ({ ...r, days })))
+                      }}
+                      className="flex-1 h-8 border border-gray-200 rounded-lg px-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                    />
+                    <span className="text-gray-400 text-xs">~</span>
+                    <input
+                      type="date"
+                      value={form.event_end}
+                      onChange={e => {
+                        const end = e.target.value
+                        const days = calcDays(form.event_start, end)
+                        setForm(f => ({ ...f, event_end: end, event_days: days, days_mode: 'auto' }))
+                        setItems(prev => prev.map(r => ({ ...r, days })))
+                      }}
+                      className="flex-1 h-8 border border-gray-200 rounded-lg px-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* 일수 설정 */}
               <div className="flex items-center gap-2 flex-wrap">
                 <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg p-2">
                   <Calendar className="h-4 w-4 text-gray-500" />
