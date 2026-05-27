@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Select } from '@/components/ui/select'
 import {
-  Trash2, Star, ChevronDown, ChevronUp, Zap, X,
+  Trash2, ChevronDown, ChevronUp, Zap, X,
   Download, Printer, Package, FileText, BarChart3,
   Clock, Calendar,
 } from 'lucide-react'
@@ -724,7 +724,7 @@ export default function EstimateBuilder({
                 <div className="text-center py-4 text-gray-400 text-sm">직군 데이터 로딩 중...</div>
               ) : (
                 <div className="space-y-2">
-                  {items.map(row => (
+                  {items.map((row, idx) => (
                     <ItemRowCard
                       key={row.key} row={row} roles={roles}
                       factors={factors.filter(f => f.role_id === row.role_id)}
@@ -736,6 +736,18 @@ export default function EstimateBuilder({
                       onUpdate={(field, val) => updateRow(row.key, field, val)}
                       onRemove={() => removeRow(row.key)}
                       onToggleFactor={() => setExpandedFactor(p => p === row.key ? null : row.key)}
+                      isFirst={idx === 0}
+                      isLast={idx === items.length - 1}
+                      onMoveUp={() => setItems(prev => {
+                        const arr = [...prev]
+                        ;[arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]]
+                        return arr
+                      })}
+                      onMoveDown={() => setItems(prev => {
+                        const arr = [...prev]
+                        ;[arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]]
+                        return arr
+                      })}
                     />
                   ))}
                 </div>
@@ -881,8 +893,10 @@ type ItemRowCardProps = {
   defaultWorkTime: string
   onRoleSelect: (id: string) => void; onLeaderToggle: () => void; onFactorToggle: (id: string) => void
   onUpdate: (f: keyof ItemRow, v: unknown) => void; onRemove: () => void; onToggleFactor: () => void
+  onMoveUp?: () => void; onMoveDown?: () => void
+  isFirst?: boolean; isLast?: boolean
 }
-function ItemRowCard({ row, roles, factors, expandedFactor, defaultWorkTime, onRoleSelect, onLeaderToggle, onFactorToggle, onUpdate, onRemove, onToggleFactor }: ItemRowCardProps) {
+function ItemRowCard({ row, roles, factors, expandedFactor, defaultWorkTime, onRoleSelect, onLeaderToggle, onFactorToggle, onUpdate, onRemove, onToggleFactor, onMoveUp, onMoveDown, isFirst, isLast }: ItemRowCardProps) {
   const subTotal  = row.quantity * row.days * row.unit_price
   const isExpanded = expandedFactor === row.key
   const isExtra   = EXTRA_TYPES.includes(row.item_type)
@@ -932,6 +946,25 @@ function ItemRowCard({ row, roles, factors, expandedFactor, defaultWorkTime, onR
             className={`h-7 text-xs ${(!isExtra && !isSupport) ? 'w-28' : 'flex-1'}`}
           />
           <button onClick={onRemove} className="text-red-400 hover:text-red-600 shrink-0 ml-auto"><Trash2 className="h-3.5 w-3.5" /></button>
+          {/* 위/아래 이동 버튼 */}
+          <div className="flex flex-col gap-0.5 shrink-0">
+            <button
+              onClick={onMoveUp}
+              disabled={isFirst}
+              className="text-gray-300 hover:text-gray-600 disabled:opacity-20 disabled:cursor-not-allowed"
+              title="위로 이동"
+            >
+              <ChevronUp className="h-3 w-3" />
+            </button>
+            <button
+              onClick={onMoveDown}
+              disabled={isLast}
+              className="text-gray-300 hover:text-gray-600 disabled:opacity-20 disabled:cursor-not-allowed"
+              title="아래로 이동"
+            >
+              <ChevronDown className="h-3 w-3" />
+            </button>
+          </div>
         </div>
 
         {/* 시간/규격 (지원품목 제외) */}
@@ -1030,8 +1063,8 @@ function ItemRowCard({ row, roles, factors, expandedFactor, defaultWorkTime, onR
         {!isExtra && !isSupport && (
           <div className="flex items-center gap-2 flex-wrap">
             <button onClick={onLeaderToggle} className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs transition-colors ${row.is_leader ? 'bg-yellow-100 text-yellow-700 border border-yellow-300' : 'bg-gray-100 text-gray-500 border border-gray-200'}`}>
-              <Star className={`h-3 w-3 ${row.is_leader ? 'fill-yellow-500 text-yellow-500' : ''}`} />
-              팀장{roles.find(r => r.id === row.role_id)?.leader_bonus ? ` (+${roles.find(r => r.id === row.role_id)!.leader_bonus.toLocaleString()})` : ''}
+              {row.is_leader ? '[팀장]' : '팀장'}
+              {roles.find(r => r.id === row.role_id)?.leader_bonus ? ` (+${roles.find(r => r.id === row.role_id)!.leader_bonus.toLocaleString()})` : ''}
             </button>
             {factors.length > 0 && (
               <button onClick={onToggleFactor} className="flex items-center gap-0.5 text-xs text-indigo-600 hover:text-indigo-800 whitespace-nowrap">
@@ -1137,7 +1170,7 @@ function ProfitReport({
                   const margin  = row.unit_price - row.pay_unit_price
                   return (
                     <tr key={row.key} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                      <td className="px-3 py-2 font-medium">{row.is_leader ? '★ ' : ''}{row.role_name}{row.work_time ? <span className="ml-1 text-gray-400">({row.work_time})</span> : null}</td>
+                      <td className="px-3 py-2 font-medium">{row.is_leader ? '[팀장] ' : ''}{row.role_name}{row.work_time ? <span className="ml-1 text-gray-400">({row.work_time})</span> : null}</td>
                       <td className="px-3 py-2 text-right">{row.days}일</td>
                       <td className="px-3 py-2 text-right">{row.quantity}명</td>
                       <td className="px-3 py-2 text-right">{row.unit_price.toLocaleString()}</td>
