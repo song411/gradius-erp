@@ -611,6 +611,26 @@ export default function SettlementsContent() {
               </Select>
             </div>
 
+            {/* 이전 발행 정보 자동완성 배너 — 문의 선택 직후 눈에 띄게 표시 */}
+            {prevBizInfo && (
+              <div className="col-span-2 flex items-center gap-3 bg-amber-50 border-2 border-amber-300 rounded-xl px-4 py-3">
+                <Sparkles className="h-5 w-5 text-amber-500 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-amber-800">이전 발행 정보가 있습니다!</p>
+                  <p className="text-xs text-amber-600 truncate">
+                    {[prevBizInfo.corp_name, prevBizInfo.biz_number, prevBizInfo.rep_name].filter(Boolean).join(' · ')}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={applyPrevBizInfo}
+                  className="shrink-0 text-xs bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg px-3 py-2 transition-colors"
+                >
+                  자동완성
+                </button>
+              </div>
+            )}
+
             <div>
               <label className="text-xs font-medium text-gray-600 mb-1 block">업체명</label>
               <Input value={form.company_name} onChange={e => setForm(f => ({ ...f, company_name: e.target.value }))} />
@@ -745,16 +765,6 @@ export default function SettlementsContent() {
             <div className="col-span-2">
               <div className="flex items-center justify-between border-t pt-3 mt-1 mb-2">
                 <h4 className="text-xs font-semibold text-gray-700">세금계산서 발행 정보</h4>
-                {prevBizInfo && (
-                  <button
-                    type="button"
-                    onClick={applyPrevBizInfo}
-                    className="flex items-center gap-1.5 text-xs bg-amber-50 text-amber-700 border border-amber-300 rounded-lg px-3 py-1.5 hover:bg-amber-100 transition-colors font-semibold"
-                  >
-                    <Sparkles className="h-3.5 w-3.5" />
-                    이전 발행 정보 불러오기 ({prevBizInfo.company_name})
-                  </button>
-                )}
               </div>
               <p className="text-[11px] text-gray-400 mb-3">
                 ※ 사업장주소는 세금계산서용 등록 주소입니다. 행사 현장주소와 다를 수 있습니다.
