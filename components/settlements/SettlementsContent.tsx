@@ -47,6 +47,20 @@ export default function SettlementsContent() {
   const [saving, setSaving]         = useState(false)
   const [error, setError]           = useState('')
 
+  // 사업자번호가 있는 이전 정산 건을 업체명 기준으로 중복 제거 (최신 순)
+  const prevBizOptions = (() => {
+    const seen = new Set<string>()
+    return settlements
+      .filter(s => s.id !== editTarget?.id && s.biz_number)
+      .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))
+      .filter(s => {
+        const key = s.biz_number!
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+  })()
+
   // 인라인 메모 편집
   const [memoEditId, setMemoEditId]     = useState<string | null>(null)
   const [memoValue, setMemoValue]       = useState('')
@@ -90,7 +104,6 @@ export default function SettlementsContent() {
     email?: string; contact_phone?: string; biz_address?: string
     company_name?: string
   } | null>(null)
-
   const load = useCallback(async () => {
     setLoading(true)
     const [setts, inqs] = await Promise.all([
@@ -169,34 +182,14 @@ export default function SettlementsContent() {
     setShowModal(true)
   }
 
-  // 문의 선택 시 같은 업체의 이전 발행 정보 조회
+  // 문의 선택 시 업체명 자동완성 (이전 발행 정보 탐색은 드롭다운으로 분리)
   async function handleInquirySelect(inquiryId: string) {
     const inq = inquiries.find(i => i.id === inquiryId)
-    const companyName = inq?.company_name || ''
-    setForm(f => ({ ...f, inquiry_id: inquiryId, company_name: companyName }))
+    setForm(f => ({ ...f, inquiry_id: inquiryId, company_name: inq?.company_name || f.company_name }))
     setPrevBizInfo(null)
-    if (!companyName) return
-
-    // 같은 업체명의 정산 건 중 사업자번호가 있는 가장 최근 건 조회
-    const prev = settlements.find(s =>
-      s.id !== editTarget?.id &&
-      (s.company_name || '') === companyName &&
-      s.biz_number
-    )
-    if (prev) {
-      setPrevBizInfo({
-        biz_number:    prev.biz_number,
-        corp_name:     prev.corp_name,
-        rep_name:      prev.rep_name,
-        email:         prev.email,
-        contact_phone: prev.contact_phone,
-        biz_address:   (prev as Settlement & { biz_address?: string }).biz_address,
-        company_name:  prev.company_name,
-      })
-    }
   }
 
-  // 이전 발행 정보 자동완성 (청구금액·현장주소는 건드리지 않음)
+  // 선택한 이전 정산 건의 발행 정보 적용 (청구금액·현장주소는 건드리지 않음)
   function applyPrevBizInfo() {
     if (!prevBizInfo) return
     setForm(f => ({
@@ -208,6 +201,7 @@ export default function SettlementsContent() {
       contact_phone: prevBizInfo.contact_phone || f.contact_phone,
       biz_address:   prevBizInfo.biz_address   || f.biz_address,
     }))
+    toast.success('이전 발행 정보를 불러왔습니다.')
     setPrevBizInfo(null)
   }
 
@@ -611,23 +605,52 @@ export default function SettlementsContent() {
               </Select>
             </div>
 
-            {/* 이전 발행 정보 자동완성 배너 — 문의 선택 직후 눈에 띄게 표시 */}
-            {prevBizInfo && (
-              <div className="col-span-2 flex items-center gap-3 bg-amber-50 border-2 border-amber-300 rounded-xl px-4 py-3">
-                <Sparkles className="h-5 w-5 text-amber-500 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-amber-800">이전 발행 정보가 있습니다!</p>
-                  <p className="text-xs text-amber-600 truncate">
-                    {[prevBizInfo.corp_name, prevBizInfo.biz_number, prevBizInfo.rep_name].filter(Boolean).join(' · ')}
-                  </p>
+            {/* 이전 발행 정보 선택 — 항상 표시 */}
+            {prevBizOptions.length > 0 && (
+              <div className="col-span-2 bg-amber-50 border-2 border-amber-200 rounded-xl px-4 py-3 space-y-2">
+                <p className="text-xs font-bold text-amber-800 flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  이전 발행 정보 불러오기
+                </p>
+                <div className="flex gap-2">
+                  <select
+                    className="flex-1 text-sm border border-amber-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    defaultValue=""
+                    onChange={e => {
+                      const s = prevBizOptions.find(o => o.id === e.target.value)
+                      if (!s) { setPrevBizInfo(null); return }
+                      setPrevBizInfo({
+                        biz_number:    s.biz_number,
+                        corp_name:     s.corp_name,
+                        rep_name:      s.rep_name,
+                        email:         s.email,
+                        contact_phone: s.contact_phone,
+                        biz_address:   (s as Settlement & { biz_address?: string }).biz_address,
+                        company_name:  s.company_name,
+                      })
+                    }}
+                  >
+                    <option value="">업체 선택...</option>
+                    {prevBizOptions.map(s => (
+                      <option key={s.id} value={s.id}>
+                        {s.corp_name || s.company_name || '(업체명 없음)'} — {s.biz_number}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={applyPrevBizInfo}
+                    disabled={!prevBizInfo}
+                    className="shrink-0 text-xs bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-white font-bold rounded-lg px-4 py-1.5 transition-colors"
+                  >
+                    적용
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={applyPrevBizInfo}
-                  className="shrink-0 text-xs bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg px-3 py-2 transition-colors"
-                >
-                  자동완성
-                </button>
+                {prevBizInfo && (
+                  <p className="text-[11px] text-amber-700">
+                    {[prevBizInfo.biz_number, prevBizInfo.rep_name, prevBizInfo.biz_address].filter(Boolean).join(' · ')}
+                  </p>
+                )}
               </div>
             )}
 
