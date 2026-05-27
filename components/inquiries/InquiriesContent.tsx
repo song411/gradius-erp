@@ -38,6 +38,7 @@ const emptyForm = {
   event_start: '',
   event_end: '',
   event_time: '',
+  date_memo: '',       // 비정기 일정 메모 (예: 5월 5일, 5월 7일)
   service_type: '',
   required_staff: '',
   pay_detail: '',
@@ -65,6 +66,7 @@ export default function InquiriesContent() {
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [dateUndecided, setDateUndecided] = useState(false)
 
   // 카톡 자동 분석 상태
   const [kakaoText, setKakaoText] = useState('')
@@ -132,6 +134,7 @@ export default function InquiriesContent() {
   function openCreate() {
     setEditTarget(null)
     setForm(emptyForm)
+    setDateUndecided(false)
     setKakaoText('')
     setParseDone(false)
     setParseConfidence(0)
@@ -142,6 +145,7 @@ export default function InquiriesContent() {
 
   function openEdit(inq: Inquiry) {
     setEditTarget(inq)
+    setDateUndecided(!inq.event_start)
     setShowKakaoBox(false)
     setParseDone(false)
     setForm({
@@ -153,6 +157,7 @@ export default function InquiriesContent() {
       event_start:    inq.event_start    || '',
       event_end:      inq.event_end      || '',
       event_time:     inq.event_time     || '',
+      date_memo:      (inq as any).date_memo || '',
       service_type:   inq.service_type   || '',
       required_staff: String(inq.required_staff || ''),
       pay_detail:     (inq as any).pay_detail || '',
@@ -213,6 +218,7 @@ export default function InquiriesContent() {
       event_start:    form.event_start           || null,
       event_end:      form.event_end             || null,
       event_time:     form.event_time.trim()     || null,
+      date_memo:      form.date_memo.trim()      || null,
       service_type:   form.service_type          || null,
       required_staff: form.required_staff ? Number(form.required_staff) : null,
       expected_pay:   form.expected_pay   ? Number(form.expected_pay)   : null,
@@ -357,8 +363,15 @@ export default function InquiriesContent() {
                         </td>
                         <td>{inq.contact_name || '-'}</td>
                         <td className="text-sm text-gray-600">
-                          {formatDate(inq.event_start)}
-                          {inq.event_end && inq.event_end !== inq.event_start ? ` ~ ${formatDate(inq.event_end)}` : ''}
+                          {inq.event_start
+                            ? <>
+                                {formatDate(inq.event_start)}
+                                {inq.event_end && inq.event_end !== inq.event_start ? ` ~ ${formatDate(inq.event_end)}` : ''}
+                              </>
+                            : (inq as any).date_memo
+                              ? <span className="text-amber-600 text-xs">{(inq as any).date_memo}</span>
+                              : <span className="text-gray-300 text-xs">미정</span>
+                          }
                         </td>
                         <td className="text-center">{inq.required_staff ? `${inq.required_staff}명` : '-'}</td>
                         <td className="text-xs text-gray-600">
@@ -485,13 +498,42 @@ export default function InquiriesContent() {
               <label className="text-xs font-medium text-gray-600 mb-1 block">연락처</label>
               <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="010-0000-0000" />
             </div>
-            <div>
-              <label className="text-xs font-medium text-gray-600 mb-1 block">행사 시작일</label>
-              <Input type="date" value={form.event_start} onChange={e => setForm(f => ({ ...f, event_start: e.target.value }))} />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-gray-600 mb-1 block">행사 종료일</label>
-              <Input type="date" value={form.event_end} onChange={e => setForm(f => ({ ...f, event_end: e.target.value }))} />
+            {/* 날짜 입력 영역 */}
+            <div className="col-span-2">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-medium text-gray-600">행사 일정</label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={dateUndecided}
+                    onChange={e => {
+                      setDateUndecided(e.target.checked)
+                      if (e.target.checked) setForm(f => ({ ...f, event_start: '', event_end: '' }))
+                    }}
+                    className="w-3.5 h-3.5 rounded"
+                  />
+                  <span className="text-xs text-gray-500">날짜 미정</span>
+                </label>
+              </div>
+              {dateUndecided ? (
+                <Input
+                  value={form.date_memo}
+                  onChange={e => setForm(f => ({ ...f, date_memo: e.target.value }))}
+                  placeholder="예: 5월 5일, 5월 7일 / 6월 중순 예정 등 자유롭게 입력"
+                  className="text-sm"
+                />
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-gray-400 mb-1 block">시작일</label>
+                    <Input type="date" value={form.event_start} onChange={e => setForm(f => ({ ...f, event_start: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-400 mb-1 block">종료일 <span className="text-gray-300">(당일 행사면 생략)</span></label>
+                    <Input type="date" value={form.event_end} onChange={e => setForm(f => ({ ...f, event_end: e.target.value }))} />
+                  </div>
+                </div>
+              )}
             </div>
             <div>
               <label className="text-xs font-medium text-gray-600 mb-1 block">장소</label>

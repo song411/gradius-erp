@@ -175,8 +175,11 @@ export default function EstimateBuilder({
   // ── 문의 선택 ────────────────────────────────────────────
   function handleInquiryChange(inqId: string) {
     const inq = inquiries.find(i => i.id === inqId)
-    const days = calcDays(inq?.event_start, inq?.event_end)
+    const hasDate = !!inq?.event_start
+    const days = hasDate ? calcDays(inq?.event_start, inq?.event_end) : 1
     const wt = inq?.event_time || ''
+    // 날짜 미정 문의: 수동 모드로 자동 전환 (일수 직접 입력 유도)
+    const newDaysMode = hasDate ? 'auto' : 'manual'
     setForm(f => ({
       ...f, inquiry_id: inqId,
       site_name: f.site_name || inq?.location || '',
@@ -186,8 +189,13 @@ export default function EstimateBuilder({
       attire: f.attire || inq?.attire || '',
       meal: f.meal || inq?.meal || '',
       parking: f.parking || inq?.parking || '',
-      event_days: days, days_mode: 'auto',
+      event_days: days, days_mode: newDaysMode,
     }))
+    if (!hasDate) {
+      const dateMemo = (inq as any)?.date_memo
+      if (dateMemo) toast.info(`날짜 미정 문의입니다. 일정: ${dateMemo} — 일수를 직접 입력해 주세요.`)
+      else toast.info('날짜 미정 문의입니다. 행사 일수를 직접 입력해 주세요.')
+    }
     // 기존 인력 항목의 work_time / days 를 문의 데이터로 채움
     if (wt) {
       setItems(prev => prev.map(r => ({
@@ -492,6 +500,9 @@ export default function EstimateBuilder({
                   <div className="font-semibold">{selectedInq.company_name} / {selectedInq.event_name}</div>
                   <div className="flex flex-wrap gap-x-3 text-blue-500">
                     {eventStart && <span>📅 {eventPeriod} ({autoDays}일)</span>}
+                    {!eventStart && (selectedInq as any)?.date_memo && (
+                      <span className="text-amber-600">📅 {(selectedInq as any).date_memo} <span className="text-amber-400">(미정 — 일수 직접 입력)</span></span>
+                    )}
                     {selectedInq.location && <span>📍 {selectedInq.location}</span>}
                     {selectedInq.required_staff && <span>👥 {selectedInq.required_staff}명</span>}
                     {selectedInq.event_time && <span>🕐 {selectedInq.event_time}</span>}
