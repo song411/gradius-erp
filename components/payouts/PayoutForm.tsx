@@ -36,6 +36,10 @@ export default function PayoutForm({ open, onClose, assignment, payout, onSaved 
   const [mealPay, setMealPay]         = useState('0')
   const [transportPay, setTransportPay] = useState('0')
   const [bonus, setBonus]             = useState('0')
+  const [nonTaxablePay, setNonTaxablePay] = useState('0')  // 비과세 실비 (3.3% 미적용)
+
+  // 일수 연동 자동계산 여부
+  const [dayLinked, setDayLinked] = useState(true)
 
   // 공제율
   const [taxRate, setTaxRate] = useState(0.033)
@@ -63,6 +67,8 @@ export default function PayoutForm({ open, onClose, assignment, payout, onSaved 
       setMealPay(String(payout.meal_pay || 0))
       setTransportPay(String(payout.transport_pay || 0))
       setBonus(String(payout.bonus || 0))
+      setNonTaxablePay(String((payout as any).non_taxable_pay || 0))
+      setDayLinked(false)  // 수정 모드는 연동 해제
       // 공제율 역산
       const sub = (payout.base_pay || 0) + (payout.overtime_pay || 0) + (payout.meal_pay || 0) + (payout.transport_pay || 0) + (payout.bonus || 0)
       const rate = sub > 0 ? (payout.tax_deduction || 0) / sub : 0.033
@@ -84,6 +90,8 @@ export default function PayoutForm({ open, onClose, assignment, payout, onSaved 
       setMealPay('0')
       setTransportPay('0')
       setBonus('0')
+      setNonTaxablePay('0')
+      setDayLinked(true)
       setTaxRate(0.033)
       setBankName(assignment.bank_name || '')
       setAccountNumber(assignment.account_number || '')
@@ -109,11 +117,13 @@ export default function PayoutForm({ open, onClose, assignment, payout, onSaved 
     }
   }, [open, assignment, payout])
 
-  // 계산
-  const subtotal = [basePay, overtimePay, mealPay, transportPay, bonus]
+  // 계산 (비과세 항목은 세금 계산에서 제외)
+  const taxableSubtotal = [basePay, overtimePay, mealPay, transportPay, bonus]
     .reduce((s, v) => s + (Number(v) || 0), 0)
-  const taxDeduction = Math.floor(subtotal * taxRate)
-  const finalPay = subtotal - taxDeduction
+  const nonTaxableAmt  = Number(nonTaxablePay) || 0
+  const subtotal       = taxableSubtotal + nonTaxableAmt
+  const taxDeduction   = Math.floor(taxableSubtotal * taxRate)
+  const finalPay       = subtotal - taxDeduction
 
   async function handleSave(newStatus?: string) {
     setSaving(true)
@@ -129,6 +139,7 @@ export default function PayoutForm({ open, onClose, assignment, payout, onSaved 
       meal_pay: Number(mealPay) || 0,
       transport_pay: Number(transportPay) || 0,
       bonus: Number(bonus) || 0,
+      non_taxable_pay: nonTaxableAmt,
       subtotal,
       tax_deduction: taxDeduction,
       final_pay: finalPay,
@@ -209,26 +220,48 @@ export default function PayoutForm({ open, onClose, assignment, payout, onSaved 
             />
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-600 mb-1 block">파견 일수</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-medium text-gray-600">파견 일수</label>
+              <label className="flex items-center gap-1 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={dayLinked}
+                  onChange={e => setDayLinked(e.target.checked)}
+                  className="w-3 h-3 rounded"
+                />
+                <span className="text-[10px] text-blue-600">일당 자동계산</span>
+              </label>
+            </div>
             <Input
               type="number"
               value={dispatchDays}
-              onChange={e => setDispatchDays(e.target.value)}
+              onChange={e => {
+                const days = e.target.value
+                setDispatchDays(days)
+                if (dayLinked && assignment.pay_rate) {
+                  setBasePay(String((assignment.pay_rate || 0) * (Number(days) || 1)))
+                }
+              }}
               className="h-8 text-sm"
             />
+            {dayLinked && assignment.pay_rate && (
+              <p className="text-[10px] text-blue-500 mt-0.5">
+                {formatKRW(assignment.pay_rate)} × {dispatchDays || 1}일 = <strong>{formatKRW((assignment.pay_rate || 0) * (Number(dispatchDays) || 1))}</strong>
+              </p>
+            )}
           </div>
         </div>
 
-        {/* 지급 항목 */}
+        {/* 지급 항목 (과세) */}
         <div>
-          <p className="text-xs font-semibold text-gray-600 mb-2">지급 항목</p>
+          <p className="text-xs font-semibold text-gray-600 mb-2">과세 지급 항목 <span className="text-gray-400 font-normal">(3.3% 원천세 적용)</span></p>
           <div className="space-y-2">
             {[
-              { label: '기본급', value: basePay, setter: setBasePay, highlight: true },
+              { label: '기본급', value: basePay, setter: (v: string) => { setBasePay(v); setDayLinked(false) }, highlight: true },
               { label: '야근수당', value: overtimePay, setter: setOvertimePay },
               { label: '식비', value: mealPay, setter: setMealPay },
               { label: '교통비', value: transportPay, setter: setTransportPay },
-              { label: '실비/기타', value: bonus, setter: setBonus },
+              { label: '기타수당', value: bonus, setter: setBonus },
             ].map(({ label, value, setter, highlight }) => (
               <div key={label} className="flex items-center gap-3">
                 <label className={`text-xs w-20 shrink-0 ${highlight ? 'font-semibold text-gray-700' : 'text-gray-500'}`}>
@@ -248,6 +281,25 @@ export default function PayoutForm({ open, onClose, assignment, payout, onSaved 
           </div>
         </div>
 
+        {/* 비과세 항목 */}
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+          <p className="text-xs font-semibold text-amber-700 mb-2">비과세 항목 <span className="font-normal text-amber-600">(3.3% 원천세 미적용 — 실비청구 등)</span></p>
+          <div className="flex items-center gap-3">
+            <label className="text-xs w-20 shrink-0 text-amber-700">실비/경비</label>
+            <Input
+              type="number"
+              value={nonTaxablePay}
+              onChange={e => setNonTaxablePay(e.target.value)}
+              className="h-8 text-sm flex-1 border-amber-300 bg-white"
+              placeholder="0"
+            />
+            <span className="text-xs text-amber-600 w-24 text-right shrink-0">
+              {formatKRW(nonTaxableAmt)}
+            </span>
+          </div>
+          <p className="text-[10px] text-amber-500 mt-1">이 금액은 세금 공제 없이 그대로 지급됩니다.</p>
+        </div>
+
         {/* 공제 + 합계 */}
         <div className="bg-gray-50 rounded-lg p-3 space-y-2">
           <div className="flex items-center gap-3">
@@ -264,13 +316,19 @@ export default function PayoutForm({ open, onClose, assignment, payout, onSaved 
           </div>
           <div className="border-t border-gray-200 pt-2 space-y-1 text-sm">
             <div className="flex justify-between text-gray-500">
-              <span>소계</span>
-              <span>{formatKRW(subtotal)}</span>
+              <span>과세 소계</span>
+              <span>{formatKRW(taxableSubtotal)}</span>
             </div>
             {taxDeduction > 0 && (
               <div className="flex justify-between text-red-500 text-xs">
                 <span>공제 ({(taxRate * 100).toFixed(1)}%)</span>
                 <span>- {formatKRW(taxDeduction)}</span>
+              </div>
+            )}
+            {nonTaxableAmt > 0 && (
+              <div className="flex justify-between text-amber-600 text-xs">
+                <span>비과세 실비</span>
+                <span>+ {formatKRW(nonTaxableAmt)}</span>
               </div>
             )}
             <div className="flex justify-between font-bold text-base text-blue-700 border-t border-gray-200 pt-1">
