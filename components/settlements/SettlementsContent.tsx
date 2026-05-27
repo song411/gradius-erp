@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dialog'
 import {
   Plus, Search, Edit2, CheckCircle, AlertCircle,
-  BadgePercent, StickyNote, Banknote, ChevronDown, Sparkles,
+  BadgePercent, StickyNote, Banknote, ChevronDown, Sparkles, Trash2,
 } from 'lucide-react'
 import type { Settlement, DepositStatus, ProjectProgress, Inquiry } from '@/lib/supabase/types'
 import { toast } from 'sonner'
@@ -252,6 +252,18 @@ export default function SettlementsContent() {
     setSaving(false)
     setShowModal(false)
     load()
+  }
+
+  // ── 정산 삭제 ──
+  async function handleDelete(id: string) {
+    if (!confirm('이 정산 항목을 삭제하시겠습니까?\n삭제 후 복구할 수 없습니다.')) return
+    try {
+      await db.delete('settlements', id)
+      setSettlements(p => p.filter(s => s.id !== id))
+      toast.success('정산 항목이 삭제되었습니다.')
+    } catch {
+      toast.error('삭제에 실패했습니다.')
+    }
   }
 
   // ── 인라인 금액 수정 (연장/변경) ──
@@ -567,6 +579,16 @@ export default function SettlementsContent() {
                               {/* 수정 */}
                               <Button variant="ghost" size="icon" onClick={() => openEdit(s)} title="수정">
                                 <Edit2 className="h-3.5 w-3.5" />
+                              </Button>
+                              {/* 삭제 */}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleDelete(s.id)}
+                                title="삭제"
+                                className="text-red-400 hover:text-red-600 hover:bg-red-50"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
                               </Button>
                             </div>
                           </td>
