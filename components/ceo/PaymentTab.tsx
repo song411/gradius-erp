@@ -187,17 +187,16 @@ export default function PaymentTab({ data }: { data: CeoData }) {
 
       const rows = readyPayouts.map(p => ({
         '이름':     p.staff_name || '',
-        '품목':     (p.assignment_id ? asgMap.get(p.assignment_id)?.job_type : null) || '',
         '은행':     p.bank_name || '',
         '계좌번호': p.account_number || '',
         '이체금액': p.final_pay,
-        '메모':     p.notes || '',
+        '메모':     g.inquiry?.event_name || p.site_name || '',
       }))
 
       const sheetName = (g.inquiry?.event_name || '미정').slice(0, 31) // Excel 시트명 최대 31자
       const ws = XLSX.utils.json_to_sheet(rows)
       // 열 너비 설정
-      ws['!cols'] = [{ wch: 12 }, { wch: 14 }, { wch: 10 }, { wch: 20 }, { wch: 12 }, { wch: 30 }]
+      ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 20 }, { wch: 12 }, { wch: 30 }]
       XLSX.utils.book_append_sheet(wb, ws, sheetName)
       totalSheets++
     }
@@ -217,11 +216,10 @@ export default function PaymentTab({ data }: { data: CeoData }) {
 
     const rows = readyPayouts.map(p => ({
       '이름':     p.staff_name || '',
-      '품목':     (p.assignment_id ? asgMap.get(p.assignment_id)?.job_type : null) || '',
       '은행':     p.bank_name || '',
       '계좌번호': p.account_number || '',
       '이체금액': p.final_pay,
-      '메모':     p.notes || '',
+      '메모':     g.inquiry?.event_name || p.site_name || '',
     }))
     const ws = XLSX.utils.json_to_sheet(rows)
     ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 20 }, { wch: 12 }, { wch: 30 }]
