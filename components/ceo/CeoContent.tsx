@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { db } from '@/lib/supabase/api'
-import type { Inquiry, Settlement, Payout, Assignment, Customer } from '@/lib/supabase/types'
+import type { Inquiry, Settlement, Payout, Assignment, Customer, EstimateItem } from '@/lib/supabase/types'
 import { BarChart3, Receipt, Banknote, Building2, TrendingUp } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 
@@ -15,12 +15,13 @@ import ProfitTab     from './ProfitTab'
 
 // closings 테이블이 없으므로 settlements 기반으로 세금계산서 관리
 export interface CeoData {
-  inquiries:   Inquiry[]
-  settlements: Settlement[]
-  payouts:     Payout[]
-  assignments: Assignment[]
-  customers:   Customer[]
-  reload:      () => void
+  inquiries:     Inquiry[]
+  settlements:   Settlement[]
+  payouts:       Payout[]
+  assignments:   Assignment[]
+  customers:     Customer[]
+  estimateItems: EstimateItem[]   // 견적서 품목 (inquiry_id 기준)
+  reload:        () => void
 }
 
 const TABS = [
@@ -40,14 +41,15 @@ export default function CeoContent() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [inquiries, settlements, payouts, assignments, customers] = await Promise.all([
+    const [inquiries, settlements, payouts, assignments, customers, estimateItems] = await Promise.all([
       db.list<Inquiry>('inquiries'),
       db.list<Settlement>('settlements'),
       db.list<Payout>('payouts', { order: 'created_at', asc: false }),
       db.list<Assignment>('assignments', { order: 'assigned_at', asc: false }),
       db.list<Customer>('customers'),
+      db.list<EstimateItem>('estimate_items'),
     ])
-    setData({ inquiries, settlements, payouts, assignments, customers })
+    setData({ inquiries, settlements, payouts, assignments, customers, estimateItems })
     setLoading(false)
   }, [])
 

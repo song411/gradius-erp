@@ -6,7 +6,7 @@ import { formatKRW } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { ChevronDown, ChevronRight, CheckCircle2, AlertCircle, Receipt, MapPin, Building2 } from 'lucide-react'
 import type { CeoData } from './CeoContent'
-import type { Settlement, Inquiry, Customer } from '@/lib/supabase/types'
+import type { Settlement, Inquiry, Customer, EstimateItem } from '@/lib/supabase/types'
 import { toast } from 'sonner'
 
 // 체결 이후 단계만 세금계산서 관리 대상
@@ -15,12 +15,15 @@ const TAX_STATUSES = ['체결', '배정완료', '진행중', '완료', '정산�
 interface SettRow extends Settlement {
   inquiry?: Inquiry
   customer?: Customer
+  items?: EstimateItem[]
 }
 
+type ViewTab = 'unissued' | 'issued'
+
 export default function TaxInvoiceTab({ data }: { data: CeoData }) {
-  const { settlements, inquiries, customers, reload } = data
-  const [historyOpen, setHistoryOpen] = useState(false)
-  const [processing, setProcessing]   = useState<string | null>(null)
+  const { settlements, inquiries, customers, estimateItems, reload } = data
+  const [viewTab, setViewTab]     = useState<ViewTab>('unissued')
+  const [processing, setProcessing] = useState<string | null>(null)
 
   // 고객사 맵 (id → customer)
   const customerMap = new Map(customers.map(c => [c.id, c]))
@@ -30,13 +33,15 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
     .map(s => {
       const inquiry  = inquiries.find(q => q.id === s.inquiry_id)
       const customer = inquiry?.customer_id ? customerMap.get(inquiry.customer_id) : undefined
-      return { ...s, inquiry, customer }
+      const items    = estimateItems.filter(it => it.inquiry_id === s.inquiry_id)
+      return { ...s, inquiry, customer, items }
     })
     .filter(s => TAX_STATUSES.includes(s.inquiry?.status || ''))
     .sort((a, b) => (a.inquiry?.event_start || '').localeCompare(b.inquiry?.event_start || ''))
 
   const unissued = rows.filter(s => !s.tax_invoice_issued)
   const issued   = rows.filter(s => s.tax_invoice_issued)
+  const current  = viewTab === 'unissued' ? unissued : issued
 
   async function handleIssue(id: string) {
     setProcessing(id)
@@ -86,35 +91,83 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
         </a>
       </div>
 
-      {/* 요약 카드 */}
-      <div className="grid grid-cols-3 gap-4">
-        <SummaryCard icon={<AlertCircle className="h-5 w-5" />} label="미발행" count={unissued.length} color="red"
-          sub={formatKRW(unissued.reduce((s, r) => s + r.supply_price, 0))} />
-        <SummaryCard
-          icon={<CheckCircle2 className="h-5 w-5" />} label="발행완료" count={issued.length} color="green"
-          sub={formatKRW(issued.reduce((s, r) => s + r.supply_price, 0))}
-          onClick={() => setHistoryOpen(v => !v)}
-          active={historyOpen}
-        />
-        <SummaryCard icon={<Receipt className="h-5 w-5" />} label="전체 체결" count={rows.length} color="blue"
-          sub={formatKRW(rows.reduce((s, r) => s + r.supply_price, 0))} />
+      {/* 탭 전환 — 미발행 / 발행완료 */}
+      <div className="grid grid-cols-2 gap-3">
+        <button
+          onClick={() => setViewTab('unissued')}
+          className={`rounded-xl p-4 flex items-start gap-3 border-2 transition-all text-left ${
+            viewTab === 'unissued'
+              ? 'bg-red-50 border-red-400 shadow-md ring-2 ring-red-300'
+              : 'bg-white border-gray-200 hover:border-red-200 hover:bg-red-50/40'
+          }`}
+        >
+          <AlertCircle className={`h-5 w-5 mt-0.5 shrink-0 ${viewTab === 'unissued' ? 'text-red-500' : 'text-gray-400'}`} />
+          <div>
+            <p className={`text-xs font-semibold ${viewTab === 'unissued' ? 'text-red-700' : 'text-gray-500'}`}>미발행</p>
+            <p className={`text-2xl font-extrabold ${viewTab === 'unissued' ? 'text-red-700' : 'text-gray-700'}`}>
+              {unissued.length}<span className="text-sm font-normal ml-0.5">건</span>
+            </p>
+            <p className={`text-xs font-medium mt-0.5 ${viewTab === 'unissued' ? 'text-red-600' : 'text-gray-400'}`}>
+              {formatKRW(unissued.reduce((s, r) => s + r.supply_price, 0))}
+            </p>
+          </div>
+          {viewTab === 'unissued' && (
+            <span className="ml-auto text-[10px] text-red-500 font-bold self-end">▶ 보는 중</span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setViewTab('issued')}
+          className={`rounded-xl p-4 flex items-start gap-3 border-2 transition-all text-left ${
+            viewTab === 'issued'
+              ? 'bg-green-50 border-green-400 shadow-md ring-2 ring-green-300'
+              : 'bg-white border-gray-200 hover:border-green-200 hover:bg-green-50/40'
+          }`}
+        >
+          <CheckCircle2 className={`h-5 w-5 mt-0.5 shrink-0 ${viewTab === 'issued' ? 'text-green-500' : 'text-gray-400'}`} />
+          <div>
+            <p className={`text-xs font-semibold ${viewTab === 'issued' ? 'text-green-700' : 'text-gray-500'}`}>발행완료</p>
+            <p className={`text-2xl font-extrabold ${viewTab === 'issued' ? 'text-green-700' : 'text-gray-700'}`}>
+              {issued.length}<span className="text-sm font-normal ml-0.5">건</span>
+            </p>
+            <p className={`text-xs font-medium mt-0.5 ${viewTab === 'issued' ? 'text-green-600' : 'text-gray-400'}`}>
+              {formatKRW(issued.reduce((s, r) => s + r.supply_price, 0))}
+            </p>
+          </div>
+          {viewTab === 'issued' && (
+            <span className="ml-auto text-[10px] text-green-600 font-bold self-end">▶ 보는 중</span>
+          )}
+        </button>
       </div>
 
-      {/* 미발행 목록 */}
-      <div className="bg-white rounded-xl border-2 border-red-200 overflow-hidden shadow-sm">
-        <div className="bg-red-50 px-4 py-3 border-b-2 border-red-200 flex items-center gap-2">
-          <AlertCircle className="h-4 w-4 text-red-600" />
-          <h3 className="font-bold text-red-700 text-sm">미발행 세금계산서 ({unissued.length}건)</h3>
+      {/* 목록 */}
+      <div className={`bg-white rounded-xl overflow-hidden shadow-sm border-2 ${
+        viewTab === 'unissued' ? 'border-red-200' : 'border-green-200'
+      }`}>
+        <div className={`px-4 py-3 border-b-2 flex items-center gap-2 ${
+          viewTab === 'unissued' ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'
+        }`}>
+          {viewTab === 'unissued'
+            ? <AlertCircle className="h-4 w-4 text-red-600" />
+            : <CheckCircle2 className="h-4 w-4 text-green-600" />
+          }
+          <h3 className={`font-bold text-sm ${viewTab === 'unissued' ? 'text-red-700' : 'text-green-700'}`}>
+            {viewTab === 'unissued' ? `미발행 세금계산서 (${unissued.length}건)` : `발행완료 이력 (${issued.length}건)`}
+          </h3>
         </div>
-        {unissued.length === 0 ? (
-          <div className="py-10 text-center text-gray-400 text-sm">미발행 건이 없습니다 ✅</div>
+
+        {current.length === 0 ? (
+          <div className="py-10 text-center text-gray-400 text-sm">
+            {viewTab === 'unissued' ? '미발행 건이 없습니다 ✅' : '발행 이력이 없습니다.'}
+          </div>
         ) : (
-          <div className="divide-y divide-gray-100">
-            {unissued.map(s => (
+          <div className={`divide-y divide-gray-100 ${viewTab === 'issued' ? 'opacity-80' : ''}`}>
+            {current.map(s => (
               <TaxRow
                 key={s.id}
                 row={s}
-                action={
+                issued={viewTab === 'issued'}
+                action={viewTab === 'unissued' ? (
                   <Button
                     size="sm"
                     onClick={() => handleIssue(s.id)}
@@ -123,53 +176,19 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
                   >
                     {processing === s.id ? '처리중...' : '발행완료 처리'}
                   </Button>
-                }
+                ) : (
+                  <Button
+                    size="sm" variant="ghost"
+                    className="text-xs text-gray-500 hover:text-red-600"
+                    onClick={() => handleRevert(s.id)}
+                    disabled={processing === s.id}
+                  >
+                    되돌리기
+                  </Button>
+                )}
               />
             ))}
           </div>
-        )}
-      </div>
-
-      {/* 발행완료 이력 (접기/펼치기) */}
-      <div className="bg-white rounded-xl border-2 border-green-200 overflow-hidden shadow-sm">
-        <button
-          className="w-full bg-green-50 px-4 py-3 border-b-2 border-green-200 flex items-center justify-between hover:bg-green-100 transition-colors"
-          onClick={() => setHistoryOpen(v => !v)}
-        >
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 text-green-500" />
-            <h3 className="font-semibold text-green-700 text-sm">발행완료 이력 ({issued.length}건)</h3>
-          </div>
-          {historyOpen
-            ? <ChevronDown className="h-4 w-4 text-green-600" />
-            : <ChevronRight className="h-4 w-4 text-green-600" />
-          }
-        </button>
-
-        {historyOpen && (
-          issued.length === 0 ? (
-            <div className="py-8 text-center text-gray-400 text-sm">발행 이력이 없습니다.</div>
-          ) : (
-            <div className="divide-y divide-gray-100 opacity-80">
-              {issued.map(s => (
-                <TaxRow
-                  key={s.id}
-                  row={s}
-                  issued
-                  action={
-                    <Button
-                      size="sm" variant="ghost"
-                      className="text-xs text-gray-500 hover:text-red-600"
-                      onClick={() => handleRevert(s.id)}
-                      disabled={processing === s.id}
-                    >
-                      되돌리기
-                    </Button>
-                  }
-                />
-              ))}
-            </div>
-          )
         )}
       </div>
     </div>
@@ -187,6 +206,7 @@ function TaxRow({
   const [open, setOpen] = useState(false)
 
   const inq = row.inquiry
+
   // 파견일자
   const eventPeriod = inq?.event_start
     ? inq.event_end && inq.event_end !== inq.event_start
@@ -194,57 +214,85 @@ function TaxRow({
       : inq.event_start.slice(0,10)
     : null
 
-  // 현장주소: 파견 행사장 주소 (inquiry.location → settlement.site_address 순)
+  // 현장주소
   const siteAddr = inq?.location || row.site_address || null
 
-  // 사업장주소: 세금계산서용 회사 등록 주소 (settlement.biz_address 우선, 없으면 customers.address)
+  // 사업장주소 (세금계산서용)
   const bizAddr = row.biz_address || row.customer?.address || null
 
   // 잔액
   const balance = row.balance ?? (row.invoice_amount - row.received_amount)
 
+  // 견적서 품목 요약 (role_name 기준 중복 제거 후 나열)
+  const itemSummary = (() => {
+    if (!row.items || row.items.length === 0) return null
+    const roleMap = new Map<string, number>()
+    row.items.forEach(it => {
+      if (!it.role_name) return
+      roleMap.set(it.role_name, (roleMap.get(it.role_name) || 0) + (it.quantity || 1))
+    })
+    return Array.from(roleMap.entries())
+      .map(([name, qty]) => `${name} ${qty}명`)
+      .join(', ')
+  })()
+
   return (
     <div>
       <div
-        className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer"
+        className="flex items-start gap-3 px-4 py-3.5 hover:bg-gray-50 cursor-pointer"
         onClick={() => setOpen(v => !v)}
       >
-        <div className="shrink-0 text-gray-400">
+        <div className="shrink-0 text-gray-400 mt-1">
           {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
         </div>
+
         <div className="flex-1 min-w-0">
+          {/* 행사명 — 가장 크게 */}
+          {inq?.event_name && (
+            <p className="font-bold text-gray-900 text-sm leading-tight mb-0.5 truncate">
+              {inq.event_name}
+            </p>
+          )}
+
+          {/* 업체명 + 상태 배지 */}
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold text-sm text-gray-800">
+            <span className="text-xs text-gray-600 font-medium">
               {row.company_name || inq?.company_name || '업체명 미정'}
             </span>
-            {inq?.event_name && (
-              <span className="text-xs text-gray-400 truncate">| {inq.event_name}</span>
-            )}
             {inq?.status && (
               <span className="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">{inq.status}</span>
             )}
             {inq?.category && (
               <span className="text-[10px] bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded">{inq.category}</span>
             )}
+            {issued && (
+              <span className="text-[10px] text-green-600 font-semibold">✓ 발행완료</span>
+            )}
           </div>
-          <div className="flex items-center gap-3 text-xs text-gray-400 mt-0.5 flex-wrap">
+
+          {/* 일정·장소·인원 */}
+          <div className="flex items-center gap-3 text-xs text-gray-400 mt-1 flex-wrap">
             {eventPeriod && <span>📅 {eventPeriod}</span>}
             {siteAddr && <span className="truncate max-w-[180px]">📍 {siteAddr}</span>}
             {inq?.required_staff ? <span>👤 {inq.required_staff}명</span> : null}
-            <span>공급가: {formatKRW(row.supply_price)}</span>
-            <span>청구액: {formatKRW(row.invoice_amount || row.supply_price + row.vat)}</span>
-            {balance > 0 && <span className="text-red-500">잔액: {formatKRW(balance)}</span>}
           </div>
-          {(row.item_description) && (
-            <div className="text-[11px] text-gray-400 mt-0.5">
-              📋 품목: <span className="text-gray-600">{row.item_description}</span>
-            </div>
+
+          {/* 견적서 품목 */}
+          {itemSummary && (
+            <p className="text-[11px] text-indigo-600 font-medium mt-0.5">
+              📋 {itemSummary}
+            </p>
           )}
+
+          {/* 금액 요약 */}
+          <div className="flex items-center gap-3 text-xs text-gray-400 mt-0.5 flex-wrap">
+            <span>공급가 {formatKRW(row.supply_price)}</span>
+            <span>청구 {formatKRW(row.invoice_amount || row.supply_price + row.vat)}</span>
+            {balance > 0 && <span className="text-red-500 font-semibold">잔액 {formatKRW(balance)}</span>}
+          </div>
         </div>
-        {issued && (
-          <span className="text-xs text-green-600 shrink-0 font-medium">✓ 발행완료</span>
-        )}
-        <div onClick={e => e.stopPropagation()}>{action}</div>
+
+        <div onClick={e => e.stopPropagation()} className="shrink-0 mt-1">{action}</div>
       </div>
 
       {/* 세금계산서 상세 정보 */}
@@ -333,38 +381,6 @@ function AmountItem({ label, value, highlight, danger }: {
       <span className={`text-xs font-bold ${highlight ? 'text-indigo-700' : danger && value > 0 ? 'text-red-600' : 'text-gray-700'}`}>
         {formatKRW(value)}
       </span>
-    </div>
-  )
-}
-
-function SummaryCard({ label, count, color, icon, sub, onClick, active }: {
-  label: string; count: number; color: string; icon: React.ReactNode; sub: string
-  onClick?: () => void; active?: boolean
-}) {
-  const styles: Record<string, string> = {
-    red:   'bg-red-50 border-2 border-red-300 text-red-700 shadow-sm',
-    green: 'bg-green-50 border-2 border-green-300 text-green-700 shadow-sm',
-    blue:  'bg-blue-50 border-2 border-blue-300 text-blue-700 shadow-sm',
-  }
-  const activeStyles: Record<string, string> = {
-    green: 'ring-2 ring-green-400',
-  }
-  return (
-    <div
-      className={`rounded-xl p-4 flex items-start gap-3 ${styles[color]} ${onClick ? 'cursor-pointer hover:brightness-95 transition-all select-none' : ''} ${active && activeStyles[color] ? activeStyles[color] : ''}`}
-      onClick={onClick}
-    >
-      <div className="mt-0.5 shrink-0">{icon}</div>
-      <div className="flex-1">
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold opacity-80">{label}</p>
-          {onClick && (
-            <span className="text-[10px] opacity-60">{active ? '▲ 접기' : '▼ 보기'}</span>
-          )}
-        </div>
-        <p className="text-2xl font-extrabold">{count}<span className="text-sm font-normal ml-0.5">건</span></p>
-        {sub && <p className="text-xs font-medium opacity-70 mt-0.5">{sub}</p>}
-      </div>
     </div>
   )
 }
