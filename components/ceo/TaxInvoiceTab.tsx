@@ -67,12 +67,35 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
 
   return (
     <div className="space-y-5">
+      {/* 국세청 바로가기 버튼 */}
+      <div className="flex gap-2 flex-wrap">
+        <a href="https://www.hometax.go.kr" target="_blank" rel="noopener noreferrer"
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm">
+          <Receipt className="h-4 w-4" />
+          홈택스 바로가기
+        </a>
+        <a href="https://www.hometax.go.kr/websquare/websquare.wss?w2xPath=/ui/pp/index_pp.xml&menuCd=MDU0020&contentCd=MDU0020" target="_blank" rel="noopener noreferrer"
+          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm">
+          <Receipt className="h-4 w-4" />
+          전자세금계산서 발행
+        </a>
+        <a href="https://www.hometax.go.kr/websquare/websquare.wss?w2xPath=/ui/pp/index_pp.xml&menuCd=MDU0030" target="_blank" rel="noopener noreferrer"
+          className="flex items-center gap-2 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm">
+          <Receipt className="h-4 w-4" />
+          세금계산서 조회
+        </a>
+      </div>
+
       {/* 요약 카드 */}
       <div className="grid grid-cols-3 gap-4">
         <SummaryCard icon={<AlertCircle className="h-5 w-5" />} label="미발행" count={unissued.length} color="red"
           sub={formatKRW(unissued.reduce((s, r) => s + r.supply_price, 0))} />
-        <SummaryCard icon={<CheckCircle2 className="h-5 w-5" />} label="발행완료" count={issued.length} color="green"
-          sub={formatKRW(issued.reduce((s, r) => s + r.supply_price, 0))} />
+        <SummaryCard
+          icon={<CheckCircle2 className="h-5 w-5" />} label="발행완료" count={issued.length} color="green"
+          sub={formatKRW(issued.reduce((s, r) => s + r.supply_price, 0))}
+          onClick={() => setHistoryOpen(v => !v)}
+          active={historyOpen}
+        />
         <SummaryCard icon={<Receipt className="h-5 w-5" />} label="전체 체결" count={rows.length} color="blue"
           sub={formatKRW(rows.reduce((s, r) => s + r.supply_price, 0))} />
       </div>
@@ -200,13 +223,23 @@ function TaxRow({
             {inq?.status && (
               <span className="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">{inq.status}</span>
             )}
+            {inq?.category && (
+              <span className="text-[10px] bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded">{inq.category}</span>
+            )}
           </div>
           <div className="flex items-center gap-3 text-xs text-gray-400 mt-0.5 flex-wrap">
             {eventPeriod && <span>📅 {eventPeriod}</span>}
+            {siteAddr && <span className="truncate max-w-[180px]">📍 {siteAddr}</span>}
+            {inq?.required_staff ? <span>👤 {inq.required_staff}명</span> : null}
             <span>공급가: {formatKRW(row.supply_price)}</span>
             <span>청구액: {formatKRW(row.invoice_amount || row.supply_price + row.vat)}</span>
             {balance > 0 && <span className="text-red-500">잔액: {formatKRW(balance)}</span>}
           </div>
+          {(row.item_description) && (
+            <div className="text-[11px] text-gray-400 mt-0.5">
+              📋 품목: <span className="text-gray-600">{row.item_description}</span>
+            </div>
+          )}
         </div>
         {issued && (
           <span className="text-xs text-green-600 shrink-0 font-medium">✓ 발행완료</span>
@@ -304,19 +337,31 @@ function AmountItem({ label, value, highlight, danger }: {
   )
 }
 
-function SummaryCard({ label, count, color, icon, sub }: {
+function SummaryCard({ label, count, color, icon, sub, onClick, active }: {
   label: string; count: number; color: string; icon: React.ReactNode; sub: string
+  onClick?: () => void; active?: boolean
 }) {
   const styles: Record<string, string> = {
     red:   'bg-red-50 border-2 border-red-300 text-red-700 shadow-sm',
     green: 'bg-green-50 border-2 border-green-300 text-green-700 shadow-sm',
     blue:  'bg-blue-50 border-2 border-blue-300 text-blue-700 shadow-sm',
   }
+  const activeStyles: Record<string, string> = {
+    green: 'ring-2 ring-green-400',
+  }
   return (
-    <div className={`rounded-xl p-4 flex items-start gap-3 ${styles[color]}`}>
+    <div
+      className={`rounded-xl p-4 flex items-start gap-3 ${styles[color]} ${onClick ? 'cursor-pointer hover:brightness-95 transition-all select-none' : ''} ${active && activeStyles[color] ? activeStyles[color] : ''}`}
+      onClick={onClick}
+    >
       <div className="mt-0.5 shrink-0">{icon}</div>
-      <div>
-        <p className="text-xs font-semibold opacity-80">{label}</p>
+      <div className="flex-1">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-semibold opacity-80">{label}</p>
+          {onClick && (
+            <span className="text-[10px] opacity-60">{active ? '▲ 접기' : '▼ 보기'}</span>
+          )}
+        </div>
         <p className="text-2xl font-extrabold">{count}<span className="text-sm font-normal ml-0.5">건</span></p>
         {sub && <p className="text-xs font-medium opacity-70 mt-0.5">{sub}</p>}
       </div>
