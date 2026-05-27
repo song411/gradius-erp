@@ -1,13 +1,13 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, Plus, ChevronRight, CheckCircle2, Clock, Send, Trash2, Tag, Save } from 'lucide-react'
+import { X, Plus, ChevronRight, CheckCircle2, Clock, Send, Trash2, Tag, Save, Ban, PauseCircle, MessageSquare } from 'lucide-react'
 import { toast } from 'sonner'
 import { db } from '@/lib/supabase/api'
 
 // ── 타입 ─────────────────────────────────────────────────────────
 type Category = '피드백' | '기획서' | '데이터점검' | '리서치'
-type Status   = '아이디어' | '검토중' | '개발예정' | '완료'
+type Status   = '아이디어' | '검토중' | '개발예정' | '완료' | '보류' | '구현불가'
 type Priority = '낮음' | '보통' | '높음' | '긴급'
 
 interface Note {
@@ -20,6 +20,7 @@ interface Note {
   status: Status
   priority: Priority
   tags: string[]
+  dev_comment?: string   // 개발자 코멘트 (완료/보류/구현불가 사유 등)
   created_at: string
 }
 
@@ -193,11 +194,15 @@ const CATEGORY_META: Record<Category, { emoji: string; color: string }> = {
   리서치:   { emoji: '🔍', color: 'from-amber-500 to-orange-600' },
 }
 const STATUS_META: Record<Status, { label: string; color: string; icon: React.ReactNode }> = {
-  '아이디어': { label: '아이디어', color: 'bg-gray-100 text-gray-600', icon: <Plus className="h-3 w-3" /> },
-  '검토중':   { label: '검토중',   color: 'bg-blue-100 text-blue-700', icon: <Clock className="h-3 w-3" /> },
-  '개발예정': { label: '개발예정', color: 'bg-amber-100 text-amber-700', icon: <Send className="h-3 w-3" /> },
-  '완료':     { label: '완료',     color: 'bg-green-100 text-green-700', icon: <CheckCircle2 className="h-3 w-3" /> },
+  '아이디어': { label: '아이디어', color: 'bg-gray-100 text-gray-600',    icon: <Plus className="h-3 w-3" /> },
+  '검토중':   { label: '검토중',   color: 'bg-blue-100 text-blue-700',    icon: <Clock className="h-3 w-3" /> },
+  '개발예정': { label: '개발예정', color: 'bg-amber-100 text-amber-700',  icon: <Send className="h-3 w-3" /> },
+  '완료':     { label: '✅ 완료',  color: 'bg-green-100 text-green-700',  icon: <CheckCircle2 className="h-3 w-3" /> },
+  '보류':     { label: '⏸ 보류',  color: 'bg-orange-100 text-orange-600', icon: <PauseCircle className="h-3 w-3" /> },
+  '구현불가': { label: '🚫 구현불가', color: 'bg-red-100 text-red-600',   icon: <Ban className="h-3 w-3" /> },
 }
+
+const ALL_STATUSES: Status[] = ['아이디어', '검토중', '개발예정', '완료', '보류', '구현불가']
 const PRIORITY_META: Record<Priority, { color: string }> = {
   낮음: { color: 'bg-gray-100 text-gray-500' },
   보통: { color: 'bg-blue-100 text-blue-600' },
@@ -356,17 +361,22 @@ function WriteForm({
 }
 
 // ── 노트 카드 ─────────────────────────────────────────────────────
-function NoteCard({ note, onDelete, onStatusChange }: {
+function NoteCard({ note, onDelete, onStatusChange, onCommentSave }: {
   note: Note
   onDelete: (id: string) => void
   onStatusChange: (id: string, status: Status) => void
+  onCommentSave: (id: string, comment: string) => void
 }) {
-  const [expanded, setExpanded] = useState(false)
-  const sm = STATUS_META[note.status]
+  const [expanded, setExpanded]       = useState(false)
+  const [editComment, setEditComment] = useState(false)
+  const [commentVal, setCommentVal]   = useState(note.dev_comment || '')
+  const sm = STATUS_META[note.status] || STATUS_META['아이디어']
   const pm = PRIORITY_META[note.priority]
 
+  const isDone = ['완료', '보류', '구현불가'].includes(note.status)
+
   return (
-    <div className="bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden">
+    <div className={`bg-white border rounded-xl shadow-sm overflow-hidden ${isDone ? 'opacity-75' : 'border-gray-100'} ${note.status === '완료' ? 'border-green-200' : note.status === '보류' ? 'border-orange-200' : note.status === '구현불가' ? 'border-red-200' : 'border-gray-100'}`}>
       <div className="p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
@@ -379,7 +389,9 @@ function NoteCard({ note, onDelete, onStatusChange }: {
               </span>
               <span className="text-[10px] text-gray-400">{note.category}</span>
             </div>
-            <div className="font-semibold text-gray-900 text-sm truncate">{note.title}</div>
+            <div className={`font-semibold text-sm truncate ${isDone ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+              {note.title}
+            </div>
             <div className="text-xs text-gray-400 mt-0.5">{note.author} · {new Date(note.created_at).toLocaleDateString('ko-KR')}</div>
           </div>
           <button onClick={() => setExpanded(p => !p)}
@@ -396,27 +408,77 @@ function NoteCard({ note, onDelete, onStatusChange }: {
             ))}
           </div>
         )}
+
+        {/* 개발자 코멘트 미리보기 (접힌 상태에서도 표시) */}
+        {note.dev_comment && !expanded && (
+          <div className="mt-2 flex items-start gap-1.5 bg-indigo-50 rounded-lg px-3 py-2">
+            <MessageSquare className="h-3 w-3 text-indigo-400 shrink-0 mt-0.5" />
+            <p className="text-[11px] text-indigo-700 line-clamp-1">{note.dev_comment}</p>
+          </div>
+        )}
       </div>
 
       {/* 펼친 내용 */}
       {expanded && (
-        <div className="border-t border-gray-50 px-4 py-3">
+        <div className="border-t border-gray-50 px-4 py-3 space-y-3">
           <pre className="text-xs text-gray-600 whitespace-pre-wrap font-sans leading-relaxed">{note.content}</pre>
 
+          {/* 개발자 코멘트 */}
+          <div className="bg-indigo-50 rounded-lg p-3">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="flex items-center gap-1.5 text-[11px] font-bold text-indigo-700">
+                <MessageSquare className="h-3.5 w-3.5" />
+                개발자 코멘트
+              </span>
+              {!editComment && (
+                <button onClick={() => { setEditComment(true); setCommentVal(note.dev_comment || '') }}
+                  className="text-[10px] text-indigo-500 hover:text-indigo-700 underline">
+                  {note.dev_comment ? '수정' : '코멘트 남기기'}
+                </button>
+              )}
+            </div>
+            {editComment ? (
+              <div className="space-y-1.5">
+                <textarea
+                  value={commentVal}
+                  onChange={e => setCommentVal(e.target.value)}
+                  rows={2}
+                  placeholder="완료 사유, 보류 이유, 구현 불가 이유 등을 남겨주세요"
+                  className="w-full border border-indigo-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400 resize-none"
+                />
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={() => { onCommentSave(note.id, commentVal); setEditComment(false) }}
+                    className="px-3 py-1 bg-indigo-600 text-white text-[10px] font-bold rounded-lg hover:bg-indigo-700"
+                  >저장</button>
+                  <button onClick={() => setEditComment(false)}
+                    className="px-3 py-1 bg-gray-100 text-gray-600 text-[10px] rounded-lg hover:bg-gray-200"
+                  >취소</button>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-indigo-700 whitespace-pre-wrap">
+                {note.dev_comment || <span className="text-indigo-300 italic">아직 코멘트가 없습니다</span>}
+              </p>
+            )}
+          </div>
+
           {/* 상태 변경 */}
-          <div className="mt-3 flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex gap-1 flex-wrap">
-              {(['아이디어', '검토중', '개발예정', '완료'] as Status[]).map(s => (
+              {ALL_STATUSES.map(s => (
                 <button key={s} onClick={() => onStatusChange(note.id, s)}
                   className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border transition-all ${
                     note.status === s
-                      ? STATUS_META[s].color + ' border-current'
+                      ? STATUS_META[s].color + ' border-current ring-1 ring-current'
                       : 'bg-gray-50 text-gray-400 border-gray-200 hover:border-gray-400'
-                  }`}>{s}</button>
+                  }`}>
+                  {STATUS_META[s].label}
+                </button>
               ))}
             </div>
             <button onClick={() => onDelete(note.id)}
-              className="text-red-400 hover:text-red-600 p-1 rounded-lg hover:bg-red-50 transition-colors">
+              className="text-red-400 hover:text-red-600 p-1 rounded-lg hover:bg-red-50 transition-colors shrink-0">
               <Trash2 className="h-3.5 w-3.5" />
             </button>
           </div>
@@ -465,8 +527,19 @@ export default function KitModal({ onClose }: { onClose: () => void }) {
     try {
       await db.update('improvement_notes', id, { status })
       setNotes(p => p.map(n => n.id === id ? { ...n, status } : n))
+      toast.success(`상태를 "${STATUS_META[status].label}"로 변경했습니다.`)
     } catch {
       toast.error('상태 변경에 실패했습니다')
+    }
+  }
+
+  async function handleCommentSave(id: string, dev_comment: string) {
+    try {
+      await db.update('improvement_notes', id, { dev_comment: dev_comment || null })
+      setNotes(p => p.map(n => n.id === id ? { ...n, dev_comment } : n))
+      toast.success('코멘트가 저장되었습니다.')
+    } catch {
+      toast.error('코멘트 저장에 실패했습니다')
     }
   }
 
@@ -563,11 +636,15 @@ export default function KitModal({ onClose }: { onClose: () => void }) {
               ))}
             </div>
             <div className="flex gap-1 flex-wrap">
-              {(['전체', '아이디어', '검토중', '개발예정', '완료'] as (Status | '전체')[]).map(s => (
+              {(['전체', ...ALL_STATUSES] as (Status | '전체')[]).map(s => (
                 <button key={s} onClick={() => setFilterStatus(s)}
                   className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all ${
-                    filterStatus === s ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
-                  }`}>{s}</button>
+                    filterStatus === s
+                      ? 'bg-gray-800 text-white border-gray-800'
+                      : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
+                  }`}>
+                  {s === '전체' ? '전체' : STATUS_META[s as Status].label}
+                </button>
               ))}
             </div>
           </div>
@@ -589,7 +666,8 @@ export default function KitModal({ onClose }: { onClose: () => void }) {
               filteredNotes.map(note => (
                 <NoteCard key={note.id} note={note}
                   onDelete={handleDelete}
-                  onStatusChange={handleStatusChange} />
+                  onStatusChange={handleStatusChange}
+                  onCommentSave={handleCommentSave} />
               ))
             )}
           </div>
