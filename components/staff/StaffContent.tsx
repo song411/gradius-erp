@@ -10,9 +10,10 @@ import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog, DialogHeader, DialogTitle, DialogContent, DialogFooter, DialogClose
 } from '@/components/ui/dialog'
-import { Plus, Search, Edit2, Trash2, Star, SlidersHorizontal, X, Eye, EyeOff } from 'lucide-react'
+import { Plus, Search, Edit2, Trash2, Star, SlidersHorizontal, X, Eye, EyeOff, FileSpreadsheet } from 'lucide-react'
 import type { Staff, StaffRecommend } from '@/lib/supabase/types'
 import CrewProfileCard from './CrewProfileCard'
+import StaffExcelUpload from './StaffExcelUpload'
 
 const RECOMMEND_OPTIONS: StaffRecommend[] = ['우선투입', '일반', '보류']
 
@@ -79,6 +80,7 @@ export default function StaffContent() {
   const [saving, setSaving]           = useState(false)
   const [error, setError]             = useState('')
   const [showIdNumber, setShowIdNumber] = useState(false) // 주민등록번호 표시 토글
+  const [showExcelUpload, setShowExcelUpload] = useState(false) // 엑셀 일괄 등록 모달
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -262,6 +264,10 @@ export default function StaffContent() {
               </span>
             )}
           </Button>
+          <Button variant="outline" onClick={() => setShowExcelUpload(true)} className="gap-1">
+            <FileSpreadsheet className="h-4 w-4" />
+            엑셀 일괄 등록
+          </Button>
           <Button onClick={openCreate} className="gap-1">
             <Plus className="h-4 w-4" />
             크루 등록
@@ -443,6 +449,15 @@ export default function StaffContent() {
           </div>
         )}
       </div>
+
+      {/* 엑셀 일괄 등록 모달 */}
+      {showExcelUpload && (
+        <StaffExcelUpload
+          existingStaff={staffList}
+          onClose={() => setShowExcelUpload(false)}
+          onDone={() => { setShowExcelUpload(false); load() }}
+        />
+      )}
 
       {/* 프로필 카드 모달 */}
       {profileStaff && (
