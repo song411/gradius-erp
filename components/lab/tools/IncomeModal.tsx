@@ -36,14 +36,21 @@ function formatKRW(n: number) {
   return n.toLocaleString('ko-KR') + '원'
 }
 
+// 본사 인원 명단 (이름 기반 판별 — PaymentTab, CeoContent 등 동일 패턴)
+const HQ_STAFF_NAMES = new Set(['최규성', '송무재', '여지은', '김영찬'])
+
+type SortMode = 'paidAt' | 'siteName'
+
 // ── 메인 컴포넌트 ─────────────────────────────────────────────────
 export default function IncomeModal({ onClose }: { onClose: () => void }) {
   const now = new Date()
-  const [year,  setYear]  = useState(now.getFullYear())
-  const [month, setMonth] = useState(now.getMonth() + 1)
-  const [viewAll, setViewAll] = useState(false)   // 전체 보기 토글
-  const [rows,  setRows]  = useState<IncomeRow[]>([])
-  const [loading, setLoading] = useState(false)
+  const [year,      setYear]      = useState(now.getFullYear())
+  const [month,     setMonth]     = useState(now.getMonth() + 1)
+  const [viewAll,   setViewAll]   = useState(false)
+  const [sortMode,  setSortMode]  = useState<SortMode>('paidAt')   // 기본: 지급일순
+  const [excludeHQ, setExcludeHQ] = useState(true)                 // 기본: 본사 제외
+  const [rows,      setRows]      = useState<IncomeRow[]>([])
+  const [loading,   setLoading]   = useState(false)
 
   useEffect(() => { fetchData() }, [year, month, viewAll])   // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -126,6 +133,13 @@ export default function IncomeModal({ onClose }: { onClose: () => void }) {
         }
       })
 
+      // 지급일 → 현장명 기본 정렬 (데이터 로드 시 고정)
+      built.sort((a, b) => {
+        const dateCompare = a.paidAt.localeCompare(b.paidAt)
+        if (dateCompare !== 0) return dateCompare
+        return a.siteName.localeCompare(b.siteName)
+      })
+
       setRows(built)
     } catch (e) {
       toast.error('데이터를 불러오지 못했습니다: ' + (e as Error).message)
@@ -144,35 +158,48 @@ export default function IncomeModal({ onClose }: { onClose: () => void }) {
     else setMonth(m => m + 1)
   }
 
-  // 합계
-  const totals = rows.reduce((acc, r) => ({
+  // 본사 제외 + 정렬 적용
+  const displayRows = (() => {
+    let list = excludeHQ
+      ? rows.filter(r => !HQ_STAFF_NAMES.has(r.name))
+      : rows
+
+    if (sortMode === 'siteName') {
+      list = [...list].sort((a, b) => {
+        const siteCompare = a.siteName.localeCompare(b.siteName)
+        if (siteCompare !== 0) return siteCompare
+        return a.paidAt.localeCompare(b.paidAt)
+      })
+    }
+    // paidAt 모드는 fetchData에서 이미 정렬됨
+
+    return list
+  })()
+
+  const totals = displayRows.reduce((acc, r) => ({
     subtotal:  acc.subtotal  + r.subtotal,
     incomeTax: acc.incomeTax + r.incomeTax,
     localTax:  acc.localTax  + r.localTax,
     finalPay:  acc.finalPay  + r.finalPay,
   }), { subtotal: 0, incomeTax: 0, localTax: 0, finalPay: 0 })
 
-  // 엑셀 내보내기
+  // 엑셀 내보내기 (현재 화면 기준 — 본사 제외 여부·정렬 반영)
   function exportExcel() {
-    if (rows.length === 0) { toast.error('내보낼 데이터가 없습니다.'); return }
+    if (displayRows.length === 0) { toast.error('내보낼 데이터가 없습니다.'); return }
 
     const headers = ['이름', '주민번호', '현장명', '일비(과세소득)', '소득세(3%)', '지방소득세(0.3%)', '지급액', '지급일', '팀원 정보']
-    const data = rows.map(r => [
+    const data = displayRows.map(r => [
       r.name, r.idNumber, r.siteName, r.subtotal, r.incomeTax, r.localTax, r.finalPay, r.paidAt, r.teamMembers,
     ])
 
-    // 합계 행
     data.push(['합계', '', '', totals.subtotal, totals.incomeTax, totals.localTax, totals.finalPay, '', ''])
 
     const ws = XLSX.utils.aoa_to_sheet([headers, ...data])
-
-    // 컬럼 너비
     ws['!cols'] = [
       { wch: 10 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 40 },
     ]
 
-    // 숫자 포맷 (D~G열, 2행부터)
-    for (let ri = 1; ri <= rows.length + 1; ri++) {
+    for (let ri = 1; ri <= displayRows.length + 1; ri++) {
       ['D', 'E', 'F', 'G'].forEach(col => {
         const cell = ws[`${col}${ri + 1}`]
         if (cell && typeof cell.v === 'number') cell.z = '#,##0'
@@ -240,13 +267,35 @@ export default function IncomeModal({ onClose }: { onClose: () => void }) {
             )}
             {loading && <Loader2 className="h-4 w-4 text-gray-400 animate-spin" />}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            {/* 정렬 토글 */}
+            <div className="flex bg-gray-200 rounded-lg p-0.5 text-xs font-semibold">
+              <button
+                onClick={() => setSortMode('paidAt')}
+                className={`px-3 py-1 rounded-md transition-all ${sortMode === 'paidAt' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              >📅 지급일순</button>
+              <button
+                onClick={() => setSortMode('siteName')}
+                className={`px-3 py-1 rounded-md transition-all ${sortMode === 'siteName' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              >🏢 현장명순</button>
+            </div>
+            {/* 본사인원 제외 토글 */}
+            <button
+              onClick={() => setExcludeHQ(v => !v)}
+              className={`text-xs px-3 py-1.5 rounded-lg border-2 font-semibold transition-colors ${
+                excludeHQ
+                  ? 'bg-purple-600 text-white border-purple-600'
+                  : 'bg-white text-gray-500 border-gray-300 hover:border-purple-400'
+              }`}
+            >
+              🏢 본사인원 {excludeHQ ? '제외중' : '포함중'}
+            </button>
             <span className="text-xs text-gray-400">
-              {rows.length}건 · 지급완료 기준
+              {displayRows.length}건 · 지급완료 기준
             </span>
             <button
               onClick={exportExcel}
-              disabled={rows.length === 0}
+              disabled={displayRows.length === 0}
               className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-semibold hover:bg-teal-700 disabled:opacity-40"
             >
               <Download className="h-4 w-4" />
@@ -261,10 +310,10 @@ export default function IncomeModal({ onClose }: { onClose: () => void }) {
             <div className="flex items-center justify-center h-48 text-gray-400 text-sm gap-2">
               <Loader2 className="h-5 w-5 animate-spin" />불러오는 중...
             </div>
-          ) : rows.length === 0 ? (
+          ) : displayRows.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-48 text-center">
               <p className="text-3xl mb-3">📭</p>
-              <p className="text-gray-400 text-sm">{year}년 {month}월 지급완료 내역이 없습니다.</p>
+              <p className="text-gray-400 text-sm">{viewAll ? '지급완료 내역이 없습니다.' : `${year}년 ${month}월 지급완료 내역이 없습니다.`}</p>
             </div>
           ) : (
             <table className="w-full text-sm border-collapse">
@@ -282,7 +331,7 @@ export default function IncomeModal({ onClose }: { onClose: () => void }) {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r, i) => (
+                {displayRows.map((r, i) => (
                   <tr key={i} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-2.5 font-medium text-gray-900">{r.name}</td>
                     <td className="px-4 py-2.5 text-gray-500 font-mono text-xs">{r.idNumber}</td>
@@ -303,7 +352,7 @@ export default function IncomeModal({ onClose }: { onClose: () => void }) {
               {/* 합계 행 */}
               <tfoot>
                 <tr className="bg-teal-50 font-bold text-sm border-t-2 border-teal-200">
-                  <td className="px-4 py-3 text-teal-800" colSpan={3}>합계 ({rows.length}건)</td>
+                  <td className="px-4 py-3 text-teal-800" colSpan={3}>합계 ({displayRows.length}건)</td>
                   <td className="px-4 py-3 text-right text-gray-800">{totals.subtotal.toLocaleString()}</td>
                   <td className="px-4 py-3 text-right text-red-600">{totals.incomeTax.toLocaleString()}</td>
                   <td className="px-4 py-3 text-right text-orange-600">{totals.localTax.toLocaleString()}</td>
