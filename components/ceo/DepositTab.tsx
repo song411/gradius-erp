@@ -13,6 +13,8 @@ import * as XLSX from 'xlsx'
 import { PeriodFilter, isInPeriodFn, type PeriodState } from './PeriodFilter'
 
 type DepositStatus = '입금완료' | '부분입금' | '미입금'
+type SortKey = '입금상태순' | '경과일순' | '최신순'
+
 const DEPOSIT_COLOR: Record<DepositStatus, string> = {
   '미입금':  'bg-red-100 text-red-700',
   '부분입금': 'bg-yellow-100 text-yellow-700',
@@ -22,14 +24,32 @@ const STATUS_ORDER: Record<DepositStatus, number> = {
   '미입금': 0, '부분입금': 1, '입금완료': 2,
 }
 
+// 행사 종료일 기준 경과일 계산
+function elapsedDays(dateStr?: string | null): number | null {
+  if (!dateStr) return null
+  const d = new Date(dateStr)
+  const today = new Date(); today.setHours(0,0,0,0)
+  return Math.floor((today.getTime() - d.getTime()) / 86400000)
+}
+
+function ElapsedBadge({ days }: { days: number | null }) {
+  if (days === null) return <span className="text-gray-400 text-xs">-</span>
+  if (days < 0) return <span className="text-xs px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 font-semibold">D-{Math.abs(days)}</span>
+  if (days === 0) return <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 font-semibold">오늘</span>
+  if (days <= 14) return <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-700 font-semibold">D+{days}일</span>
+  if (days <= 30) return <span className="text-xs px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 font-semibold">D+{days}일</span>
+  return <span className="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-semibold">D+{days}일</span>
+}
+
 export default function DepositTab({ data }: { data: CeoData }) {
   const { settlements, inquiries, reload } = data
-  const [filter, setFilter]         = useState<'' | DepositStatus>('')
+  const [filter, setFilter]           = useState<'' | DepositStatus>('')
+  const [sortKey, setSortKey]         = useState<SortKey>('입금상태순')
   const [periodState, setPeriodState] = useState<PeriodState>({ period: '전체', customFrom: '', customTo: '' })
-  const [search, setSearch]         = useState('')
-  const [editId, setEditId]         = useState<string | null>(null)
-  const [editAmt, setEditAmt]       = useState('')
-  const [saving, setSaving]         = useState(false)
+  const [search, setSearch]           = useState('')
+  const [editId, setEditId]           = useState<string | null>(null)
+  const [editAmt, setEditAmt]         = useState('')
+  const [saving, setSaving]           = useState(false)
 
   // 정산 + 문의 조인
   const rows = useMemo(() => {
@@ -50,11 +70,22 @@ export default function DepositTab({ data }: { data: CeoData }) {
         return company.includes(q) || eventName.includes(q) || siteName.includes(q)
       })
       .sort((a, b) => {
+        if (sortKey === '경과일순') {
+          const ad = elapsedDays(a.inquiry?.event_end || a.inquiry?.event_start) ?? -9999
+          const bd = elapsedDays(b.inquiry?.event_end || b.inquiry?.event_start) ?? -9999
+          return bd - ad   // 경과일 많은 것(오래된 미수금) 먼저
+        }
+        if (sortKey === '최신순') {
+          const as = a.inquiry?.event_start || a.created_at || ''
+          const bs = b.inquiry?.event_start || b.created_at || ''
+          return bs.localeCompare(as)
+        }
+        // 기본: 입금상태순 (미입금 → 부분입금 → 완료)
         const ao = STATUS_ORDER[(a.deposit_status as DepositStatus)] ?? 3
         const bo = STATUS_ORDER[(b.deposit_status as DepositStatus)] ?? 3
         return ao - bo
       })
-  }, [settlements, inquiries, filter, periodState, search])
+  }, [settlements, inquiries, filter, sortKey, periodState, search])
 
   // 필터된 합계
   const filteredBilled   = rows.reduce((acc, s) => acc + (s.invoice_amount || s.supply_price || 0), 0)
@@ -197,6 +228,16 @@ export default function DepositTab({ data }: { data: CeoData }) {
             <Download className="h-3.5 w-3.5" />엑셀 내보내기
           </button>
         </div>
+        {/* 정렬 */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500 font-bold shrink-0">정렬:</span>
+          {(['입금상태순', '경과일순', '최신순'] as SortKey[]).map(s => (
+            <button key={s} onClick={() => setSortKey(s)}
+              className={`text-xs px-3 py-1.5 rounded-full border-2 font-semibold transition-colors ${sortKey === s ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-300 hover:border-gray-600'}`}>
+              {s}
+            </button>
+          ))}
+        </div>
         {/* 필터 결과 소계 */}
         <div className="flex items-center gap-4 text-xs text-gray-500 px-1">
           <span>결과 <b className="text-gray-800">{rows.length}건</b></span>
@@ -215,6 +256,7 @@ export default function DepositTab({ data }: { data: CeoData }) {
                 <th className="text-left px-4 py-3 text-xs font-bold text-gray-700">업체명</th>
                 <th className="text-left px-3 py-3 text-xs font-bold text-gray-700">행사명</th>
                 <th className="text-left px-3 py-3 text-xs font-bold text-gray-700">행사일</th>
+                <th className="text-center px-3 py-3 text-xs font-bold text-gray-700">경과일</th>
                 <th className="text-right px-3 py-3 text-xs font-bold text-gray-700">청구금액</th>
                 <th className="text-right px-3 py-3 text-xs font-bold text-gray-700">받은금액</th>
                 <th className="text-right px-3 py-3 text-xs font-bold text-gray-700">미수금</th>
@@ -225,7 +267,7 @@ export default function DepositTab({ data }: { data: CeoData }) {
             </thead>
             <tbody className="divide-y divide-gray-200">
               {rows.length === 0 && (
-                <tr><td colSpan={9} className="text-center py-10 text-gray-500">데이터가 없습니다.</td></tr>
+                <tr><td colSpan={10} className="text-center py-10 text-gray-500">데이터가 없습니다.</td></tr>
               )}
               {rows.map(s => {
                 const balance = s.balance ?? (s.supply_price - s.received_amount)
@@ -236,6 +278,9 @@ export default function DepositTab({ data }: { data: CeoData }) {
                     <td className="px-4 py-3 font-semibold text-gray-900">{s.company_name || s.inquiry?.company_name || '-'}</td>
                     <td className="px-3 py-3 text-gray-700 text-sm font-medium max-w-[160px] truncate">{s.inquiry?.event_name || '-'}</td>
                     <td className="px-3 py-3 text-gray-600 text-xs whitespace-nowrap">{eventDate || <span className="text-gray-400">-</span>}</td>
+                    <td className="px-3 py-3 text-center">
+                      <ElapsedBadge days={elapsedDays(s.inquiry?.event_end || s.inquiry?.event_start)} />
+                    </td>
                     <td className="px-3 py-3 text-right font-semibold text-gray-900">{formatKRW(s.invoice_amount || s.supply_price)}</td>
                     <td className="px-3 py-3 text-right">
                       {isEditing ? (

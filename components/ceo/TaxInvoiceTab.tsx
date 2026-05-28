@@ -22,12 +22,32 @@ interface SettRow extends Settlement {
 }
 
 type ViewTab = 'unissued' | 'issued' | 'all'
+type SortKey = '기본순' | '경과일순(긴급)' | '최신순'
+
+// 경과일 계산 유틸
+function elapsedDays(dateStr?: string | null): number | null {
+  if (!dateStr) return null
+  const d = new Date(dateStr)
+  const today = new Date(); today.setHours(0,0,0,0)
+  return Math.floor((today.getTime() - d.getTime()) / 86400000)
+}
+
+function ElapsedBadge({ days, label }: { days: number | null; label?: string }) {
+  if (days === null) return <span className="text-gray-400 text-xs">-</span>
+  const text = label || (days < 0 ? `D-${Math.abs(days)}` : days === 0 ? '오늘' : `D+${days}일`)
+  if (days < 0) return <span className="text-xs px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 font-semibold">{text}</span>
+  if (days === 0) return <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 font-semibold">{text}</span>
+  if (days <= 14) return <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-700 font-semibold">{text}</span>
+  if (days <= 30) return <span className="text-xs px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 font-semibold">{text}</span>
+  return <span className="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-semibold">{text}</span>
+}
 
 export default function TaxInvoiceTab({ data }: { data: CeoData }) {
   const { settlements, inquiries, customers, estimateItems, reload } = data
-  const [viewTab, setViewTab]       = useState<ViewTab>('unissued')
-  const [processing, setProcessing] = useState<string | null>(null)
-  const [search, setSearch]         = useState('')
+  const [viewTab, setViewTab]         = useState<ViewTab>('unissued')
+  const [sortKey, setSortKey]         = useState<SortKey>('기본순')
+  const [processing, setProcessing]   = useState<string | null>(null)
+  const [search, setSearch]           = useState('')
   const [periodState, setPeriodState] = useState<PeriodState>({ period: '전체', customFrom: '', customTo: '' })
 
   // 고객사 맵 (id → customer)
@@ -60,8 +80,24 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
     })
   }
 
+  const sortList = (list: SettRow[]) => {
+    if (sortKey === '경과일순(긴급)') {
+      return [...list].sort((a, b) => {
+        const ad = elapsedDays(a.inquiry?.event_end || a.inquiry?.event_start) ?? -9999
+        const bd = elapsedDays(b.inquiry?.event_end || b.inquiry?.event_start) ?? -9999
+        return bd - ad
+      })
+    }
+    if (sortKey === '최신순') {
+      return [...list].sort((a, b) =>
+        (b.inquiry?.event_start || b.created_at || '').localeCompare(a.inquiry?.event_start || a.created_at || '')
+      )
+    }
+    return list  // 기본순: event_start 오름차순 (이미 rows에서 정렬됨)
+  }
+
   const base    = viewTab === 'unissued' ? unissued : viewTab === 'issued' ? issued : periodFiltered
-  const current = applySearch(base)
+  const current = sortList(applySearch(base))
 
   async function handleIssue(id: string) {
     setProcessing(id)
@@ -119,6 +155,16 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
             <Input placeholder="업체명, 행사명 검색..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
           </div>
           <PeriodFilter value={periodState} onChange={setPeriodState} />
+        </div>
+        {/* 정렬 */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500 font-bold shrink-0">정렬:</span>
+          {(['기본순', '경과일순(긴급)', '최신순'] as SortKey[]).map(s => (
+            <button key={s} onClick={() => setSortKey(s)}
+              className={`text-xs px-3 py-1.5 rounded-full border-2 font-semibold transition-colors ${sortKey === s ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-300 hover:border-gray-600'}`}>
+              {s}
+            </button>
+          ))}
         </div>
         {(search || periodState.period !== '전체' || periodState.customFrom || periodState.customTo) && (
           <p className="text-xs text-gray-400 px-1">검색 결과 {current.length}건</p>
@@ -336,11 +382,12 @@ function TaxRow({
             )}
           </div>
 
-          {/* 일정·장소·인원 */}
+          {/* 일정·장소·인원 + 경과일 */}
           <div className="flex items-center gap-3 text-xs text-gray-600 mt-1 flex-wrap">
             {eventPeriod && <span>📅 {eventPeriod}</span>}
             {siteAddr && <span className="truncate max-w-[180px]">📍 {siteAddr}</span>}
             {inq?.required_staff ? <span>👤 {inq.required_staff}명</span> : null}
+            <ElapsedBadge days={elapsedDays(inq?.event_end || inq?.event_start)} />
           </div>
 
           {/* 견적서 품목 */}
