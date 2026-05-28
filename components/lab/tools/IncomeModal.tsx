@@ -50,25 +50,33 @@ export default function IncomeModal({ onClose }: { onClose: () => void }) {
   async function fetchData() {
     setLoading(true)
     try {
-      // 지급완료 전체 조회 후 클라이언트에서 월 필터
+      // 지급완료 전체 조회 (지급완료 + 완료 + 확인완료 모두 포함)
+      // - '지급완료': 신버전 ERP 이후 상태값
+      // - '완료': 구버전 이전 데이터 상태값
+      // - '확인완료': 중간 단계 완료 처리 케이스
       const [payouts, assignments] = await Promise.all([
-        db.list<Payout>('payouts', { filters: { status: '지급완료' }, order: 'paid_at', asc: true }),
+        db.list<Payout>('payouts', {
+          inFilter: { status: ['지급완료', '완료', '확인완료'] },
+          order: 'paid_at', asc: true,
+        }),
         db.list<Assignment>('assignments', { order: 'assigned_at', asc: true }),
       ])
 
-      // ── 중복 제거: 같은 assignment_id에 지급완료 payout이 여러 개면 첫 번째만 유지
+      // ── 중복 제거: 같은 assignment_id에 완료 payout이 여러 개면 첫 번째만 유지
+      // (정상적으로 두 번 입금한 경우는 assignment_id가 다르므로 두 건 모두 유지됨)
       const seenAssignmentIds = new Set<string>()
       const dedupedPayouts = payouts.filter(p => {
-        if (!p.assignment_id) return true   // assignment_id 없으면 그대로 포함
+        if (!p.assignment_id) return true
         if (seenAssignmentIds.has(p.assignment_id)) return false
         seenAssignmentIds.add(p.assignment_id)
         return true
       })
 
-      // 전체 보기가 아닐 때만 월 필터 적용
+      // 월별 보기: paid_at(지급일) 기준으로 필터 — 지급일 미입력 건 제외
+      // 전체 보기: 완료 상태 전체 표시 (paid_at 유무 무관)
       const monthStr = `${year}-${String(month).padStart(2, '0')}`
       const filtered = viewAll
-        ? dedupedPayouts.filter(p => p.paid_at)
+        ? dedupedPayouts
         : dedupedPayouts.filter(p => p.paid_at && p.paid_at.startsWith(monthStr))
 
       // assignment 맵 생성
