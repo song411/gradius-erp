@@ -61,9 +61,33 @@ interface ProjectRow {
 
 export default function ProfitTab({ data }: { data: CeoData }) {
   const { inquiries, settlements, payouts, assignments } = data
-  const [openRows, setOpenRows] = useState<Set<string>>(new Set())
-  const [sortKey, setSortKey]   = useState<'profit' | 'rate' | 'supply'>('profit')
-  const [search, setSearch]     = useState('')
+  type Period = '전체' | '이번달' | '이번분기' | '올해'
+  type RateFilter = '전체' | '30%이상' | '20-30%' | '10-20%' | '10%미만'
+
+  const [openRows, setOpenRows]     = useState<Set<string>>(new Set())
+  const [sortKey, setSortKey]       = useState<'profit' | 'rate' | 'supply'>('profit')
+  const [search, setSearch]         = useState('')
+  const [period, setPeriod]         = useState<Period>('전체')
+  const [rateFilter, setRateFilter] = useState<RateFilter>('전체')
+
+  function isInPeriod(dateStr: string | undefined | null): boolean {
+    if (period === '전체') return true
+    if (!dateStr) return false
+    const d = new Date(dateStr); const now = new Date()
+    if (period === '이번달') return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+    if (period === '이번분기') return d.getFullYear() === now.getFullYear() && Math.floor(d.getMonth() / 3) === Math.floor(now.getMonth() / 3)
+    if (period === '올해') return d.getFullYear() === now.getFullYear()
+    return true
+  }
+
+  function matchesRateFilter(rate: number): boolean {
+    if (rateFilter === '전체') return true
+    if (rateFilter === '30%이상') return rate >= 30
+    if (rateFilter === '20-30%')  return rate >= 20 && rate < 30
+    if (rateFilter === '10-20%')  return rate >= 10 && rate < 20
+    if (rateFilter === '10%미만') return rate < 10
+    return true
+  }
 
   // 프로젝트별 수익 계산
   const projects: ProjectRow[] = useMemo(() => {
@@ -108,16 +132,19 @@ export default function ProfitTab({ data }: { data: CeoData }) {
       })
   }, [inquiries, settlements, payouts, assignments, sortKey])
 
-  // 검색 필터
+  // 검색 + 기간 + 수익률 필터
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return projects
     return projects.filter(r => {
+      if (!isInPeriod(r.inquiry.event_start)) return false
+      if (!matchesRateFilter(r.profitRate)) return false
+      if (!q) return true
       const eventName = (r.inquiry.event_name || '').toLowerCase()
       const company   = (r.inquiry.company_name || '').toLowerCase()
       return eventName.includes(q) || company.includes(q)
     })
-  }, [projects, search])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projects, search, period, rateFilter])
 
   // 총계
   const totalSupply = filtered.reduce((s, r) => s + r.supplyPrice, 0)
@@ -147,19 +174,35 @@ export default function ProfitTab({ data }: { data: CeoData }) {
         </div>
       </div>
 
-      {/* 검색 */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-        <Input
-          placeholder="행사명, 업체명 검색..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="pl-9"
-        />
+      {/* 검색 + 기간 + 수익률 필터 */}
+      <div className="space-y-2">
+        <div className="flex gap-2 items-center">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Input placeholder="행사명, 업체명 검색..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+          </div>
+          <div className="flex gap-1">
+            {(['전체', '이번달', '이번분기', '올해'] as const).map(p => (
+              <button key={p} onClick={() => setPeriod(p)}
+                className={`text-xs px-3 py-1.5 rounded-full border-2 font-semibold transition-colors ${period === p ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-600 border-gray-300 hover:border-amber-400'}`}>
+                {p}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500 font-bold shrink-0">수익률:</span>
+          {(['전체', '30%이상', '20-30%', '10-20%', '10%미만'] as const).map(r => (
+            <button key={r} onClick={() => setRateFilter(r)}
+              className={`text-xs px-3 py-1.5 rounded-full border-2 font-semibold transition-colors ${rateFilter === r ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-gray-600 border-gray-300 hover:border-emerald-400'}`}>
+              {r}
+            </button>
+          ))}
+        </div>
+        {(search || period !== '전체' || rateFilter !== '전체') && (
+          <p className="text-xs text-gray-400 px-1">결과 {filtered.length}건</p>
+        )}
       </div>
-      {search && (
-        <p className="text-xs text-gray-400 -mt-2 px-1">"{search}" 검색 결과 {filtered.length}건</p>
-      )}
 
       {/* 정렬 */}
       <div className="flex items-center gap-2">

@@ -5,12 +5,31 @@ import { db } from '@/lib/supabase/api'
 import { formatKRW } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Building2, AlertCircle, CheckCircle2, Clock, Search } from 'lucide-react'
+import { Building2, AlertCircle, CheckCircle2, Clock, Search, Download } from 'lucide-react'
 import type { CeoData } from './CeoContent'
 import type { Settlement, Inquiry } from '@/lib/supabase/types'
 import { toast } from 'sonner'
+import * as XLSX from 'xlsx'
 
 type DepositStatus = '입금완료' | '부분입금' | '미입금'
+type Period = '전체' | '이번달' | '이번분기' | '올해'
+
+// 날짜 → 기간 내 여부 판별
+function isInPeriod(dateStr: string | undefined | null, period: Period): boolean {
+  if (period === '전체') return true
+  if (!dateStr) return false
+  const d   = new Date(dateStr)
+  const now = new Date()
+  if (period === '이번달') return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+  if (period === '이번분기') {
+    const q = Math.floor(now.getMonth() / 3)
+    return d.getFullYear() === now.getFullYear() && Math.floor(d.getMonth() / 3) === q
+  }
+  if (period === '올해') return d.getFullYear() === now.getFullYear()
+  return true
+}
+
+const PERIOD_BTNS: Period[] = ['전체', '이번달', '이번분기', '올해']
 const DEPOSIT_COLOR: Record<DepositStatus, string> = {
   '미입금':  'bg-red-100 text-red-700',
   '부분입금': 'bg-yellow-100 text-yellow-700',
@@ -23,6 +42,7 @@ const STATUS_ORDER: Record<DepositStatus, number> = {
 export default function DepositTab({ data }: { data: CeoData }) {
   const { settlements, inquiries, reload } = data
   const [filter, setFilter]         = useState<'' | DepositStatus>('')
+  const [period, setPeriod]         = useState<Period>('전체')
   const [search, setSearch]         = useState('')
   const [editId, setEditId]         = useState<string | null>(null)
   const [editAmt, setEditAmt]       = useState('')
@@ -37,6 +57,7 @@ export default function DepositTab({ data }: { data: CeoData }) {
         inquiry: inquiries.find(inq => inq.id === s.inquiry_id),
       }))
       .filter(s => !filter || s.deposit_status === filter)
+      .filter(s => isInPeriod(s.inquiry?.event_start, period))
       .filter(s => {
         if (!q) return true
         const company   = (s.company_name || s.inquiry?.company_name || '').toLowerCase()
@@ -49,7 +70,33 @@ export default function DepositTab({ data }: { data: CeoData }) {
         const bo = STATUS_ORDER[(b.deposit_status as DepositStatus)] ?? 3
         return ao - bo
       })
-  }, [settlements, inquiries, filter, search])
+  }, [settlements, inquiries, filter, period, search])
+
+  // 필터된 합계
+  const filteredBilled   = rows.reduce((acc, s) => acc + (s.invoice_amount || s.supply_price || 0), 0)
+  const filteredReceived = rows.reduce((acc, s) => acc + (s.received_amount || 0), 0)
+  const filteredBalance  = rows.reduce((acc, s) => acc + Math.max(0, (s.invoice_amount || s.supply_price || 0) - (s.received_amount || 0)), 0)
+
+  // 엑셀 내보내기
+  function exportExcel() {
+    if (rows.length === 0) { toast.error('내보낼 데이터가 없습니다.'); return }
+    const headers = ['업체명', '행사명', '청구금액', '받은금액', '미수금', '입금상태']
+    const data = rows.map(s => [
+      s.company_name || s.inquiry?.company_name || '-',
+      s.inquiry?.event_name || '-',
+      s.invoice_amount || s.supply_price || 0,
+      s.received_amount || 0,
+      Math.max(0, (s.invoice_amount || s.supply_price || 0) - (s.received_amount || 0)),
+      s.deposit_status || '-',
+    ])
+    data.push(['합계', '', filteredBilled, filteredReceived, filteredBalance, ''])
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...data])
+    ws['!cols'] = [{ wch: 16 }, { wch: 24 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 10 }]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, '업체입금현황')
+    XLSX.writeFile(wb, `업체입금현황_${new Date().toLocaleDateString('ko-KR').replace(/\. /g, '-').replace('.', '')}.xlsx`)
+    toast.success('엑셀 파일을 다운로드했습니다.')
+  }
 
   // 요약
   const billed = (s: Settlement) => s.invoice_amount || s.supply_price || 0
@@ -145,37 +192,42 @@ export default function DepositTab({ data }: { data: CeoData }) {
         </div>
       </div>
 
-      {/* 검색 + 필터 */}
-      <div className="flex flex-wrap gap-2 items-center">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <Input
-            placeholder="업체명, 행사명 검색..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-        {(['', '미입금', '부분입금', '입금완료'] as const).map(f => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`text-sm px-4 py-1.5 rounded-full border-2 font-semibold transition-colors ${
-              filter === f
-                ? 'bg-blue-600 text-white border-blue-600'
-                : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
-            }`}
-          >
-            {f || '전체'}
+      {/* 검색 + 기간 필터 + 엑셀 */}
+      <div className="space-y-2">
+        <div className="flex flex-wrap gap-2 items-center">
+          <div className="relative flex-1 min-w-[180px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Input placeholder="업체명, 행사명 검색..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+          </div>
+          {/* 기간 필터 */}
+          <div className="flex gap-1">
+            {PERIOD_BTNS.map(p => (
+              <button key={p} onClick={() => setPeriod(p)}
+                className={`text-xs px-3 py-1.5 rounded-full border-2 font-semibold transition-colors ${period === p ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-600 border-gray-300 hover:border-amber-400'}`}>
+                {p}
+              </button>
+            ))}
+          </div>
+          {/* 입금상태 필터 */}
+          {(['', '미입금', '부분입금', '입금완료'] as const).map(f => (
+            <button key={f} onClick={() => setFilter(f)}
+              className={`text-xs px-3 py-1.5 rounded-full border-2 font-semibold transition-colors ${filter === f ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'}`}>
+              {f || '전체상태'}
+            </button>
+          ))}
+          <button onClick={exportExcel}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-full text-xs font-semibold hover:bg-emerald-700 ml-auto">
+            <Download className="h-3.5 w-3.5" />엑셀 내보내기
           </button>
-        ))}
+        </div>
+        {/* 필터 결과 소계 */}
+        <div className="flex items-center gap-4 text-xs text-gray-500 px-1">
+          <span>결과 <b className="text-gray-800">{rows.length}건</b></span>
+          <span>청구 <b className="text-gray-800">{filteredBilled.toLocaleString()}원</b></span>
+          <span>수령 <b className="text-green-700">{filteredReceived.toLocaleString()}원</b></span>
+          <span>미수금 <b className="text-red-600">{filteredBalance.toLocaleString()}원</b></span>
+        </div>
       </div>
-
-      {search && (
-        <p className="text-xs text-gray-400 -mt-1 px-1">
-          "{search}" 검색 결과 {rows.length}건
-        </p>
-      )}
 
       {/* 테이블 */}
       <div className="bg-white rounded-xl border-2 border-gray-200 overflow-hidden shadow-sm">

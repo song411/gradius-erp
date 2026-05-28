@@ -67,7 +67,18 @@ interface GroupInfo {
   allDone:       boolean
 }
 
-type ViewTab = 'pending' | 'done'
+type ViewTab = 'pending' | 'done' | 'all'
+type Period = '전체' | '이번달' | '이번분기' | '올해'
+const PERIOD_BTNS: Period[] = ['전체', '이번달', '이번분기', '올해']
+function isInPeriod(dateStr: string | undefined | null, period: Period): boolean {
+  if (period === '전체') return true
+  if (!dateStr) return false
+  const d = new Date(dateStr); const now = new Date()
+  if (period === '이번달') return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+  if (period === '이번분기') return d.getFullYear() === now.getFullYear() && Math.floor(d.getMonth() / 3) === Math.floor(now.getMonth() / 3)
+  if (period === '올해') return d.getFullYear() === now.getFullYear()
+  return true
+}
 
 export default function PaymentTab({ data }: { data: CeoData }) {
   const { payouts, inquiries, assignments, reload } = data
@@ -79,6 +90,7 @@ export default function PaymentTab({ data }: { data: CeoData }) {
   )
   const [viewTab, setViewTab]           = useState<ViewTab>('pending')
   const [search, setSearch]             = useState('')
+  const [period, setPeriod]             = useState<Period>('전체')
   const [openGroups, setOpenGroups]     = useState<Set<string>>(new Set())
   const [processing, setProcessing]     = useState<string | null>(null)
 
@@ -119,7 +131,10 @@ export default function PaymentTab({ data }: { data: CeoData }) {
       .filter(g => g.allDone && g.payouts.length > 0)
       .sort((a, b) => (b.inquiry?.event_start || '').localeCompare(a.inquiry?.event_start || ''))
 
-    return { pendingGroups, doneGroups }
+    const allGroups = all.sort((a, b) =>
+      (b.inquiry?.event_start || '').localeCompare(a.inquiry?.event_start || ''))
+
+    return { pendingGroups, doneGroups, allGroups }
   }, [payouts, inquiries, asgMap])
 
   function toggleGroup(key: string) {
@@ -237,19 +252,25 @@ export default function PaymentTab({ data }: { data: CeoData }) {
   const totalPending  = pendingGroups.reduce((s, g) => s + g.pendingCount, 0)
   const pendingAmount = payouts.filter(p => isPending(p, asgMap)).reduce((s, p) => s + p.final_pay, 0)
 
-  // 검색 필터 적용 — 행사명 또는 소속 직원명으로 필터
+  // 검색 + 기간 필터 적용
   const filterGroups = (groups: GroupInfo[]) => {
     const q = search.trim().toLowerCase()
-    if (!q) return groups
-    return groups.filter(g => {
-      const eventName = (g.inquiry?.event_name || '').toLowerCase()
-      const company   = (g.inquiry?.company_name || '').toLowerCase()
-      const staffHit  = g.payouts.some(p => (p.staff_name || '').toLowerCase().includes(q))
-      return eventName.includes(q) || company.includes(q) || staffHit
-    })
+    return groups
+      .filter(g => isInPeriod(
+        viewTab === 'done' ? g.payouts.find(p => p.paid_at)?.paid_at : g.inquiry?.event_start,
+        period
+      ))
+      .filter(g => {
+        if (!q) return true
+        const eventName = (g.inquiry?.event_name || '').toLowerCase()
+        const company   = (g.inquiry?.company_name || '').toLowerCase()
+        const staffHit  = g.payouts.some(p => (p.staff_name || '').toLowerCase().includes(q))
+        return eventName.includes(q) || company.includes(q) || staffHit
+      })
   }
 
-  const activeGroups = filterGroups(viewTab === 'pending' ? pendingGroups : doneGroups)
+  const baseGroups   = viewTab === 'pending' ? pendingGroups : viewTab === 'done' ? doneGroups : allGroups
+  const activeGroups = filterGroups(baseGroups)
 
   return (
     <div className="space-y-4">
@@ -263,20 +284,26 @@ export default function PaymentTab({ data }: { data: CeoData }) {
           count={doneGroups.length} amount={0}              color="green" />
       </div>
 
-      {/* 검색 */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-        <Input
-          placeholder="행사명, 업체명, 직원명 검색..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="pl-9"
-        />
+      {/* 검색 + 기간 필터 */}
+      <div className="space-y-2">
+        <div className="flex gap-2 items-center">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Input placeholder="행사명, 업체명, 직원명 검색..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+          </div>
+          <div className="flex gap-1">
+            {PERIOD_BTNS.map(p => (
+              <button key={p} onClick={() => setPeriod(p)}
+                className={`text-xs px-3 py-1.5 rounded-full border-2 font-semibold transition-colors ${period === p ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-600 border-gray-300 hover:border-amber-400'}`}>
+                {p}
+              </button>
+            ))}
+          </div>
+        </div>
+        {(search || period !== '전체') && (
+          <p className="text-xs text-gray-400 px-1">결과 {activeGroups.length}건</p>
+        )}
       </div>
-      {search && (
-        <p className="text-xs text-gray-400 -mt-2 px-1">"{search}" 검색 결과 {activeGroups.length}건</p>
-      )}
-
       {/* 탭 + 엑셀 버튼 */}
       <div className="flex items-center justify-between">
         <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
@@ -284,6 +311,8 @@ export default function PaymentTab({ data }: { data: CeoData }) {
             label={`처리 필요 (${pendingGroups.length})`} color="red" />
           <TabBtn active={viewTab === 'done'}    onClick={() => setViewTab('done')}
             label={`지급완료 이력 (${doneGroups.length})`} color="green" />
+          <TabBtn active={viewTab === 'all'}     onClick={() => setViewTab('all')}
+            label={`전체보기 (${allGroups.length})`} color="blue" />
         </div>
         <Button variant="outline" onClick={handleExcel} className="gap-2 text-sm border-green-300 text-green-700 hover:bg-green-50">
           <FileSpreadsheet className="h-4 w-4" />
@@ -318,7 +347,7 @@ export default function PaymentTab({ data }: { data: CeoData }) {
 
       {/* 지급완료 탭: 전체 평면 테이블 */}
       {viewTab === 'done' && (() => {
-        const doneRows = doneGroups.flatMap(g =>
+        const doneRows = activeGroups.flatMap(g =>
           g.payouts
             .filter(p => !isHQByMap(p, asgMap) && (p.status === '지급완료' || p.status === '완료'))
             .map(p => ({ p, g }))
@@ -407,6 +436,31 @@ export default function PaymentTab({ data }: { data: CeoData }) {
           </div>
         )
       })()}
+
+      {/* 전체보기 탭: pending + done 합산 아코디언 */}
+      {viewTab === 'all' && (
+        activeGroups.length === 0 ? (
+          <div className="bg-white rounded-xl border p-12 text-center text-gray-400">
+            표시할 데이터가 없습니다.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {activeGroups.map(g => (
+              <GroupRow
+                key={g.key}
+                g={g}
+                asgMap={asgMap}
+                openGroups={openGroups}
+                toggleGroup={toggleGroup}
+                processing={processing}
+                handleMarkPaid={handleMarkPaid}
+                handleGroupExcel={handleGroupExcel}
+                done={g.allDone}
+              />
+            ))}
+          </div>
+        )
+      )}
     </div>
   )
 }
@@ -563,6 +617,8 @@ function GroupRow({ g, asgMap, openGroups, toggleGroup, processing, handleMarkPa
 function TabBtn({ active, onClick, label, color }: { active: boolean; onClick: () => void; label: string; color: string }) {
   const activeStyle = color === 'red'
     ? 'bg-white text-red-700 shadow-sm'
+    : color === 'blue'
+    ? 'bg-white text-blue-700 shadow-sm'
     : 'bg-white text-green-700 shadow-sm'
   return (
     <button

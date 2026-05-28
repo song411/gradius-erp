@@ -13,19 +13,32 @@ import { toast } from 'sonner'
 // 체결 이후 단계만 세금계산서 관리 대상
 const TAX_STATUSES = ['체결', '배정완료', '진행중', '완료', '정산완료']
 
+type Period = '전체' | '이번달' | '이번분기' | '올해'
+const PERIOD_BTNS: Period[] = ['전체', '이번달', '이번분기', '올해']
+function isInPeriod(dateStr: string | undefined | null, period: Period): boolean {
+  if (period === '전체') return true
+  if (!dateStr) return false
+  const d = new Date(dateStr); const now = new Date()
+  if (period === '이번달') return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+  if (period === '이번분기') return d.getFullYear() === now.getFullYear() && Math.floor(d.getMonth() / 3) === Math.floor(now.getMonth() / 3)
+  if (period === '올해') return d.getFullYear() === now.getFullYear()
+  return true
+}
+
 interface SettRow extends Settlement {
   inquiry?: Inquiry
   customer?: Customer
   items?: EstimateItem[]
 }
 
-type ViewTab = 'unissued' | 'issued'
+type ViewTab = 'unissued' | 'issued' | 'all'
 
 export default function TaxInvoiceTab({ data }: { data: CeoData }) {
   const { settlements, inquiries, customers, estimateItems, reload } = data
   const [viewTab, setViewTab]       = useState<ViewTab>('unissued')
   const [processing, setProcessing] = useState<string | null>(null)
   const [search, setSearch]         = useState('')
+  const [period, setPeriod]         = useState<Period>('전체')
 
   // 고객사 맵 (id → customer)
   const customerMap = new Map(customers.map(c => [c.id, c]))
@@ -41,8 +54,10 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
     .filter(s => TAX_STATUSES.includes(s.inquiry?.status || ''))
     .sort((a, b) => (a.inquiry?.event_start || '').localeCompare(b.inquiry?.event_start || ''))
 
-  const unissued = rows.filter(s => !s.tax_invoice_issued)
-  const issued   = rows.filter(s => s.tax_invoice_issued)
+  // 기간 필터 적용
+  const periodFiltered = rows.filter(s => isInPeriod(s.inquiry?.event_start, period))
+  const unissued = periodFiltered.filter(s => !s.tax_invoice_issued)
+  const issued   = periodFiltered.filter(s => s.tax_invoice_issued)
 
   const applySearch = (list: SettRow[]) => {
     const q = search.trim().toLowerCase()
@@ -55,7 +70,8 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
     })
   }
 
-  const current = applySearch(viewTab === 'unissued' ? unissued : issued)
+  const base    = viewTab === 'unissued' ? unissued : viewTab === 'issued' ? issued : periodFiltered
+  const current = applySearch(base)
 
   async function handleIssue(id: string) {
     setProcessing(id)
@@ -105,22 +121,29 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
         </a>
       </div>
 
-      {/* 검색 */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-        <Input
-          placeholder="업체명, 행사명 검색..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="pl-9"
-        />
+      {/* 검색 + 기간 필터 */}
+      <div className="space-y-2">
+        <div className="flex gap-2 items-center">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Input placeholder="업체명, 행사명 검색..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+          </div>
+          <div className="flex gap-1">
+            {PERIOD_BTNS.map(p => (
+              <button key={p} onClick={() => setPeriod(p)}
+                className={`text-xs px-3 py-1.5 rounded-full border-2 font-semibold transition-colors ${period === p ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-600 border-gray-300 hover:border-amber-400'}`}>
+                {p}
+              </button>
+            ))}
+          </div>
+        </div>
+        {(search || period !== '전체') && (
+          <p className="text-xs text-gray-400 px-1">검색 결과 {current.length}건</p>
+        )}
       </div>
-      {search && (
-        <p className="text-xs text-gray-400 -mt-2 px-1">"{search}" 검색 결과 {current.length}건</p>
-      )}
 
-      {/* 탭 전환 — 미발행 / 발행완료 */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* 탭 전환 — 미발행 / 발행완료 / 전체 */}
+      <div className="grid grid-cols-3 gap-3">
         <button
           onClick={() => setViewTab('unissued')}
           className={`rounded-xl p-4 flex items-start gap-3 border-2 transition-all text-left ${
@@ -166,21 +189,43 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
             <span className="ml-auto text-[10px] text-green-600 font-bold self-end">▶ 보는 중</span>
           )}
         </button>
+
+        <button
+          onClick={() => setViewTab('all')}
+          className={`rounded-xl p-4 flex items-start gap-3 border-2 transition-all text-left ${
+            viewTab === 'all'
+              ? 'bg-blue-50 border-blue-400 shadow-md ring-2 ring-blue-300'
+              : 'bg-white border-gray-200 hover:border-blue-200 hover:bg-blue-50/40'
+          }`}
+        >
+          <Receipt className={`h-5 w-5 mt-0.5 shrink-0 ${viewTab === 'all' ? 'text-blue-500' : 'text-gray-400'}`} />
+          <div>
+            <p className={`text-xs font-semibold ${viewTab === 'all' ? 'text-blue-700' : 'text-gray-500'}`}>전체보기</p>
+            <p className={`text-2xl font-extrabold ${viewTab === 'all' ? 'text-blue-700' : 'text-gray-700'}`}>
+              {periodFiltered.length}<span className="text-sm font-normal ml-0.5">건</span>
+            </p>
+            <p className={`text-xs font-medium mt-0.5 ${viewTab === 'all' ? 'text-blue-600' : 'text-gray-400'}`}>
+              {formatKRW(periodFiltered.reduce((s, r) => s + r.supply_price, 0))}
+            </p>
+          </div>
+          {viewTab === 'all' && (
+            <span className="ml-auto text-[10px] text-blue-600 font-bold self-end">▶ 보는 중</span>
+          )}
+        </button>
       </div>
 
       {/* 목록 */}
       <div className={`bg-white rounded-xl overflow-hidden shadow-sm border-2 ${
-        viewTab === 'unissued' ? 'border-red-200' : 'border-green-200'
+        viewTab === 'unissued' ? 'border-red-200' : viewTab === 'issued' ? 'border-green-200' : 'border-blue-200'
       }`}>
         <div className={`px-4 py-3 border-b-2 flex items-center gap-2 ${
-          viewTab === 'unissued' ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'
+          viewTab === 'unissued' ? 'bg-red-50 border-red-200' : viewTab === 'issued' ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'
         }`}>
-          {viewTab === 'unissued'
-            ? <AlertCircle className="h-4 w-4 text-red-600" />
-            : <CheckCircle2 className="h-4 w-4 text-green-600" />
-          }
-          <h3 className={`font-bold text-sm ${viewTab === 'unissued' ? 'text-red-700' : 'text-green-700'}`}>
-            {viewTab === 'unissued' ? `미발행 세금계산서 (${unissued.length}건)` : `발행완료 이력 (${issued.length}건)`}
+          {viewTab === 'unissued' ? <AlertCircle className="h-4 w-4 text-red-600" />
+            : viewTab === 'issued' ? <CheckCircle2 className="h-4 w-4 text-green-600" />
+            : <Receipt className="h-4 w-4 text-blue-600" />}
+          <h3 className={`font-bold text-sm ${viewTab === 'unissued' ? 'text-red-700' : viewTab === 'issued' ? 'text-green-700' : 'text-blue-700'}`}>
+            {viewTab === 'unissued' ? `미발행 세금계산서 (${current.length}건)` : viewTab === 'issued' ? `발행완료 이력 (${current.length}건)` : `전체 목록 (${current.length}건)`}
           </h3>
         </div>
 
