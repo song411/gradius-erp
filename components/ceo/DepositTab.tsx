@@ -212,27 +212,31 @@ export default function DepositTab({ data }: { data: CeoData }) {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-100 border-b-2 border-gray-200">
-                <th className="text-left px-4 py-3 text-xs font-bold text-gray-600">업체명</th>
-                <th className="text-left px-3 py-3 text-xs font-bold text-gray-600">행사명</th>
-                <th className="text-right px-3 py-3 text-xs font-bold text-gray-600">청구금액</th>
-                <th className="text-right px-3 py-3 text-xs font-bold text-gray-600">받은금액</th>
-                <th className="text-right px-3 py-3 text-xs font-bold text-gray-600">미수금</th>
-                <th className="text-center px-3 py-3 text-xs font-bold text-gray-600">입금상태</th>
-                <th className="text-right px-4 py-3 text-xs font-bold text-gray-600">액션</th>
+                <th className="text-left px-4 py-3 text-xs font-bold text-gray-700">업체명</th>
+                <th className="text-left px-3 py-3 text-xs font-bold text-gray-700">행사명</th>
+                <th className="text-left px-3 py-3 text-xs font-bold text-gray-700">행사일</th>
+                <th className="text-right px-3 py-3 text-xs font-bold text-gray-700">청구금액</th>
+                <th className="text-right px-3 py-3 text-xs font-bold text-gray-700">받은금액</th>
+                <th className="text-right px-3 py-3 text-xs font-bold text-gray-700">미수금</th>
+                <th className="text-center px-3 py-3 text-xs font-bold text-gray-700">입금상태</th>
+                <th className="text-center px-3 py-3 text-xs font-bold text-gray-700">계산서</th>
+                <th className="text-right px-4 py-3 text-xs font-bold text-gray-700">액션</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {rows.length === 0 && (
-                <tr><td colSpan={7} className="text-center py-10 text-gray-400">데이터가 없습니다.</td></tr>
+                <tr><td colSpan={9} className="text-center py-10 text-gray-500">데이터가 없습니다.</td></tr>
               )}
               {rows.map(s => {
                 const balance = s.balance ?? (s.supply_price - s.received_amount)
                 const isEditing = editId === s.id
+                const eventDate = s.inquiry?.event_start?.slice(0, 10)
                 return (
                   <tr key={s.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium text-gray-800">{s.company_name || s.inquiry?.company_name || '-'}</td>
-                    <td className="px-3 py-3 text-gray-600 text-xs max-w-[160px] truncate">{s.inquiry?.event_name || '-'}</td>
-                    <td className="px-3 py-3 text-right font-semibold">{formatKRW(s.invoice_amount || s.supply_price)}</td>
+                    <td className="px-4 py-3 font-semibold text-gray-900">{s.company_name || s.inquiry?.company_name || '-'}</td>
+                    <td className="px-3 py-3 text-gray-700 text-sm font-medium max-w-[160px] truncate">{s.inquiry?.event_name || '-'}</td>
+                    <td className="px-3 py-3 text-gray-600 text-xs whitespace-nowrap">{eventDate || <span className="text-gray-400">-</span>}</td>
+                    <td className="px-3 py-3 text-right font-semibold text-gray-900">{formatKRW(s.invoice_amount || s.supply_price)}</td>
                     <td className="px-3 py-3 text-right">
                       {isEditing ? (
                         <div className="flex items-center gap-1 justify-end">
@@ -259,9 +263,15 @@ export default function DepositTab({ data }: { data: CeoData }) {
                       {balance > 0 ? formatKRW(balance) : '-'}
                     </td>
                     <td className="px-3 py-3 text-center">
-                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${DEPOSIT_COLOR[s.deposit_status as DepositStatus] || 'bg-gray-100 text-gray-500'}`}>
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${DEPOSIT_COLOR[s.deposit_status as DepositStatus] || 'bg-gray-100 text-gray-600'}`}>
                         {s.deposit_status || '-'}
                       </span>
+                    </td>
+                    <td className="px-3 py-3 text-center">
+                      {s.tax_invoice_issued
+                        ? <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">발행완료</span>
+                        : <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">미발행</span>
+                      }
                     </td>
                     <td className="px-4 py-3 text-right">
                       {s.deposit_status !== '입금완료' && !isEditing && (

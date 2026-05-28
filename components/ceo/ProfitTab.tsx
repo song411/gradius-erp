@@ -209,14 +209,14 @@ export default function ProfitTab({ data }: { data: CeoData }) {
           <thead>
             <tr className="bg-gray-100 border-b-2 border-gray-200">
               <th className="w-8 px-3 py-3" />
-              <th className="text-left px-3 py-3 text-xs font-bold text-gray-600">행사명</th>
-              <th className="text-left px-3 py-3 text-xs font-bold text-gray-600">업체명</th>
-              <th className="text-left px-3 py-3 text-xs font-bold text-gray-600">행사일</th>
-              <th className="text-right px-3 py-3 text-xs font-bold text-gray-600">공급가액</th>
-              <th className="text-right px-3 py-3 text-xs font-bold text-gray-600">총지급</th>
-              <th className="text-right px-3 py-3 text-xs font-bold text-gray-600">순수익</th>
-              <th className="text-center px-3 py-3 text-xs font-bold text-gray-600">수익률</th>
-              <th className="text-center px-3 py-3 text-xs font-bold text-gray-600">상태</th>
+              <th className="text-left px-3 py-3 text-xs font-bold text-gray-700">행사명</th>
+              <th className="text-left px-3 py-3 text-xs font-bold text-gray-700">업체명</th>
+              <th className="text-left px-3 py-3 text-xs font-bold text-gray-700">행사일</th>
+              <th className="text-right px-3 py-3 text-xs font-bold text-gray-700">공급가액</th>
+              <th className="text-right px-3 py-3 text-xs font-bold text-gray-700">총지급</th>
+              <th className="text-right px-3 py-3 text-xs font-bold text-gray-700">순수익</th>
+              <th className="text-center px-3 py-3 text-xs font-bold text-gray-700">수익률</th>
+              <th className="text-center px-3 py-3 text-xs font-bold text-gray-700">상태</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
@@ -239,14 +239,14 @@ export default function ProfitTab({ data }: { data: CeoData }) {
                           : <ChevronRight className="h-3.5 w-3.5 opacity-40" />
                       )}
                     </td>
-                    <td className="px-3 py-3 font-medium text-gray-800 max-w-[160px]">
+                    <td className="px-3 py-3 font-semibold text-gray-900 max-w-[160px]">
                       <p className="truncate">{r.inquiry.event_name}</p>
                     </td>
-                    <td className="px-3 py-3 text-gray-500 text-xs">{r.inquiry.company_name || '-'}</td>
-                    <td className="px-3 py-3 text-gray-500 text-xs whitespace-nowrap">
+                    <td className="px-3 py-3 text-gray-700 text-xs font-medium">{r.inquiry.company_name || '-'}</td>
+                    <td className="px-3 py-3 text-gray-600 text-xs whitespace-nowrap">
                       {r.inquiry.event_start?.slice(0, 10) || '-'}
                     </td>
-                    <td className="px-3 py-3 text-right font-semibold">{formatKRW(r.supplyPrice)}</td>
+                    <td className="px-3 py-3 text-right font-semibold text-gray-900">{formatKRW(r.supplyPrice)}</td>
                     <td className="px-3 py-3 text-right text-orange-600">
                       {r.payoutCase === 'normal'  && formatKRW(r.totalPayout)}
                       {r.payoutCase === 'hq_only' && <span className="text-slate-400 text-xs">₩0 (본사)</span>}

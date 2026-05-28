@@ -312,22 +312,32 @@ function TaxRow({
 
           {/* 업체명 + 상태 배지 */}
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs text-gray-600 font-medium">
+            <span className="text-sm text-gray-800 font-semibold">
               {row.company_name || inq?.company_name || '업체명 미정'}
             </span>
             {inq?.status && (
-              <span className="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">{inq.status}</span>
+              <span className="text-xs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded font-medium">{inq.status}</span>
             )}
             {inq?.category && (
-              <span className="text-[10px] bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded">{inq.category}</span>
+              <span className="text-xs bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded font-medium">{inq.category}</span>
             )}
             {issued && (
-              <span className="text-[10px] text-green-600 font-semibold">✓ 발행완료</span>
+              <span className="text-xs text-green-700 font-semibold bg-green-50 px-1.5 py-0.5 rounded">✓ 발행완료</span>
+            )}
+            {/* 입금 상태 배지 — 메인 행에 바로 표시 */}
+            {row.deposit_status === '입금완료'
+              ? <span className="text-xs bg-green-100 text-green-700 font-semibold px-1.5 py-0.5 rounded">💰 입금완료</span>
+              : row.deposit_status === '부분입금'
+              ? <span className="text-xs bg-yellow-100 text-yellow-700 font-semibold px-1.5 py-0.5 rounded">💰 부분입금</span>
+              : <span className="text-xs bg-red-50 text-red-600 font-semibold px-1.5 py-0.5 rounded">💰 미입금</span>
+            }
+            {balance > 0 && (
+              <span className="text-xs bg-red-50 text-red-600 font-semibold px-1.5 py-0.5 rounded">잔액 {formatKRW(balance)}</span>
             )}
           </div>
 
           {/* 일정·장소·인원 */}
-          <div className="flex items-center gap-3 text-xs text-gray-400 mt-1 flex-wrap">
+          <div className="flex items-center gap-3 text-xs text-gray-600 mt-1 flex-wrap">
             {eventPeriod && <span>📅 {eventPeriod}</span>}
             {siteAddr && <span className="truncate max-w-[180px]">📍 {siteAddr}</span>}
             {inq?.required_staff ? <span>👤 {inq.required_staff}명</span> : null}
@@ -335,16 +345,15 @@ function TaxRow({
 
           {/* 견적서 품목 */}
           {itemSummary && (
-            <p className="text-[11px] text-indigo-600 font-medium mt-0.5">
+            <p className="text-xs text-indigo-600 font-medium mt-0.5">
               📋 {itemSummary}
             </p>
           )}
 
           {/* 금액 요약 */}
-          <div className="flex items-center gap-3 text-xs text-gray-400 mt-0.5 flex-wrap">
-            <span>공급가 {formatKRW(row.supply_price)}</span>
-            <span>청구 {formatKRW(row.invoice_amount || row.supply_price + row.vat)}</span>
-            {balance > 0 && <span className="text-red-500 font-semibold">잔액 {formatKRW(balance)}</span>}
+          <div className="flex items-center gap-3 text-xs text-gray-600 font-medium mt-0.5 flex-wrap">
+            <span>공급가 <b className="text-gray-800">{formatKRW(row.supply_price)}</b></span>
+            <span>청구 <b className="text-gray-800">{formatKRW(row.invoice_amount || row.supply_price + row.vat)}</b></span>
           </div>
         </div>
 

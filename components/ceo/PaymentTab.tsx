@@ -376,15 +376,15 @@ export default function PaymentTab({ data }: { data: CeoData }) {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b">
                   <tr>
-                    <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 whitespace-nowrap">입금일</th>
-                    <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500">행사명</th>
-                    <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500">업체명</th>
-                    <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500">이름</th>
-                    <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500">품목</th>
-                    <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500">은행</th>
-                    <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 whitespace-nowrap">계좌번호</th>
-                    <th className="text-right px-4 py-2.5 text-xs font-semibold text-gray-500 whitespace-nowrap">실수령액</th>
-                    <th className="px-3 py-2.5 text-xs font-semibold text-gray-500"></th>
+                    <th className="text-left px-4 py-2.5 text-xs font-bold text-gray-700 whitespace-nowrap">입금일</th>
+                    <th className="text-left px-3 py-2.5 text-xs font-bold text-gray-700">행사명</th>
+                    <th className="text-left px-3 py-2.5 text-xs font-bold text-gray-700">업체명</th>
+                    <th className="text-left px-3 py-2.5 text-xs font-bold text-gray-700">이름</th>
+                    <th className="text-left px-3 py-2.5 text-xs font-bold text-gray-700">품목</th>
+                    <th className="text-left px-3 py-2.5 text-xs font-bold text-gray-700">은행</th>
+                    <th className="text-left px-3 py-2.5 text-xs font-bold text-gray-700 whitespace-nowrap">계좌번호</th>
+                    <th className="text-right px-4 py-2.5 text-xs font-bold text-gray-700 whitespace-nowrap">실수령액</th>
+                    <th className="px-3 py-2.5"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -392,24 +392,24 @@ export default function PaymentTab({ data }: { data: CeoData }) {
                     const asg = p.assignment_id ? asgMap.get(p.assignment_id) : null
                     return (
                       <tr key={p.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-4 py-2.5 text-xs text-gray-500 whitespace-nowrap">
+                        <td className="px-4 py-2.5 text-xs font-medium text-gray-700 whitespace-nowrap">
                           {p.paid_at
                             ? new Date(p.paid_at).toLocaleDateString('ko-KR', { year: '2-digit', month: '2-digit', day: '2-digit' })
-                            : <span className="text-gray-300">-</span>
+                            : <span className="text-gray-400">-</span>
                           }
                         </td>
-                        <td className="px-3 py-2.5 text-xs font-medium text-gray-800 max-w-[140px] truncate">
+                        <td className="px-3 py-2.5 text-sm font-medium text-gray-800 max-w-[140px] truncate">
                           {g.inquiry?.event_name || '-'}
                         </td>
-                        <td className="px-3 py-2.5 text-xs text-gray-500 max-w-[100px] truncate">
+                        <td className="px-3 py-2.5 text-xs font-medium text-gray-700 max-w-[100px] truncate">
                           {g.inquiry?.company_name || '-'}
                         </td>
-                        <td className="px-3 py-2.5 font-semibold text-gray-800 whitespace-nowrap">
+                        <td className="px-3 py-2.5 font-semibold text-gray-900 whitespace-nowrap">
                           {p.staff_name || '-'}
                         </td>
-                        <td className="px-3 py-2.5 text-xs text-gray-500">{asg?.job_type || '-'}</td>
-                        <td className="px-3 py-2.5 text-xs text-gray-500">{p.bank_name || '-'}</td>
-                        <td className="px-3 py-2.5 text-xs font-mono text-gray-400">{p.account_number || '-'}</td>
+                        <td className="px-3 py-2.5 text-xs text-gray-600">{asg?.job_type || '-'}</td>
+                        <td className="px-3 py-2.5 text-xs text-gray-600">{p.bank_name || '-'}</td>
+                        <td className="px-3 py-2.5 text-xs font-mono text-gray-600">{p.account_number || '-'}</td>
                         <td className="px-4 py-2.5 text-right font-bold text-blue-700 whitespace-nowrap">
                           {formatKRW(p.final_pay)}
                         </td>
@@ -417,7 +417,7 @@ export default function PaymentTab({ data }: { data: CeoData }) {
                           <button
                             onClick={() => handleRevertPaid(p.id, p.staff_name || '')}
                             disabled={processing === p.id}
-                            className="text-[10px] text-orange-600 border border-orange-300 rounded-lg px-2 py-1 hover:bg-orange-50 transition-colors whitespace-nowrap disabled:opacity-40"
+                            className="text-xs text-orange-600 border border-orange-300 rounded-lg px-2 py-1 hover:bg-orange-50 transition-colors whitespace-nowrap disabled:opacity-40"
                           >
                             {processing === p.id ? '...' : '↩ 되돌리기'}
                           </button>
