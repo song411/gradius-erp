@@ -367,16 +367,22 @@ function OverviewTab({
         <p className="text-xs font-semibold text-slate-400 mb-4 tracking-wider uppercase">
           {year}년 연간 현황
         </p>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* 연간 매출 */}
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          {/* 연간 매출 (공급가액) */}
           <div className="bg-white/10 rounded-xl p-4 backdrop-blur-sm">
             <p className="text-xs text-slate-300 mb-1">{year}년 매출</p>
             <p className="text-2xl font-bold text-white leading-tight">{formatKRW(rev2026)}</p>
             <p className="text-[11px] text-slate-400 mt-1">체결 {settsYearCount}건 공급가액 합계</p>
           </div>
-          {/* 영업이익 */}
+          {/* VAT 포함 총매출 */}
+          <div className="bg-sky-500/20 rounded-xl p-4 border border-sky-500/30">
+            <p className="text-xs text-sky-300 mb-1">VAT 포함 총매출</p>
+            <p className="text-2xl font-bold text-sky-200 leading-tight">{formatKRW(Math.round(rev2026 * 1.1))}</p>
+            <p className="text-[11px] text-sky-400 mt-1">공급가액 × 1.1 (부가세 10%)</p>
+          </div>
+          {/* 매출총이익 */}
           <div className="bg-emerald-500/20 rounded-xl p-4 border border-emerald-500/30">
-            <p className="text-xs text-emerald-300 mb-1">영업이익</p>
+            <p className="text-xs text-emerald-300 mb-1">매출총이익</p>
             <p className="text-2xl font-bold text-emerald-200 leading-tight">{formatKRW(profit2026)}</p>
             <p className="text-[11px] text-emerald-400 mt-1">
               {rev2026 > 0 && payout2026 > 0
