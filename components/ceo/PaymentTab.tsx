@@ -300,7 +300,7 @@ export default function PaymentTab({ data }: { data: CeoData }) {
             ))}
           </div>
         </div>
-        {(search || period !== '전체') && (
+        {(search || period !== '전체') && viewTab !== 'done' && (
           <p className="text-xs text-gray-400 px-1">결과 {activeGroups.length}건</p>
         )}
       </div>
@@ -347,11 +347,22 @@ export default function PaymentTab({ data }: { data: CeoData }) {
 
       {/* 지급완료 탭: 전체 평면 테이블 */}
       {viewTab === 'done' && (() => {
-        const doneRows = activeGroups.flatMap(g =>
+        const allDoneRows = activeGroups.flatMap(g =>
           g.payouts
             .filter(p => !isHQByMap(p, asgMap) && (p.status === '지급완료' || p.status === '완료'))
             .map(p => ({ p, g }))
         ).sort((a, b) => (b.p.paid_at || '').localeCompare(a.p.paid_at || ''))
+
+        // 검색어가 있을 때 행(payout) 단위로도 추가 필터 → 직원명 검색 시 해당 직원 행만 표시
+        const q = search.trim().toLowerCase()
+        const doneRows = q
+          ? allDoneRows.filter(({ p, g }) => {
+              const staffMatch   = (p.staff_name || '').toLowerCase().includes(q)
+              const eventMatch   = (g.inquiry?.event_name || '').toLowerCase().includes(q)
+              const companyMatch = (g.inquiry?.company_name || '').toLowerCase().includes(q)
+              return staffMatch || eventMatch || companyMatch
+            })
+          : allDoneRows
 
         const totalAmt = doneRows.reduce((s, { p }) => s + p.final_pay, 0)
 
@@ -365,8 +376,13 @@ export default function PaymentTab({ data }: { data: CeoData }) {
             <div className="px-5 py-3 border-b bg-green-50 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <CheckCircle2 className="h-4 w-4 text-green-600" />
-                <span className="text-sm font-bold text-green-800">지급완료 전체 이력</span>
+                <span className="text-sm font-bold text-green-800">
+                  {q ? `"${search}" 검색 결과` : '지급완료 전체 이력'}
+                </span>
                 <span className="text-xs text-green-600 bg-green-100 rounded-full px-2 py-0.5">{doneRows.length}건</span>
+                {q && allDoneRows.length !== doneRows.length && (
+                  <span className="text-xs text-gray-400">전체 {allDoneRows.length}건 중</span>
+                )}
               </div>
               <span className="text-sm font-extrabold text-blue-700">{formatKRW(totalAmt)}</span>
             </div>
