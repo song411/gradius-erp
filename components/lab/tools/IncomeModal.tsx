@@ -40,10 +40,11 @@ export default function IncomeModal({ onClose }: { onClose: () => void }) {
   const now = new Date()
   const [year,  setYear]  = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
+  const [viewAll, setViewAll] = useState(false)   // 전체 보기 토글
   const [rows,  setRows]  = useState<IncomeRow[]>([])
   const [loading, setLoading] = useState(false)
 
-  useEffect(() => { fetchData() }, [year, month])   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchData() }, [year, month, viewAll])   // eslint-disable-line react-hooks/exhaustive-deps
 
   async function fetchData() {
     setLoading(true)
@@ -51,12 +52,14 @@ export default function IncomeModal({ onClose }: { onClose: () => void }) {
       // 지급완료 전체 조회 후 클라이언트에서 월 필터
       const [payouts, assignments] = await Promise.all([
         db.list<Payout>('payouts', { filters: { status: '지급완료' }, order: 'paid_at', asc: true }),
-        db.list<Assignment>('assignments'),
+        db.list<Assignment>('assignments', { order: 'assigned_at', asc: true }),
       ])
 
-      // 해당 월 필터
+      // 전체 보기가 아닐 때만 월 필터 적용
       const monthStr = `${year}-${String(month).padStart(2, '0')}`
-      const filtered = payouts.filter(p => p.paid_at && p.paid_at.startsWith(monthStr))
+      const filtered = viewAll
+        ? payouts.filter(p => p.paid_at)
+        : payouts.filter(p => p.paid_at && p.paid_at.startsWith(monthStr))
 
       // assignment 맵 생성
       const assignMap = new Map<string, Assignment>()
@@ -158,8 +161,10 @@ export default function IncomeModal({ onClose }: { onClose: () => void }) {
     }
 
     const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, `사업소득대장_${year}${String(month).padStart(2, '0')}`)
-    XLSX.writeFile(wb, `사업소득대장_${year}년_${month}월.xlsx`)
+    const sheetName = viewAll ? '사업소득대장_전체' : `사업소득대장_${year}${String(month).padStart(2, '0')}`
+    const fileName  = viewAll ? '사업소득대장_전체.xlsx' : `사업소득대장_${year}년_${month}월.xlsx`
+    XLSX.utils.book_append_sheet(wb, ws, sheetName)
+    XLSX.writeFile(wb, fileName)
     toast.success('엑셀 파일이 다운로드되었습니다.')
   }
 
@@ -185,17 +190,36 @@ export default function IncomeModal({ onClose }: { onClose: () => void }) {
 
         {/* 월 선택 + 내보내기 */}
         <div className="flex items-center justify-between px-6 py-3 border-b border-gray-100 bg-gray-50">
-          <div className="flex items-center gap-2">
-            <button onClick={prevMonth} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-500">
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <span className="text-base font-extrabold text-gray-900 min-w-[100px] text-center">
-              {year}년 {month}월
-            </span>
-            <button onClick={nextMonth} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-500">
-              <ChevronRight className="h-4 w-4" />
-            </button>
-            {loading && <Loader2 className="h-4 w-4 text-gray-400 animate-spin ml-1" />}
+          <div className="flex items-center gap-3">
+            {/* 전체/월별 토글 */}
+            <div className="flex bg-gray-200 rounded-lg p-0.5 text-xs font-semibold">
+              <button
+                onClick={() => setViewAll(false)}
+                className={`px-3 py-1 rounded-md transition-all ${!viewAll ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              >월별</button>
+              <button
+                onClick={() => setViewAll(true)}
+                className={`px-3 py-1 rounded-md transition-all ${viewAll ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              >전체</button>
+            </div>
+            {/* 월 선택 (월별 모드일 때만) */}
+            {!viewAll && (
+              <div className="flex items-center gap-1">
+                <button onClick={prevMonth} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-500">
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <span className="text-base font-extrabold text-gray-900 min-w-[100px] text-center">
+                  {year}년 {month}월
+                </span>
+                <button onClick={nextMonth} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-500">
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+            {viewAll && (
+              <span className="text-base font-extrabold text-gray-900">전체 지급 내역</span>
+            )}
+            {loading && <Loader2 className="h-4 w-4 text-gray-400 animate-spin" />}
           </div>
           <div className="flex items-center gap-3">
             <span className="text-xs text-gray-400">
