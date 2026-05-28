@@ -259,7 +259,9 @@ export default function PaymentTab({ data }: { data: CeoData }) {
       })
   }
 
-  const baseGroups   = viewTab === 'pending' ? pendingGroups : viewTab === 'done' ? doneGroups : allGroups
+  // 지급완료 이력 탭은 전체 행사 중 완료된 개별 payout 행 기준 → allGroups 사용
+  // (행사 일부 인원만 완료여도 해당 인원이 이력에 표시)
+  const baseGroups   = viewTab === 'pending' ? pendingGroups : allGroups
   const activeGroups = filterGroups(baseGroups)
 
   return (
@@ -271,7 +273,8 @@ export default function PaymentTab({ data }: { data: CeoData }) {
         <StatCard icon={<AlertTriangle className="h-5 w-5" />} label="D-Day 초과" sub="기한 경과"
           count={overdueCount}      amount={0}              color="red" />
         <StatCard icon={<CheckCircle2 className="h-5 w-5" />}  label="지급완료" sub="이력 탭에서 전체 확인"
-          count={doneGroups.length} amount={0}              color="green" />
+          count={payouts.filter(p => !isHQByMap(p, asgMap) && (p.status === '지급완료' || p.status === '완료')).length}
+          amount={0} color="green" />
       </div>
 
       {/* 검색 + 기간 필터 */}
