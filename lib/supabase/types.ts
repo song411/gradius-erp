@@ -98,6 +98,7 @@ export interface Inquiry {
   location?: string
   event_start?: string
   event_end?: string
+  date_memo?: string
   event_time?: string
   service_type?: string
   required_staff?: number

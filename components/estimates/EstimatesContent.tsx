@@ -186,20 +186,31 @@ export default function EstimatesContent() {
         })
         if (existingSettlements.length === 0) {
           const inq = est.inquiries
+
+          // 파견기간: 행사 시작~종료일, 날짜 미정이면 date_memo 사용
+          const dispatchPeriod = (() => {
+            if (inq?.event_start && inq?.event_end) return `${inq.event_start} ~ ${inq.event_end}`
+            if (inq?.event_start) return inq.event_start
+            return inq?.date_memo || ''
+          })()
+
           const settlementPayload = {
-            inquiry_id: est.inquiry_id,
-            company_name: est.company_name || inq?.company_name || '',
-            site_name: est.site_name || inq?.event_name || '',
-            invoice_amount: est.total_price || 0,
-            supply_price: est.supply_price || 0,
-            vat: est.vat || 0,
-            received_amount: 0,
-            progress: '계약체결',
-            deposit_status: '미입금',
+            inquiry_id:       est.inquiry_id,
+            company_name:     est.company_name || inq?.company_name || '',
+            site_name:        est.site_name || inq?.event_name || '',
+            dispatch_period:  dispatchPeriod,
+            manager:          est.manager || inq?.contact_name || '',
+            site_address:     est.site_address || inq?.location || '',
+            invoice_amount:   est.total_price || 0,
+            supply_price:     est.supply_price || 0,
+            vat:              est.vat || 0,
+            received_amount:  0,
+            progress:         '계약체결',
+            deposit_status:   '미입금',
             tax_invoice_issued: false,
-            payout_amount: est.cost_price || 0,
+            payout_amount:    est.cost_price || 0,
             invoice_calc_amount: est.total_price || 0,
-            withholding_tax: 0,
+            withholding_tax:  0,
           }
           await db.insert('settlements', settlementPayload)
         }
