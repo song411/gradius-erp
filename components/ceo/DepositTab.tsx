@@ -10,26 +10,9 @@ import type { CeoData } from './CeoContent'
 import type { Settlement, Inquiry } from '@/lib/supabase/types'
 import { toast } from 'sonner'
 import * as XLSX from 'xlsx'
+import { PeriodFilter, isInPeriodFn, type PeriodState } from './PeriodFilter'
 
 type DepositStatus = '입금완료' | '부분입금' | '미입금'
-type Period = '전체' | '이번달' | '이번분기' | '올해'
-
-// 날짜 → 기간 내 여부 판별
-function isInPeriod(dateStr: string | undefined | null, period: Period): boolean {
-  if (period === '전체') return true
-  if (!dateStr) return false
-  const d   = new Date(dateStr)
-  const now = new Date()
-  if (period === '이번달') return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
-  if (period === '이번분기') {
-    const q = Math.floor(now.getMonth() / 3)
-    return d.getFullYear() === now.getFullYear() && Math.floor(d.getMonth() / 3) === q
-  }
-  if (period === '올해') return d.getFullYear() === now.getFullYear()
-  return true
-}
-
-const PERIOD_BTNS: Period[] = ['전체', '이번달', '이번분기', '올해']
 const DEPOSIT_COLOR: Record<DepositStatus, string> = {
   '미입금':  'bg-red-100 text-red-700',
   '부분입금': 'bg-yellow-100 text-yellow-700',
@@ -42,7 +25,7 @@ const STATUS_ORDER: Record<DepositStatus, number> = {
 export default function DepositTab({ data }: { data: CeoData }) {
   const { settlements, inquiries, reload } = data
   const [filter, setFilter]         = useState<'' | DepositStatus>('')
-  const [period, setPeriod]         = useState<Period>('전체')
+  const [periodState, setPeriodState] = useState<PeriodState>({ period: '전체', customFrom: '', customTo: '' })
   const [search, setSearch]         = useState('')
   const [editId, setEditId]         = useState<string | null>(null)
   const [editAmt, setEditAmt]       = useState('')
@@ -57,7 +40,7 @@ export default function DepositTab({ data }: { data: CeoData }) {
         inquiry: inquiries.find(inq => inq.id === s.inquiry_id),
       }))
       .filter(s => !filter || s.deposit_status === filter)
-      .filter(s => isInPeriod(s.inquiry?.event_start, period))
+      .filter(s => isInPeriodFn(s.inquiry?.event_start, periodState))
       .filter(s => {
         if (!q) return true
         const company   = (s.company_name || s.inquiry?.company_name || '').toLowerCase()
@@ -70,7 +53,7 @@ export default function DepositTab({ data }: { data: CeoData }) {
         const bo = STATUS_ORDER[(b.deposit_status as DepositStatus)] ?? 3
         return ao - bo
       })
-  }, [settlements, inquiries, filter, period, search])
+  }, [settlements, inquiries, filter, periodState, search])
 
   // 필터된 합계
   const filteredBilled   = rows.reduce((acc, s) => acc + (s.invoice_amount || s.supply_price || 0), 0)
@@ -200,14 +183,7 @@ export default function DepositTab({ data }: { data: CeoData }) {
             <Input placeholder="업체명, 행사명 검색..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
           </div>
           {/* 기간 필터 */}
-          <div className="flex gap-1">
-            {PERIOD_BTNS.map(p => (
-              <button key={p} onClick={() => setPeriod(p)}
-                className={`text-xs px-3 py-1.5 rounded-full border-2 font-semibold transition-colors ${period === p ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-600 border-gray-300 hover:border-amber-400'}`}>
-                {p}
-              </button>
-            ))}
-          </div>
+          <PeriodFilter value={periodState} onChange={setPeriodState} />
           {/* 입금상태 필터 */}
           {(['', '미입금', '부분입금', '입금완료'] as const).map(f => (
             <button key={f} onClick={() => setFilter(f)}

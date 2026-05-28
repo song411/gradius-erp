@@ -68,17 +68,7 @@ interface GroupInfo {
 }
 
 type ViewTab = 'pending' | 'done' | 'all'
-type Period = '전체' | '이번달' | '이번분기' | '올해'
-const PERIOD_BTNS: Period[] = ['전체', '이번달', '이번분기', '올해']
-function isInPeriod(dateStr: string | undefined | null, period: Period): boolean {
-  if (period === '전체') return true
-  if (!dateStr) return false
-  const d = new Date(dateStr); const now = new Date()
-  if (period === '이번달') return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
-  if (period === '이번분기') return d.getFullYear() === now.getFullYear() && Math.floor(d.getMonth() / 3) === Math.floor(now.getMonth() / 3)
-  if (period === '올해') return d.getFullYear() === now.getFullYear()
-  return true
-}
+import { PeriodFilter, isInPeriodFn, type PeriodState } from './PeriodFilter'
 
 export default function PaymentTab({ data }: { data: CeoData }) {
   const { payouts, inquiries, assignments, reload } = data
@@ -90,7 +80,7 @@ export default function PaymentTab({ data }: { data: CeoData }) {
   )
   const [viewTab, setViewTab]           = useState<ViewTab>('pending')
   const [search, setSearch]             = useState('')
-  const [period, setPeriod]             = useState<Period>('전체')
+  const [periodState, setPeriodState]   = useState<PeriodState>({ period: '전체', customFrom: '', customTo: '' })
   const [openGroups, setOpenGroups]     = useState<Set<string>>(new Set())
   const [processing, setProcessing]     = useState<string | null>(null)
 
@@ -256,9 +246,9 @@ export default function PaymentTab({ data }: { data: CeoData }) {
   const filterGroups = (groups: GroupInfo[]) => {
     const q = search.trim().toLowerCase()
     return groups
-      .filter(g => isInPeriod(
+      .filter(g => isInPeriodFn(
         viewTab === 'done' ? g.payouts.find(p => p.paid_at)?.paid_at : g.inquiry?.event_start,
-        period
+        periodState
       ))
       .filter(g => {
         if (!q) return true
@@ -291,16 +281,9 @@ export default function PaymentTab({ data }: { data: CeoData }) {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <Input placeholder="행사명, 업체명, 직원명 검색..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
           </div>
-          <div className="flex gap-1">
-            {PERIOD_BTNS.map(p => (
-              <button key={p} onClick={() => setPeriod(p)}
-                className={`text-xs px-3 py-1.5 rounded-full border-2 font-semibold transition-colors ${period === p ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-600 border-gray-300 hover:border-amber-400'}`}>
-                {p}
-              </button>
-            ))}
-          </div>
+          <PeriodFilter value={periodState} onChange={setPeriodState} />
         </div>
-        {(search || period !== '전체') && viewTab !== 'done' && (
+        {(search || periodState.period !== '전체' || periodState.customFrom || periodState.customTo) && viewTab !== 'done' && (
           <p className="text-xs text-gray-400 px-1">결과 {activeGroups.length}건</p>
         )}
       </div>

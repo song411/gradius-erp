@@ -6,6 +6,7 @@ import { ChevronDown, ChevronRight, TrendingUp, TrendingDown, Minus, Clock, User
 import { Input } from '@/components/ui/input'
 import type { CeoData } from './CeoContent'
 import type { Inquiry, Settlement, Payout } from '@/lib/supabase/types'
+import { PeriodFilter, isInPeriodFn, type PeriodState } from './PeriodFilter'
 
 // 본사 인원 목록
 const HQ_NAMES = new Set(['최규성', '송무재', '여지은', '김영찬'])
@@ -61,24 +62,13 @@ interface ProjectRow {
 
 export default function ProfitTab({ data }: { data: CeoData }) {
   const { inquiries, settlements, payouts, assignments } = data
-  type Period = '전체' | '이번달' | '이번분기' | '올해'
   type RateFilter = '전체' | '30%이상' | '20-30%' | '10-20%' | '10%미만'
 
-  const [openRows, setOpenRows]     = useState<Set<string>>(new Set())
-  const [sortKey, setSortKey]       = useState<'profit' | 'rate' | 'supply'>('profit')
-  const [search, setSearch]         = useState('')
-  const [period, setPeriod]         = useState<Period>('전체')
-  const [rateFilter, setRateFilter] = useState<RateFilter>('전체')
-
-  function isInPeriod(dateStr: string | undefined | null): boolean {
-    if (period === '전체') return true
-    if (!dateStr) return false
-    const d = new Date(dateStr); const now = new Date()
-    if (period === '이번달') return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
-    if (period === '이번분기') return d.getFullYear() === now.getFullYear() && Math.floor(d.getMonth() / 3) === Math.floor(now.getMonth() / 3)
-    if (period === '올해') return d.getFullYear() === now.getFullYear()
-    return true
-  }
+  const [openRows, setOpenRows]       = useState<Set<string>>(new Set())
+  const [sortKey, setSortKey]         = useState<'profit' | 'rate' | 'supply'>('profit')
+  const [search, setSearch]           = useState('')
+  const [periodState, setPeriodState] = useState<PeriodState>({ period: '전체', customFrom: '', customTo: '' })
+  const [rateFilter, setRateFilter]   = useState<RateFilter>('전체')
 
   function matchesRateFilter(rate: number): boolean {
     if (rateFilter === '전체') return true
@@ -136,7 +126,7 @@ export default function ProfitTab({ data }: { data: CeoData }) {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return projects.filter(r => {
-      if (!isInPeriod(r.inquiry.event_start)) return false
+      if (!isInPeriodFn(r.inquiry.event_start, periodState)) return false
       if (!matchesRateFilter(r.profitRate)) return false
       if (!q) return true
       const eventName = (r.inquiry.event_name || '').toLowerCase()
@@ -144,7 +134,7 @@ export default function ProfitTab({ data }: { data: CeoData }) {
       return eventName.includes(q) || company.includes(q)
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projects, search, period, rateFilter])
+  }, [projects, search, periodState, rateFilter])
 
   // 총계
   const totalSupply = filtered.reduce((s, r) => s + r.supplyPrice, 0)
@@ -181,14 +171,7 @@ export default function ProfitTab({ data }: { data: CeoData }) {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <Input placeholder="행사명, 업체명 검색..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
           </div>
-          <div className="flex gap-1">
-            {(['전체', '이번달', '이번분기', '올해'] as const).map(p => (
-              <button key={p} onClick={() => setPeriod(p)}
-                className={`text-xs px-3 py-1.5 rounded-full border-2 font-semibold transition-colors ${period === p ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-600 border-gray-300 hover:border-amber-400'}`}>
-                {p}
-              </button>
-            ))}
-          </div>
+          <PeriodFilter value={periodState} onChange={setPeriodState} />
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs text-gray-500 font-bold shrink-0">수익률:</span>
@@ -199,7 +182,7 @@ export default function ProfitTab({ data }: { data: CeoData }) {
             </button>
           ))}
         </div>
-        {(search || period !== '전체' || rateFilter !== '전체') && (
+        {(search || periodState.period !== '전체' || periodState.customFrom || periodState.customTo || rateFilter !== '전체') && (
           <p className="text-xs text-gray-400 px-1">결과 {filtered.length}건</p>
         )}
       </div>

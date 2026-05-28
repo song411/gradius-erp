@@ -13,17 +13,7 @@ import { toast } from 'sonner'
 // 체결 이후 단계만 세금계산서 관리 대상
 const TAX_STATUSES = ['체결', '배정완료', '진행중', '완료', '정산완료']
 
-type Period = '전체' | '이번달' | '이번분기' | '올해'
-const PERIOD_BTNS: Period[] = ['전체', '이번달', '이번분기', '올해']
-function isInPeriod(dateStr: string | undefined | null, period: Period): boolean {
-  if (period === '전체') return true
-  if (!dateStr) return false
-  const d = new Date(dateStr); const now = new Date()
-  if (period === '이번달') return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
-  if (period === '이번분기') return d.getFullYear() === now.getFullYear() && Math.floor(d.getMonth() / 3) === Math.floor(now.getMonth() / 3)
-  if (period === '올해') return d.getFullYear() === now.getFullYear()
-  return true
-}
+import { PeriodFilter, isInPeriodFn, type PeriodState } from './PeriodFilter'
 
 interface SettRow extends Settlement {
   inquiry?: Inquiry
@@ -38,7 +28,7 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
   const [viewTab, setViewTab]       = useState<ViewTab>('unissued')
   const [processing, setProcessing] = useState<string | null>(null)
   const [search, setSearch]         = useState('')
-  const [period, setPeriod]         = useState<Period>('전체')
+  const [periodState, setPeriodState] = useState<PeriodState>({ period: '전체', customFrom: '', customTo: '' })
 
   // 고객사 맵 (id → customer)
   const customerMap = new Map(customers.map(c => [c.id, c]))
@@ -55,7 +45,7 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
     .sort((a, b) => (a.inquiry?.event_start || '').localeCompare(b.inquiry?.event_start || ''))
 
   // 기간 필터 적용
-  const periodFiltered = rows.filter(s => isInPeriod(s.inquiry?.event_start, period))
+  const periodFiltered = rows.filter(s => isInPeriodFn(s.inquiry?.event_start, periodState))
   const unissued = periodFiltered.filter(s => !s.tax_invoice_issued)
   const issued   = periodFiltered.filter(s => s.tax_invoice_issued)
 
@@ -128,16 +118,9 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <Input placeholder="업체명, 행사명 검색..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
           </div>
-          <div className="flex gap-1">
-            {PERIOD_BTNS.map(p => (
-              <button key={p} onClick={() => setPeriod(p)}
-                className={`text-xs px-3 py-1.5 rounded-full border-2 font-semibold transition-colors ${period === p ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-600 border-gray-300 hover:border-amber-400'}`}>
-                {p}
-              </button>
-            ))}
-          </div>
+          <PeriodFilter value={periodState} onChange={setPeriodState} />
         </div>
-        {(search || period !== '전체') && (
+        {(search || periodState.period !== '전체' || periodState.customFrom || periodState.customTo) && (
           <p className="text-xs text-gray-400 px-1">검색 결과 {current.length}건</p>
         )}
       </div>
