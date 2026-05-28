@@ -11,6 +11,7 @@ import type { Payout, Assignment } from '@/lib/supabase/types'
 interface IncomeRow {
   name:         string
   idNumber:     string
+  siteName:     string   // 현장명 (어떤 행사인지 구분)
   subtotal:     number   // 일비 (과세소득)
   incomeTax:    number   // 소득세 3%
   localTax:     number   // 지방소득세 0.3%
@@ -55,11 +56,20 @@ export default function IncomeModal({ onClose }: { onClose: () => void }) {
         db.list<Assignment>('assignments', { order: 'assigned_at', asc: true }),
       ])
 
+      // ── 중복 제거: 같은 assignment_id에 지급완료 payout이 여러 개면 첫 번째만 유지
+      const seenAssignmentIds = new Set<string>()
+      const dedupedPayouts = payouts.filter(p => {
+        if (!p.assignment_id) return true   // assignment_id 없으면 그대로 포함
+        if (seenAssignmentIds.has(p.assignment_id)) return false
+        seenAssignmentIds.add(p.assignment_id)
+        return true
+      })
+
       // 전체 보기가 아닐 때만 월 필터 적용
       const monthStr = `${year}-${String(month).padStart(2, '0')}`
       const filtered = viewAll
-        ? payouts.filter(p => p.paid_at)
-        : payouts.filter(p => p.paid_at && p.paid_at.startsWith(monthStr))
+        ? dedupedPayouts.filter(p => p.paid_at)
+        : dedupedPayouts.filter(p => p.paid_at && p.paid_at.startsWith(monthStr))
 
       // assignment 맵 생성
       const assignMap = new Map<string, Assignment>()
@@ -98,6 +108,7 @@ export default function IncomeModal({ onClose }: { onClose: () => void }) {
         return {
           name:        p.staff_name || '-',
           idNumber:    p.id_number  || '-',
+          siteName:    p.site_name  || '-',
           subtotal,
           incomeTax,
           localTax,
@@ -137,24 +148,24 @@ export default function IncomeModal({ onClose }: { onClose: () => void }) {
   function exportExcel() {
     if (rows.length === 0) { toast.error('내보낼 데이터가 없습니다.'); return }
 
-    const headers = ['이름', '주민번호', '일비(과세소득)', '소득세(3%)', '지방소득세(0.3%)', '지급액', '지급일', '팀원 정보']
+    const headers = ['이름', '주민번호', '현장명', '일비(과세소득)', '소득세(3%)', '지방소득세(0.3%)', '지급액', '지급일', '팀원 정보']
     const data = rows.map(r => [
-      r.name, r.idNumber, r.subtotal, r.incomeTax, r.localTax, r.finalPay, r.paidAt, r.teamMembers,
+      r.name, r.idNumber, r.siteName, r.subtotal, r.incomeTax, r.localTax, r.finalPay, r.paidAt, r.teamMembers,
     ])
 
     // 합계 행
-    data.push(['합계', '', totals.subtotal, totals.incomeTax, totals.localTax, totals.finalPay, '', ''])
+    data.push(['합계', '', '', totals.subtotal, totals.incomeTax, totals.localTax, totals.finalPay, '', ''])
 
     const ws = XLSX.utils.aoa_to_sheet([headers, ...data])
 
     // 컬럼 너비
     ws['!cols'] = [
-      { wch: 10 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 40 },
+      { wch: 10 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 40 },
     ]
 
-    // 숫자 포맷 (C~F열, 2행부터)
+    // 숫자 포맷 (D~G열, 2행부터)
     for (let ri = 1; ri <= rows.length + 1; ri++) {
-      ['C', 'D', 'E', 'F'].forEach(col => {
+      ['D', 'E', 'F', 'G'].forEach(col => {
         const cell = ws[`${col}${ri + 1}`]
         if (cell && typeof cell.v === 'number') cell.z = '#,##0'
       })
@@ -253,6 +264,7 @@ export default function IncomeModal({ onClose }: { onClose: () => void }) {
                 <tr className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide sticky top-0 z-10">
                   <th className="px-4 py-2.5 text-left border-b border-gray-100 whitespace-nowrap">이름</th>
                   <th className="px-4 py-2.5 text-left border-b border-gray-100 whitespace-nowrap">주민번호</th>
+                  <th className="px-4 py-2.5 text-left border-b border-gray-100 whitespace-nowrap">현장명</th>
                   <th className="px-4 py-2.5 text-right border-b border-gray-100 whitespace-nowrap">일비 (과세소득)</th>
                   <th className="px-4 py-2.5 text-right border-b border-gray-100 whitespace-nowrap">소득세 (3%)</th>
                   <th className="px-4 py-2.5 text-right border-b border-gray-100 whitespace-nowrap">지방소득세 (0.3%)</th>
@@ -266,6 +278,7 @@ export default function IncomeModal({ onClose }: { onClose: () => void }) {
                   <tr key={i} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-2.5 font-medium text-gray-900">{r.name}</td>
                     <td className="px-4 py-2.5 text-gray-500 font-mono text-xs">{r.idNumber}</td>
+                    <td className="px-4 py-2.5 text-gray-600 text-xs max-w-[120px] truncate">{r.siteName}</td>
                     <td className="px-4 py-2.5 text-right text-gray-800 font-semibold">{r.subtotal.toLocaleString()}</td>
                     <td className="px-4 py-2.5 text-right text-red-500">{r.incomeTax.toLocaleString()}</td>
                     <td className="px-4 py-2.5 text-right text-orange-500">{r.localTax.toLocaleString()}</td>
@@ -282,7 +295,7 @@ export default function IncomeModal({ onClose }: { onClose: () => void }) {
               {/* 합계 행 */}
               <tfoot>
                 <tr className="bg-teal-50 font-bold text-sm border-t-2 border-teal-200">
-                  <td className="px-4 py-3 text-teal-800" colSpan={2}>합계 ({rows.length}건)</td>
+                  <td className="px-4 py-3 text-teal-800" colSpan={3}>합계 ({rows.length}건)</td>
                   <td className="px-4 py-3 text-right text-gray-800">{totals.subtotal.toLocaleString()}</td>
                   <td className="px-4 py-3 text-right text-red-600">{totals.incomeTax.toLocaleString()}</td>
                   <td className="px-4 py-3 text-right text-orange-600">{totals.localTax.toLocaleString()}</td>
