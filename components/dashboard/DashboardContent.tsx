@@ -157,9 +157,11 @@ export default function DashboardContent() {
   const yearInqIds = new Set(inqsYear.map(i => i.id))
   // dedupedSettlements 재활용 (위에서 이미 선언)
   const settsYear  = dedupedSettlements.filter(s => s.inquiry_id && yearInqIds.has(s.inquiry_id))
-  const rev2026    = settsYear.reduce((s, r) => s + (r.supply_price || 0), 0)
-  const payout2026 = settsYear.reduce((s, r) => s + getActualPayout(r.inquiry_id, r.payout_amount), 0)
-  const profit2026 = rev2026 - payout2026
+  const rev2026         = settsYear.reduce((s, r) => s + (r.supply_price || 0), 0)
+  // 실제 청구금액(invoice_amount) 합계 — 없으면 supply_price + vat fallback
+  const invoiceTotal2026 = settsYear.reduce((s, r) => s + (r.invoice_amount || (r.supply_price || 0) + (r.vat || Math.floor((r.supply_price || 0) * 0.1))), 0)
+  const payout2026      = settsYear.reduce((s, r) => s + getActualPayout(r.inquiry_id, r.payout_amount), 0)
+  const profit2026      = rev2026 - payout2026
   // 체결율: 체결 이상 / 전체 문의
   const contractedStatuses = ['체결', '배정완료', '진행중', '완료', '정산완료']
   const contractRate = inquiries.length > 0
@@ -259,6 +261,7 @@ export default function DashboardContent() {
           todayStr={todayStr}
           year={YEAR}
           rev2026={rev2026}
+          invoiceTotal2026={invoiceTotal2026}
           payout2026={payout2026}
           profit2026={profit2026}
           contractRate={contractRate}
@@ -294,7 +297,7 @@ function OverviewTab({
   monthlySettCount, monthlyNewInquiries,
   unpaidAmount, unpaidTop5, staffCount, customerCount,
   monthlyChart, statusDist, assignCountMap, todayStr,
-  year, rev2026, payout2026, profit2026, contractRate, hasRealPayoutData, settsYearCount,
+  year, rev2026, invoiceTotal2026, payout2026, profit2026, contractRate, hasRealPayoutData, settsYearCount,
 }: {
   inquiries: Inquiry[]; settlements: Settlement[]
   happeningToday: Inquiry[]; prepThisWeek: Inquiry[]; unassigned: Inquiry[]
@@ -304,7 +307,7 @@ function OverviewTab({
   monthlyChart: { label: string; revenue: number; profit: number; profitRate: number }[]
   statusDist: { name: string; value: number }[]
   assignCountMap: Map<string, number>; todayStr: string
-  year: string; rev2026: number; payout2026: number; profit2026: number; contractRate: number
+  year: string; rev2026: number; invoiceTotal2026: number; payout2026: number; profit2026: number; contractRate: number
   hasRealPayoutData: boolean; settsYearCount: number
 }) {
   const thisMonth = todayStr.substring(0, 7)
@@ -377,8 +380,8 @@ function OverviewTab({
           {/* VAT 포함 총매출 */}
           <div className="bg-sky-500/20 rounded-xl p-4 border border-sky-500/30">
             <p className="text-xs text-sky-300 mb-1">VAT 포함 총매출</p>
-            <p className="text-2xl font-bold text-sky-200 leading-tight">{formatKRW(Math.round(rev2026 * 1.1))}</p>
-            <p className="text-[11px] text-sky-400 mt-1">공급가액 × 1.1 (부가세 10%)</p>
+            <p className="text-2xl font-bold text-sky-200 leading-tight">{formatKRW(invoiceTotal2026)}</p>
+            <p className="text-[11px] text-sky-400 mt-1">정산청구 기준 실제 청구금액 합계</p>
           </div>
           {/* 매출총이익 */}
           <div className="bg-emerald-500/20 rounded-xl p-4 border border-emerald-500/30">
