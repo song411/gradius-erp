@@ -5,7 +5,7 @@ import { db } from '@/lib/supabase/api'
 import { formatKRW } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Building2, AlertCircle, CheckCircle2, Clock } from 'lucide-react'
+import { Building2, AlertCircle, CheckCircle2, Clock, Search } from 'lucide-react'
 import type { CeoData } from './CeoContent'
 import type { Settlement, Inquiry } from '@/lib/supabase/types'
 import { toast } from 'sonner'
@@ -23,24 +23,33 @@ const STATUS_ORDER: Record<DepositStatus, number> = {
 export default function DepositTab({ data }: { data: CeoData }) {
   const { settlements, inquiries, reload } = data
   const [filter, setFilter]         = useState<'' | DepositStatus>('')
+  const [search, setSearch]         = useState('')
   const [editId, setEditId]         = useState<string | null>(null)
   const [editAmt, setEditAmt]       = useState('')
   const [saving, setSaving]         = useState(false)
 
   // 정산 + 문의 조인
   const rows = useMemo(() => {
+    const q = search.trim().toLowerCase()
     return settlements
       .map(s => ({
         ...s,
-        inquiry: inquiries.find(q => q.id === s.inquiry_id),
+        inquiry: inquiries.find(inq => inq.id === s.inquiry_id),
       }))
       .filter(s => !filter || s.deposit_status === filter)
+      .filter(s => {
+        if (!q) return true
+        const company   = (s.company_name || s.inquiry?.company_name || '').toLowerCase()
+        const eventName = (s.inquiry?.event_name || '').toLowerCase()
+        const siteName  = (s.site_name || '').toLowerCase()
+        return company.includes(q) || eventName.includes(q) || siteName.includes(q)
+      })
       .sort((a, b) => {
         const ao = STATUS_ORDER[(a.deposit_status as DepositStatus)] ?? 3
         const bo = STATUS_ORDER[(b.deposit_status as DepositStatus)] ?? 3
         return ao - bo
       })
-  }, [settlements, inquiries, filter])
+  }, [settlements, inquiries, filter, search])
 
   // 요약
   const billed = (s: Settlement) => s.invoice_amount || s.supply_price || 0
@@ -136,8 +145,17 @@ export default function DepositTab({ data }: { data: CeoData }) {
         </div>
       </div>
 
-      {/* 필터 */}
-      <div className="flex gap-2">
+      {/* 검색 + 필터 */}
+      <div className="flex flex-wrap gap-2 items-center">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Input
+            placeholder="업체명, 행사명 검색..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
         {(['', '미입금', '부분입금', '입금완료'] as const).map(f => (
           <button
             key={f}
@@ -152,6 +170,12 @@ export default function DepositTab({ data }: { data: CeoData }) {
           </button>
         ))}
       </div>
+
+      {search && (
+        <p className="text-xs text-gray-400 -mt-1 px-1">
+          "{search}" 검색 결과 {rows.length}건
+        </p>
+      )}
 
       {/* 테이블 */}
       <div className="bg-white rounded-xl border-2 border-gray-200 overflow-hidden shadow-sm">

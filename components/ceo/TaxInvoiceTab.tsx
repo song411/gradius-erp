@@ -4,7 +4,8 @@ import { useState } from 'react'
 import { db } from '@/lib/supabase/api'
 import { formatKRW } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { ChevronDown, ChevronRight, CheckCircle2, AlertCircle, Receipt, MapPin, Building2 } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { ChevronDown, ChevronRight, CheckCircle2, AlertCircle, Receipt, MapPin, Building2, Search } from 'lucide-react'
 import type { CeoData } from './CeoContent'
 import type { Settlement, Inquiry, Customer, EstimateItem } from '@/lib/supabase/types'
 import { toast } from 'sonner'
@@ -22,8 +23,9 @@ type ViewTab = 'unissued' | 'issued'
 
 export default function TaxInvoiceTab({ data }: { data: CeoData }) {
   const { settlements, inquiries, customers, estimateItems, reload } = data
-  const [viewTab, setViewTab]     = useState<ViewTab>('unissued')
+  const [viewTab, setViewTab]       = useState<ViewTab>('unissued')
   const [processing, setProcessing] = useState<string | null>(null)
+  const [search, setSearch]         = useState('')
 
   // 고객사 맵 (id → customer)
   const customerMap = new Map(customers.map(c => [c.id, c]))
@@ -41,7 +43,19 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
 
   const unissued = rows.filter(s => !s.tax_invoice_issued)
   const issued   = rows.filter(s => s.tax_invoice_issued)
-  const current  = viewTab === 'unissued' ? unissued : issued
+
+  const applySearch = (list: SettRow[]) => {
+    const q = search.trim().toLowerCase()
+    if (!q) return list
+    return list.filter(s => {
+      const company   = (s.company_name || s.corp_name || s.inquiry?.company_name || '').toLowerCase()
+      const eventName = (s.inquiry?.event_name || '').toLowerCase()
+      const siteName  = (s.site_name || '').toLowerCase()
+      return company.includes(q) || eventName.includes(q) || siteName.includes(q)
+    })
+  }
+
+  const current = applySearch(viewTab === 'unissued' ? unissued : issued)
 
   async function handleIssue(id: string) {
     setProcessing(id)
@@ -90,6 +104,20 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
           세금계산서 조회
         </a>
       </div>
+
+      {/* 검색 */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+        <Input
+          placeholder="업체명, 행사명 검색..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+      {search && (
+        <p className="text-xs text-gray-400 -mt-2 px-1">"{search}" 검색 결과 {current.length}건</p>
+      )}
 
       {/* 탭 전환 — 미발행 / 발행완료 */}
       <div className="grid grid-cols-2 gap-3">

@@ -4,7 +4,8 @@ import { useState, useMemo } from 'react'
 import { db } from '@/lib/supabase/api'
 import { formatKRW } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { ChevronDown, ChevronRight, Clock, AlertTriangle, CheckCircle2, FileSpreadsheet } from 'lucide-react'
+import { ChevronDown, ChevronRight, Clock, AlertTriangle, CheckCircle2, FileSpreadsheet, Search } from 'lucide-react'
+import { Input } from '@/components/ui/input'
 import type { CeoData } from './CeoContent'
 import type { Payout, Inquiry, Assignment } from '@/lib/supabase/types'
 import { toast } from 'sonner'
@@ -77,6 +78,7 @@ export default function PaymentTab({ data }: { data: CeoData }) {
     [assignments]
   )
   const [viewTab, setViewTab]           = useState<ViewTab>('pending')
+  const [search, setSearch]             = useState('')
   const [openGroups, setOpenGroups]     = useState<Set<string>>(new Set())
   const [processing, setProcessing]     = useState<string | null>(null)
 
@@ -235,7 +237,19 @@ export default function PaymentTab({ data }: { data: CeoData }) {
   const totalPending  = pendingGroups.reduce((s, g) => s + g.pendingCount, 0)
   const pendingAmount = payouts.filter(p => isPending(p, asgMap)).reduce((s, p) => s + p.final_pay, 0)
 
-  const activeGroups = viewTab === 'pending' ? pendingGroups : doneGroups
+  // 검색 필터 적용 — 행사명 또는 소속 직원명으로 필터
+  const filterGroups = (groups: GroupInfo[]) => {
+    const q = search.trim().toLowerCase()
+    if (!q) return groups
+    return groups.filter(g => {
+      const eventName = (g.inquiry?.event_name || '').toLowerCase()
+      const company   = (g.inquiry?.company_name || '').toLowerCase()
+      const staffHit  = g.payouts.some(p => (p.staff_name || '').toLowerCase().includes(q))
+      return eventName.includes(q) || company.includes(q) || staffHit
+    })
+  }
+
+  const activeGroups = filterGroups(viewTab === 'pending' ? pendingGroups : doneGroups)
 
   return (
     <div className="space-y-4">
@@ -248,6 +262,20 @@ export default function PaymentTab({ data }: { data: CeoData }) {
         <StatCard icon={<CheckCircle2 className="h-5 w-5" />}  label="지급완료" sub="이력 탭에서 전체 확인"
           count={doneGroups.length} amount={0}              color="green" />
       </div>
+
+      {/* 검색 */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+        <Input
+          placeholder="행사명, 업체명, 직원명 검색..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+      {search && (
+        <p className="text-xs text-gray-400 -mt-2 px-1">"{search}" 검색 결과 {activeGroups.length}건</p>
+      )}
 
       {/* 탭 + 엑셀 버튼 */}
       <div className="flex items-center justify-between">

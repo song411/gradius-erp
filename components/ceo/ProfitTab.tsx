@@ -2,7 +2,8 @@
 
 import { useState, useMemo } from 'react'
 import { formatKRW } from '@/lib/utils'
-import { ChevronDown, ChevronRight, TrendingUp, TrendingDown, Minus, Clock, Users } from 'lucide-react'
+import { ChevronDown, ChevronRight, TrendingUp, TrendingDown, Minus, Clock, Users, Search } from 'lucide-react'
+import { Input } from '@/components/ui/input'
 import type { CeoData } from './CeoContent'
 import type { Inquiry, Settlement, Payout } from '@/lib/supabase/types'
 
@@ -62,6 +63,7 @@ export default function ProfitTab({ data }: { data: CeoData }) {
   const { inquiries, settlements, payouts, assignments } = data
   const [openRows, setOpenRows] = useState<Set<string>>(new Set())
   const [sortKey, setSortKey]   = useState<'profit' | 'rate' | 'supply'>('profit')
+  const [search, setSearch]     = useState('')
 
   // 프로젝트별 수익 계산
   const projects: ProjectRow[] = useMemo(() => {
@@ -106,10 +108,21 @@ export default function ProfitTab({ data }: { data: CeoData }) {
       })
   }, [inquiries, settlements, payouts, assignments, sortKey])
 
+  // 검색 필터
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return projects
+    return projects.filter(r => {
+      const eventName = (r.inquiry.event_name || '').toLowerCase()
+      const company   = (r.inquiry.company_name || '').toLowerCase()
+      return eventName.includes(q) || company.includes(q)
+    })
+  }, [projects, search])
+
   // 총계
-  const totalSupply = projects.reduce((s, r) => s + r.supplyPrice, 0)
-  const totalPayout = projects.reduce((s, r) => s + r.totalPayout, 0)
-  const totalProfit = projects.reduce((s, r) => s + r.profit, 0)
+  const totalSupply = filtered.reduce((s, r) => s + r.supplyPrice, 0)
+  const totalPayout = filtered.reduce((s, r) => s + r.totalPayout, 0)
+  const totalProfit = filtered.reduce((s, r) => s + r.profit, 0)
   const avgRate     = totalSupply > 0 ? Math.round((totalProfit / totalSupply) * 100) : 0
 
   function toggleRow(id: string) {
@@ -125,7 +138,7 @@ export default function ProfitTab({ data }: { data: CeoData }) {
     <div className="space-y-5">
       {/* 전체 요약 */}
       <div className="bg-gradient-to-br from-slate-800 to-slate-700 rounded-2xl p-5">
-        <p className="text-xs font-semibold text-slate-400 mb-4 uppercase tracking-wider">프로젝트 수익 총계 ({projects.length}건)</p>
+        <p className="text-xs font-semibold text-slate-400 mb-4 uppercase tracking-wider">프로젝트 수익 총계 ({filtered.length}건{search ? ` / 검색 중` : ''})</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <SummaryCard label="총 공급가액" value={formatKRW(totalSupply)} sub="(VAT 제외)" color="white" />
           <SummaryCard label="총 지급액" value={formatKRW(totalPayout)} sub="지급완료 기준" color="orange" />
@@ -133,6 +146,20 @@ export default function ProfitTab({ data }: { data: CeoData }) {
           <SummaryCard label="평균 수익률" value={`${avgRate}%`} sub="" color="purple" />
         </div>
       </div>
+
+      {/* 검색 */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+        <Input
+          placeholder="행사명, 업체명 검색..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+      {search && (
+        <p className="text-xs text-gray-400 -mt-2 px-1">"{search}" 검색 결과 {filtered.length}건</p>
+      )}
 
       {/* 정렬 */}
       <div className="flex items-center gap-2">
@@ -167,10 +194,10 @@ export default function ProfitTab({ data }: { data: CeoData }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {projects.length === 0 && (
-              <tr><td colSpan={9} className="py-10 text-center text-gray-400">데이터가 없습니다.</td></tr>
+            {filtered.length === 0 && (
+              <tr><td colSpan={9} className="py-10 text-center text-gray-400">{search ? `"${search}" 검색 결과가 없습니다.` : '데이터가 없습니다.'}</td></tr>
             )}
-            {projects.map(r => {
+            {filtered.map(r => {
               const isOpen = openRows.has(r.inquiry.id)
               return (
                 <>
@@ -271,7 +298,7 @@ export default function ProfitTab({ data }: { data: CeoData }) {
           {/* 총계 행 */}
           <tfoot>
             <tr className="bg-gray-100 font-bold border-t-2 border-gray-300">
-              <td colSpan={4} className="px-3 py-3 text-sm text-gray-700">합계 ({projects.length}건)</td>
+              <td colSpan={4} className="px-3 py-3 text-sm text-gray-700">합계 ({filtered.length}건)</td>
               <td className="px-3 py-3 text-right text-sm">{formatKRW(totalSupply)}</td>
               <td className="px-3 py-3 text-right text-sm text-orange-600">{formatKRW(totalPayout)}</td>
               <td className="px-3 py-3 text-right text-sm text-emerald-700">{formatKRW(totalProfit)}</td>
