@@ -94,7 +94,7 @@ export default function PaymentTab({ data }: { data: CeoData }) {
   const [openGroups, setOpenGroups]     = useState<Set<string>>(new Set())
   const [processing, setProcessing]     = useState<string | null>(null)
 
-  const { pendingGroups, doneGroups } = useMemo(() => {
+  const { pendingGroups, doneGroups, allGroups } = useMemo(() => {
     const map = new Map<string, { inquiry?: Inquiry; payouts: Payout[] }>()
 
     for (const p of payouts) {
