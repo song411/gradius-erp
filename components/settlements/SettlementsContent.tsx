@@ -692,6 +692,10 @@ export default function SettlementsContent() {
               <label className="text-xs font-medium text-gray-600 mb-1 block">담당자</label>
               <Input value={form.manager} onChange={e => setForm(f => ({ ...f, manager: e.target.value }))} />
             </div>
+            <div className="col-span-2">
+              <label className="text-xs font-medium text-gray-600 mb-1 block">사업장 주소 (세금계산서용 — 현장주소와 다를 수 있음)</label>
+              <Input value={form.site_address} onChange={e => setForm(f => ({ ...f, site_address: e.target.value }))} placeholder="세금계산서 발행용 사업장 주소" />
+            </div>
 
             {/* 청구 금액 */}
             <div className="col-span-2">

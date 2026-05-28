@@ -151,12 +151,17 @@ export default function DashboardContent() {
 
   const activeInquiries = inquiries.filter(i => ['접수','견적','체결','배정완료','진행중'].includes(i.status))
 
-  // ── 연간 KPI (event_start 기준, inquiry당 settlement 중복 제거)
+  // ── 연간 KPI (event_start 기준, 없으면 settlement.created_at 대체)
   const YEAR = String(now.getFullYear())
-  const inqsYear   = inquiries.filter(i => i.event_start?.startsWith(YEAR))
-  const yearInqIds = new Set(inqsYear.map(i => i.id))
+  const inqMap = new Map(inquiries.map(i => [i.id, i]))
   // dedupedSettlements 재활용 (위에서 이미 선언)
-  const settsYear  = dedupedSettlements.filter(s => s.inquiry_id && yearInqIds.has(s.inquiry_id))
+  const settsYear = dedupedSettlements.filter(s => {
+    if (!s.inquiry_id) return false
+    const inq = inqMap.get(s.inquiry_id)
+    // 행사일이 있으면 우선 사용, 없으면(날짜 미정) 정산 등록일로 대체
+    const dateRef = inq?.event_start || s.created_at
+    return dateRef?.startsWith(YEAR) ?? false
+  })
   const rev2026         = settsYear.reduce((s, r) => s + (r.supply_price || 0), 0)
   // 실제 청구금액(invoice_amount) 합계 — 없으면 supply_price + vat fallback
   const invoiceTotal2026 = settsYear.reduce((s, r) => s + (r.invoice_amount || (r.supply_price || 0) + (r.vat || Math.floor((r.supply_price || 0) * 0.1))), 0)

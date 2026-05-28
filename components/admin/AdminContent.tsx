@@ -116,12 +116,18 @@ function AdminInner() {
   const [search, setSearch]       = useState('')
   const [showHidden, setShowHidden] = useState(false)
 
+  // 테이블별 기본 정렬 컬럼 (created_at이 없는 테이블 대응)
+  const TABLE_ORDER: Record<string, string> = {
+    assignments: 'assigned_at',
+  }
+
   const loadTable = useCallback(async (table: string) => {
     setLoading(true)
     setEditCell(null)
     setSearch('')
     try {
-      const data = await db.list<Row>(table, { order: 'created_at', asc: false })
+      const orderCol = TABLE_ORDER[table] || 'created_at'
+      const data = await db.list<Row>(table, { order: orderCol, asc: false })
       setRows(data)
       if (data.length > 0) {
         setColumns(Object.keys(data[0]))

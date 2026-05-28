@@ -40,7 +40,8 @@ export default function DepositTab({ data }: { data: CeoData }) {
         inquiry: inquiries.find(inq => inq.id === s.inquiry_id),
       }))
       .filter(s => !filter || s.deposit_status === filter)
-      .filter(s => isInPeriodFn(s.inquiry?.event_start, periodState))
+      // 행사일 없으면(날짜 미정) 정산 등록일로 대체
+      .filter(s => isInPeriodFn(s.inquiry?.event_start || s.created_at, periodState))
       .filter(s => {
         if (!q) return true
         const company   = (s.company_name || s.inquiry?.company_name || '').toLowerCase()
