@@ -5,7 +5,7 @@ import { db } from '@/lib/supabase/api'
 import { formatKRW } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Building2, AlertCircle, CheckCircle2, Clock, Search, Download } from 'lucide-react'
+import { Building2, AlertCircle, CheckCircle2, Clock, Search, Download, ChevronDown, ChevronRight, MapPin, User, Package } from 'lucide-react'
 import type { CeoData } from './CeoContent'
 import type { Settlement, Inquiry } from '@/lib/supabase/types'
 import { toast } from 'sonner'
@@ -42,7 +42,7 @@ function ElapsedBadge({ days }: { days: number | null }) {
 }
 
 export default function DepositTab({ data }: { data: CeoData }) {
-  const { settlements, inquiries, reload } = data
+  const { settlements, inquiries, estimateItems, reload } = data
   const [filter, setFilter]           = useState<'' | DepositStatus>('')
   const [sortKey, setSortKey]         = useState<SortKey>('입금상태순')
   const [periodState, setPeriodState] = useState<PeriodState>({ period: '전체', customFrom: '', customTo: '' })
@@ -50,6 +50,7 @@ export default function DepositTab({ data }: { data: CeoData }) {
   const [editId, setEditId]           = useState<string | null>(null)
   const [editAmt, setEditAmt]         = useState('')
   const [saving, setSaving]           = useState(false)
+  const [expandedId, setExpandedId]   = useState<string | null>(null)
 
   // 정산 + 문의 조인
   const rows = useMemo(() => {
@@ -273,9 +274,28 @@ export default function DepositTab({ data }: { data: CeoData }) {
                 const balance = s.balance ?? (s.supply_price - s.received_amount)
                 const isEditing = editId === s.id
                 const eventDate = s.inquiry?.event_start?.slice(0, 10)
+                const isExpanded = expandedId === s.id
+                const inqItems = estimateItems.filter(it => it.inquiry_id === s.inquiry_id)
                 return (
-                  <tr key={s.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-semibold text-gray-900">{s.company_name || s.inquiry?.company_name || '-'}</td>
+                  <>
+                  <tr
+                    key={s.id}
+                    className={`hover:bg-amber-50 cursor-pointer transition-colors ${isExpanded ? 'bg-amber-50' : ''}`}
+                    onClick={e => {
+                      // 입금액 수정 버튼/입력 클릭 시 토글 방지
+                      if ((e.target as HTMLElement).closest('button,input')) return
+                      setExpandedId(isExpanded ? null : s.id)
+                    }}
+                  >
+                    <td className="px-4 py-3 font-semibold text-gray-900">
+                      <div className="flex items-center gap-1.5">
+                        {isExpanded
+                          ? <ChevronDown className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                          : <ChevronRight className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                        }
+                        {s.company_name || s.inquiry?.company_name || '-'}
+                      </div>
+                    </td>
                     <td className="px-3 py-3 text-gray-700 text-sm font-medium max-w-[160px] truncate">{s.inquiry?.event_name || '-'}</td>
                     <td className="px-3 py-3 text-gray-600 text-xs whitespace-nowrap">{eventDate || <span className="text-gray-400">-</span>}</td>
                     <td className="px-3 py-3 text-center">
@@ -339,6 +359,97 @@ export default function DepositTab({ data }: { data: CeoData }) {
                       )}
                     </td>
                   </tr>
+
+                  {/* 아코디언 상세 행 */}
+                  {isExpanded && (
+                    <tr key={`${s.id}-detail`}>
+                      <td colSpan={10} className="px-0 pb-0 pt-0 bg-amber-50 border-b-2 border-amber-200">
+                        <div className="px-6 py-4 space-y-4">
+
+                          {/* 행사 기본 정보 */}
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            <div className="bg-white rounded-lg p-3 border border-amber-100">
+                              <p className="text-[10px] text-gray-400 font-semibold uppercase mb-1">행사명</p>
+                              <p className="text-sm font-bold text-gray-900">{s.inquiry?.event_name || '-'}</p>
+                            </div>
+                            <div className="bg-white rounded-lg p-3 border border-amber-100">
+                              <p className="text-[10px] text-gray-400 font-semibold uppercase mb-1">행사일</p>
+                              <p className="text-sm font-semibold text-gray-800">
+                                {s.inquiry?.event_start
+                                  ? s.inquiry.event_end && s.inquiry.event_end !== s.inquiry.event_start
+                                    ? `${s.inquiry.event_start.slice(0,10)} ~ ${s.inquiry.event_end.slice(0,10)}`
+                                    : s.inquiry.event_start.slice(0,10)
+                                  : (s.inquiry?.date_memo || '-')}
+                              </p>
+                            </div>
+                            <div className="bg-white rounded-lg p-3 border border-amber-100">
+                              <p className="text-[10px] text-gray-400 font-semibold uppercase mb-1 flex items-center gap-1"><MapPin className="h-2.5 w-2.5" />현장</p>
+                              <p className="text-sm text-gray-700">{s.site_address || s.inquiry?.location || '-'}</p>
+                            </div>
+                            <div className="bg-white rounded-lg p-3 border border-amber-100">
+                              <p className="text-[10px] text-gray-400 font-semibold uppercase mb-1 flex items-center gap-1"><User className="h-2.5 w-2.5" />담당자</p>
+                              <p className="text-sm text-gray-700">{s.manager || s.inquiry?.contact_name || '-'}</p>
+                            </div>
+                          </div>
+
+                          {/* 청구 요약 */}
+                          <div className="grid grid-cols-4 gap-3">
+                            {[
+                              { label: '공급가액',  value: formatKRW(s.supply_price),               color: 'text-gray-800' },
+                              { label: 'VAT',       value: formatKRW(s.vat || Math.floor(s.supply_price * 0.1)), color: 'text-gray-600' },
+                              { label: '총 청구액', value: formatKRW(s.invoice_amount || s.supply_price + (s.vat || 0)), color: 'text-blue-700 font-bold' },
+                              { label: '잔액',      value: balance > 0 ? formatKRW(balance) : '없음', color: balance > 0 ? 'text-red-600 font-bold' : 'text-green-600 font-bold' },
+                            ].map(({ label, value, color }) => (
+                              <div key={label} className="bg-white rounded-lg p-3 border border-amber-100 text-center">
+                                <p className="text-[10px] text-gray-400 font-semibold uppercase mb-1">{label}</p>
+                                <p className={`text-sm ${color}`}>{value}</p>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* 품목 목록 */}
+                          {inqItems.length > 0 && (
+                            <div className="bg-white rounded-lg border border-amber-100 overflow-hidden">
+                              <div className="px-3 py-2 bg-gray-50 border-b flex items-center gap-1.5">
+                                <Package className="h-3.5 w-3.5 text-gray-500" />
+                                <span className="text-xs font-bold text-gray-700">견적 품목 ({inqItems.length}개)</span>
+                              </div>
+                              <table className="w-full text-xs">
+                                <thead>
+                                  <tr className="bg-gray-800 text-white">
+                                    {['품목', '일', '명', '청구단가', '지급단가', '합계'].map(h => (
+                                      <th key={h} className="px-3 py-1.5 text-right first:text-left font-semibold">{h}</th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {inqItems.map((it, idx) => (
+                                    <tr key={it.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                                      <td className="px-3 py-1.5 font-medium text-gray-800">
+                                        {it.is_leader && <span className="text-[10px] text-amber-600 font-bold mr-1">[팀장]</span>}
+                                        {it.role_name || '-'}
+                                      </td>
+                                      <td className="px-3 py-1.5 text-right text-gray-600">{it.days}일</td>
+                                      <td className="px-3 py-1.5 text-right text-gray-600">{it.quantity}명</td>
+                                      <td className="px-3 py-1.5 text-right text-gray-700">{it.unit_price.toLocaleString()}</td>
+                                      <td className="px-3 py-1.5 text-right text-gray-500">{it.pay_unit_price.toLocaleString()}</td>
+                                      <td className="px-3 py-1.5 text-right font-bold text-blue-700">
+                                        {(it.quantity * it.days * it.unit_price).toLocaleString()}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                          {inqItems.length === 0 && (
+                            <p className="text-xs text-gray-400 text-center py-2">등록된 견적 품목이 없습니다.</p>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </>
                 )
               })}
             </tbody>
