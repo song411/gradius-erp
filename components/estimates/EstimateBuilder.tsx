@@ -403,16 +403,47 @@ export default function EstimateBuilder({
     width: number,
   ): Promise<string> {
     const { toPng } = await import('html-to-image')
+
     const wrap = document.createElement('div')
     wrap.style.cssText = `position:fixed;top:-9999px;left:0;width:${width}px;background:${bgColor};`
+
     const cloned = source.cloneNode(true) as HTMLElement
     cloned.style.width = `${width}px`
+    cloned.style.maxWidth = 'none'
+    cloned.style.height = 'auto'
+    cloned.style.maxHeight = 'none'
+    cloned.style.overflow = 'visible'
+
     wrap.appendChild(cloned)
     document.body.appendChild(wrap)
+
+    // DOM 삽입 후 Tailwind 포함 모든 overflow 클리핑 제거
     await new Promise(r => requestAnimationFrame(r))
+    cloned.querySelectorAll<HTMLElement>('*').forEach(el => {
+      const s = window.getComputedStyle(el)
+      const clips = ['auto', 'scroll', 'hidden']
+      if (clips.includes(s.overflow) || clips.includes(s.overflowX) || clips.includes(s.overflowY)) {
+        el.style.overflow  = 'visible'
+        el.style.overflowX = 'visible'
+        el.style.overflowY = 'visible'
+      }
+    })
+
+    // overflow 제거 후 실제 콘텐츠 전체 크기 측정
     await new Promise(r => requestAnimationFrame(r))
+    const fullWidth  = Math.max(width, cloned.scrollWidth)
+    const fullHeight = cloned.scrollHeight || cloned.offsetHeight
+    cloned.style.width = `${fullWidth}px`
+    wrap.style.width   = `${fullWidth}px`
+    wrap.style.height  = `${fullHeight}px`
+
+    await new Promise(r => requestAnimationFrame(r))
+
     try {
-      const opts = { pixelRatio: 2, backgroundColor: bgColor, skipFonts: true, cacheBust: true }
+      const opts = {
+        pixelRatio: 2, backgroundColor: bgColor, skipFonts: true, cacheBust: true,
+        width: fullWidth, height: fullHeight,
+      }
       await toPng(cloned, opts) // 워밍업 1
       await toPng(cloned, opts) // 워밍업 2
       return await toPng(cloned, opts) // 실제 결과
