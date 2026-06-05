@@ -92,7 +92,7 @@ export default function EstimatesContent() {
     if (inqIds.length > 0) {
       const items = await db.list<EstimateItem>('estimate_items', {
         inFilter: { inquiry_id: inqIds },
-        order: 'created_at', asc: true,
+        order: 'sort_order', asc: true,
       })
       items.forEach(item => {
         const key = item.inquiry_id || ''

@@ -358,7 +358,7 @@ export default function EstimateBuilder({
         await db.update('inquiries', form.inquiry_id, { status: '견적' })
       }
 
-      const itemsPayload = items.map(row => ({
+      const itemsPayload = items.map((row, idx) => ({
         estimate_id: estId,
         inquiry_id: form.inquiry_id,
         role_name: row.role_name,
@@ -369,6 +369,7 @@ export default function EstimateBuilder({
         is_leader: row.is_leader,
         item_type: row.item_type,
         spec: [row.work_time, row.spec].filter(Boolean).join(' / ') || null,
+        sort_order: idx,
       }))
 
       await db.insert('estimate_items', itemsPayload)

@@ -201,6 +201,7 @@ export interface EstimateItem {
   is_leader: boolean
   discount: number
   item_type: string
+  sort_order: number
   created_at: string
 }
 
