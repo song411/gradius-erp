@@ -167,6 +167,31 @@ export default function PaymentTab({ data }: { data: CeoData }) {
     }
   }
 
+  async function handleBulkPaid(g: GroupInfo) {
+    // 이미 지급완료된 인원은 제외 — 중복 처리 방지
+    const targets = g.payouts.filter(p =>
+      !isHQByMap(p, asgMap) && (p.status === '검토완료' || p.status === '확인완료')
+    )
+    if (targets.length === 0) {
+      toast.info('일괄 처리할 미지급 인원이 없습니다.')
+      return
+    }
+    if (!confirm(`"${g.inquiry?.event_name || '해당 행사'}" 미지급 ${targets.length}명을 일괄 지급완료 처리하시겠습니까?`)) return
+
+    setProcessing('bulk')
+    const paidAt = new Date().toISOString()
+    try {
+      await Promise.all(targets.map(p => patchPayoutStatus(p.id, '지급완료', { paid_at: paidAt })))
+      toast.success(`${targets.length}명 일괄 지급완료 처리되었습니다.`)
+      reload()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      toast.error(`일괄 처리 오류: ${msg}`, { duration: 8000 })
+    } finally {
+      setProcessing(null)
+    }
+  }
+
   async function handleRevertPaid(payoutId: string, staffName: string) {
     if (!confirm(`"${staffName}" 지급완료를 검토완료로 되돌리겠습니까?`)) return
     setProcessing(payoutId)
@@ -323,6 +348,7 @@ export default function PaymentTab({ data }: { data: CeoData }) {
                 toggleGroup={toggleGroup}
                 processing={processing}
                 handleMarkPaid={handleMarkPaid}
+                handleBulkPaid={handleBulkPaid}
                 handleGroupExcel={handleGroupExcel}
                 done={false}
               />
@@ -456,6 +482,7 @@ export default function PaymentTab({ data }: { data: CeoData }) {
                 toggleGroup={toggleGroup}
                 processing={processing}
                 handleMarkPaid={handleMarkPaid}
+                handleBulkPaid={handleBulkPaid}
                 handleGroupExcel={handleGroupExcel}
                 done={g.allDone}
               />
@@ -468,13 +495,14 @@ export default function PaymentTab({ data }: { data: CeoData }) {
 }
 
 // ─── 그룹 행 ───────────────────────────────────────────
-function GroupRow({ g, asgMap, openGroups, toggleGroup, processing, handleMarkPaid, handleGroupExcel, done }: {
+function GroupRow({ g, asgMap, openGroups, toggleGroup, processing, handleMarkPaid, handleBulkPaid, handleGroupExcel, done }: {
   g: GroupInfo
   asgMap: Map<string, Assignment>
   openGroups: Set<string>
   toggleGroup: (key: string) => void
   processing: string | null
   handleMarkPaid: (id: string) => void
+  handleBulkPaid: (g: GroupInfo) => void
   handleGroupExcel: (g: GroupInfo) => void
   done: boolean
 }) {
@@ -543,12 +571,22 @@ function GroupRow({ g, asgMap, openGroups, toggleGroup, processing, handleMarkPa
             완료 {paidCount}명
           </p>
           {hasExcel && (
-            <button
-              onClick={e => { e.stopPropagation(); handleGroupExcel(g) }}
-              className="flex items-center gap-1 ml-auto text-xs font-semibold text-white bg-green-600 hover:bg-green-700 px-2.5 py-1 rounded-lg transition-colors"
-            >
-              <FileSpreadsheet className="h-3.5 w-3.5" />이체명단
-            </button>
+            <div className="flex flex-col gap-1 items-end">
+              <button
+                onClick={e => { e.stopPropagation(); handleBulkPaid(g) }}
+                disabled={processing === 'bulk'}
+                className="flex items-center gap-1 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 px-2.5 py-1 rounded-lg transition-colors"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                {processing === 'bulk' ? '처리중...' : '전원 지급완료'}
+              </button>
+              <button
+                onClick={e => { e.stopPropagation(); handleGroupExcel(g) }}
+                className="flex items-center gap-1 text-xs font-semibold text-white bg-green-600 hover:bg-green-700 px-2.5 py-1 rounded-lg transition-colors"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5" />이체명단
+              </button>
+            </div>
           )}
         </div>
       </div>
