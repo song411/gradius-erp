@@ -66,6 +66,8 @@ export interface Staff {
   gender?: string
   age?: number
   height?: number
+  weight?: number
+  mbti?: string
   total_score: number
   english_skill?: string
   driving?: string

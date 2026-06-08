@@ -9,8 +9,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
   Search, CalendarDays, MapPin, Users, CheckCircle2,
-  Clock, XCircle, AlertCircle, ChevronRight, Star,
-  ClipboardList, Award, Save, RefreshCw,
+  Clock, AlertCircle, ChevronRight, Star,
+  ClipboardList, Award, Save, RefreshCw, HelpCircle,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -47,13 +47,45 @@ const STATUS_IDLE = 'bg-gray-100 text-gray-500 hover:bg-gray-200'
 
 const ALL_STATUSES: AttendanceStatus[] = ['출석', '지각', '결근', '조퇴', '외출']
 
-// 평가 항목 정의
-const EVAL_FIELDS: { key: keyof EvalScores; label: string }[] = [
-  { key: 'attendance_score', label: '출결' },
-  { key: 'performance_score', label: '업무수행' },
-  { key: 'appearance_score', label: '용모복장' },
-  { key: 'teamwork_score', label: '팀워크' },
-  { key: 'adaptability_score', label: '적응력' },
+// 새 평가 항목 정의 (라벨 + 가이드)
+interface EvalField {
+  key: keyof EvalScores
+  label: string
+  emoji: string
+  guide: string
+}
+
+const EVAL_FIELDS: EvalField[] = [
+  {
+    key: 'attendance_score',
+    label: '근태',
+    emoji: '📅',
+    guide: '집결시간·휴게시간 준수 여부\n5점: 15분 전 도착, 시간 완벽 준수\n4점: 제시간 도착, 전반적으로 양호\n3점: 소폭 지각 또는 짧은 이탈 (업무 지장 없음)\n2점: 지각·이탈로 팀에 영향\n1점: 심각한 지각·무단이탈·조퇴',
+  },
+  {
+    key: 'performance_score',
+    label: '직무·서비스',
+    emoji: '🎯',
+    guide: '업무 수행 능력 + 고객 응대 태도\n5점: 매뉴얼 완벽 숙지, 장비 능숙, 응대 탁월\n4점: 임무 우수, 고객 응대 원활\n3점: 기본 수행, 응대 방식 일부 보완 필요\n2점: 임무 미흡, 상급자 지시 반복 필요\n1점: 임무 불이행 또는 고객 민원 발생',
+  },
+  {
+    key: 'appearance_score',
+    label: '외형',
+    emoji: '✨',
+    guide: '복장·청결도가 현장에 적합한가\n5점: 복장 완벽, 청결 우수, 행사 이미지 완전 부합\n4점: 전반적으로 단정, 소소한 보완만 필요\n3점: 기본은 갖췄으나 일부 흐트러짐\n2점: 복장 불량 또는 청결 문제 눈에 띔\n1점: 현장 이미지에 심각하게 부적합',
+  },
+  {
+    key: 'teamwork_score',
+    label: '팀워크·보고',
+    emoji: '📡',
+    guide: '무전 보고 정확성 및 팀 협업\n5점: 보고 정확·신속, 팀 소통 완벽\n4점: 팀워크 우수, 소통 원활\n3점: 기본 소통 가능, 보고 누락·지연 있음\n2점: 소통 미흡, 무전 응답 지연, 단독행동\n1점: 팀워크 저해, 지시 불이행',
+  },
+  {
+    key: 'adaptability_score',
+    label: '상황대응',
+    emoji: '⚡',
+    guide: '돌발 상황 시 초동 대응 능력\n5점: 즉각 판단·대응, 보고 완벽, 능동적 해결\n4점: 대부분 적절하게 대응\n3점: 기본 대응하나 판단이 느리거나 수동적\n2점: 돌발상황에 당황, 지시 대기만 함\n1점: 상황 대응 불가, 오히려 악화',
+  },
 ]
 
 interface EvalScores {
@@ -64,27 +96,82 @@ interface EvalScores {
   adaptability_score: number
 }
 
-// 별점 컴포넌트 (0~5, 0.5 단위)
-function StarRating({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+// 별 표시 (읽기 전용)
+function StarDisplay({ value }: { value: number }) {
   return (
-    <div className="flex items-center gap-0.5">
+    <div className="flex gap-0.5">
       {[1, 2, 3, 4, 5].map(i => (
-        <button
+        <Star
           key={i}
-          onClick={() => onChange(value === i ? i - 0.5 : i)}
-          className="focus:outline-none"
-          title={`${i}점`}
-        >
-          <Star
-            className={`h-5 w-5 transition-colors ${
-              value >= i ? 'text-yellow-400 fill-yellow-400' :
-              value >= i - 0.5 ? 'text-yellow-300 fill-yellow-200' :
-              'text-gray-200'
-            }`}
-          />
-        </button>
+          className={`h-4 w-4 ${
+            value >= i ? 'text-yellow-400 fill-yellow-400' :
+            value >= i - 0.5 ? 'text-yellow-300 fill-yellow-200' :
+            'text-gray-200'
+          }`}
+        />
       ))}
-      <span className="text-xs text-gray-500 ml-1">{value.toFixed(1)}</span>
+    </div>
+  )
+}
+
+// 점수 입력 컴포넌트 (별 표시 + 숫자 직접 입력)
+function ScoreInput({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  const [raw, setRaw] = useState(String(value))
+
+  // 외부 value 변경 시 동기화
+  useEffect(() => { setRaw(String(value)) }, [value])
+
+  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    setRaw(e.target.value)
+    const num = parseFloat(e.target.value)
+    if (!isNaN(num)) {
+      // 0.5 단위로 반올림, 0~5 범위 제한
+      const snapped = Math.round(Math.min(5, Math.max(0, num)) * 2) / 2
+      onChange(snapped)
+    }
+  }
+
+  function handleBlur() {
+    setRaw(String(value))
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <StarDisplay value={value} />
+      <input
+        type="number"
+        value={raw}
+        onChange={handleChange}
+        onBlur={handleBlur}
+        min={0}
+        max={5}
+        step={0.5}
+        inputMode="decimal"
+        className="w-14 h-8 text-center text-sm font-bold border-2 border-gray-200 rounded-lg focus:border-purple-400 focus:outline-none bg-gray-50 focus:bg-white transition-colors"
+      />
+    </div>
+  )
+}
+
+// 평가 기준 툴팁
+function GuideTooltip({ guide }: { guide: string }) {
+  const [show, setShow] = useState(false)
+  return (
+    <div className="relative inline-flex">
+      <button
+        type="button"
+        onMouseEnter={() => setShow(true)}
+        onMouseLeave={() => setShow(false)}
+        onTouchStart={() => setShow(v => !v)}
+        className="text-gray-300 hover:text-gray-500 focus:outline-none"
+      >
+        <HelpCircle className="h-3.5 w-3.5" />
+      </button>
+      {show && (
+        <div className="absolute left-5 top-0 z-50 w-56 bg-gray-900 text-white text-[11px] rounded-xl p-3 shadow-xl whitespace-pre-line leading-relaxed">
+          {guide}
+        </div>
+      )}
     </div>
   )
 }
@@ -110,11 +197,14 @@ export default function AttendanceContent() {
     dirty: boolean
   }>>({})
 
-  // 평가 편집 상태 (assignmentId → 점수)
+  // 평가 편집 상태 (assignmentId → 점수 + 크루 정보)
   const [evalMap, setEvalMap] = useState<Record<string, EvalScores & {
     re_recommend: boolean
     strengths: string
     improvements: string
+    height: string
+    weight: string
+    mbti: string
     dirty: boolean
   }>>({})
 
@@ -184,10 +274,17 @@ export default function AttendanceContent() {
     // 시작일 기준으로 editMap 초기화
     setEditMap(buildEditMap(activeAsgns, atts, initDate))
 
+    // 스태프 정보 병렬 로드 (키: staff_id → height/weight/mbti 참조용)
+    const staffIds = [...new Set(asgns.filter(a => a.staff_id).map(a => a.staff_id!))]
+    const staffList = staffIds.length
+      ? await db.list<Staff>('staff', { inFilter: { id: staffIds } })
+      : []
+
     // 기존 평가 데이터로 evalMap 초기화
     const newEvalMap: typeof evalMap = {}
     asgns.filter(a => a.status !== '취소').forEach(a => {
       const existing = evals.find(e => e.assignment_id === a.id)
+      const staffInfo = staffList.find(s => s.id === a.staff_id)
       newEvalMap[a.id] = {
         attendance_score: existing?.attendance_score ?? 3,
         performance_score: existing?.performance_score ?? 3,
@@ -197,6 +294,9 @@ export default function AttendanceContent() {
         re_recommend: existing?.re_recommend ?? true,
         strengths: existing?.strengths || '',
         improvements: existing?.improvements || '',
+        height: staffInfo?.height ? String(staffInfo.height) : '',
+        weight: staffInfo?.weight ? String(staffInfo.weight) : '',
+        mbti: staffInfo?.mbti || '',
         dirty: false,
       }
     })
@@ -346,25 +446,27 @@ export default function AttendanceContent() {
         await db.insert('evaluations', payload)
       }
 
-      // staff 테이블 점수 갱신 (있는 경우)
+      // staff 테이블 점수 + 프로필 정보 갱신 (있는 경우)
       if (asgn.staff_id) {
+        // 점수 집계
         const staffEvals = await db.list<Evaluation>('evaluations', {
           filters: { staff_id: asgn.staff_id },
         })
+        const staffUpdate: Record<string, unknown> = {}
         if (staffEvals.length > 0) {
-          const avgAttendance  = staffEvals.reduce((s, e) => s + e.attendance_score, 0) / staffEvals.length
-          const avgPerformance = staffEvals.reduce((s, e) => s + e.performance_score, 0) / staffEvals.length
-          const avgAppearance  = staffEvals.reduce((s, e) => s + e.appearance_score, 0) / staffEvals.length
-          const avgTeamwork    = staffEvals.reduce((s, e) => s + e.teamwork_score, 0) / staffEvals.length
-          const avgTotal       = staffEvals.reduce((s, e) => s + e.total_score, 0) / staffEvals.length
+          staffUpdate.attendance_score  = Math.round(staffEvals.reduce((s, e) => s + e.attendance_score, 0) / staffEvals.length * 10) / 10
+          staffUpdate.performance_score = Math.round(staffEvals.reduce((s, e) => s + e.performance_score, 0) / staffEvals.length * 10) / 10
+          staffUpdate.appearance_score  = Math.round(staffEvals.reduce((s, e) => s + e.appearance_score, 0) / staffEvals.length * 10) / 10
+          staffUpdate.teamwork_score    = Math.round(staffEvals.reduce((s, e) => s + e.teamwork_score, 0) / staffEvals.length * 10) / 10
+          staffUpdate.total_score       = Math.round(staffEvals.reduce((s, e) => s + e.total_score, 0) / staffEvals.length * 10) / 10
+        }
+        // 키/몸무게/MBTI 저장 (입력된 경우만)
+        if (data.height) staffUpdate.height = parseFloat(data.height)
+        if (data.weight) staffUpdate.weight = parseFloat(data.weight)
+        if (data.mbti)   staffUpdate.mbti   = data.mbti.toUpperCase()
 
-          await db.update('staff', asgn.staff_id, {
-            attendance_score:  Math.round(avgAttendance * 10) / 10,
-            performance_score: Math.round(avgPerformance * 10) / 10,
-            appearance_score:  Math.round(avgAppearance * 10) / 10,
-            teamwork_score:    Math.round(avgTeamwork * 10) / 10,
-            total_score:       Math.round(avgTotal * 10) / 10,
-          })
+        if (Object.keys(staffUpdate).length > 0) {
+          await db.update('staff', asgn.staff_id, staffUpdate)
         }
       }
 
@@ -652,49 +754,76 @@ export default function AttendanceContent() {
                 </div>
               ) : (
                 /* ── 평가 탭 ── */
-                <div className="space-y-3">
-                  <p className="text-xs text-gray-400 mb-3">
-                    행사 종료 후 인원별 평가를 입력하세요. 저장 시 크루 프로필 점수에 자동 반영됩니다.
-                  </p>
+                <div className="space-y-4">
+                  {/* 안내 배너 */}
+                  <div className="flex items-start gap-2.5 bg-purple-50 border border-purple-100 rounded-xl px-3.5 py-2.5">
+                    <Award className="h-4 w-4 text-purple-400 mt-0.5 shrink-0" />
+                    <p className="text-xs text-purple-700 leading-relaxed">
+                      행사 종료 후 인원별 평가를 입력하세요.<br />
+                      저장 시 크루 프로필 점수에 <strong>자동 반영</strong>됩니다.
+                    </p>
+                  </div>
+
                   {assignments
                     .filter(a => a.staff_type !== '본사')
                     .map(asgn => {
                       const evalData = evalMap[asgn.id]
                       const existing = evaluations.find(e => e.assignment_id === asgn.id)
                       if (!evalData) return null
-                      const avgScore = (
-                        evalData.attendance_score + evalData.performance_score +
-                        evalData.appearance_score + evalData.teamwork_score +
-                        evalData.adaptability_score
-                      ) / 5
+
+                      const avgScore = Math.round(
+                        (evalData.attendance_score + evalData.performance_score +
+                         evalData.appearance_score + evalData.teamwork_score +
+                         evalData.adaptability_score) / 5 * 10
+                      ) / 10
+
+                      const gradeColor = avgScore >= 4 ? 'text-green-600 bg-green-50 border-green-200'
+                        : avgScore >= 2.5 ? 'text-yellow-700 bg-yellow-50 border-yellow-200'
+                        : 'text-red-600 bg-red-50 border-red-200'
 
                       return (
-                        <div key={asgn.id} className={`bg-white rounded-xl border shadow-sm ${evalData.dirty ? 'border-purple-300' : 'border-gray-200'}`}>
+                        <div
+                          key={asgn.id}
+                          className={`rounded-2xl border shadow-sm overflow-hidden transition-all ${
+                            evalData.dirty
+                              ? 'border-purple-300 shadow-purple-100'
+                              : 'border-gray-200'
+                          }`}
+                        >
                           {/* 카드 헤더 */}
-                          <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
-                            <div className="w-8 h-8 rounded-full bg-purple-100 text-purple-700 text-sm font-bold flex items-center justify-center shrink-0">
+                          <div className={`flex items-center gap-3 px-4 py-3 ${evalData.dirty ? 'bg-purple-50' : 'bg-gray-50'} border-b border-gray-100`}>
+                            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-400 to-indigo-500 text-white text-sm font-bold flex items-center justify-center shrink-0 shadow-sm">
                               {asgn.staff_name?.[0] || '?'}
                             </div>
-                            <div className="flex-1">
-                              <span className="text-sm font-semibold">{asgn.staff_name}</span>
-                              {asgn.job_type && <span className="text-xs text-gray-400 ml-1.5">{asgn.job_type}</span>}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-sm font-bold text-gray-800">{asgn.staff_name}</span>
+                                {asgn.job_type && (
+                                  <span className="text-[10px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded-full">{asgn.job_type}</span>
+                                )}
+                              </div>
+                              {existing && (
+                                <span className="text-[10px] text-purple-500">
+                                  이전 평가: {existing.total_score}점 ({existing.grade})
+                                </span>
+                              )}
                             </div>
-                            {existing && (
-                              <span className="text-[10px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium">
-                                기존: {existing.total_score}점 ({existing.grade})
-                              </span>
-                            )}
-                            <span className="text-sm font-bold text-purple-700">
-                              {avgScore.toFixed(1)}점
-                            </span>
+                            {/* 현재 평균 점수 뱃지 */}
+                            <div className={`px-2.5 py-1 rounded-xl border text-sm font-black ${gradeColor}`}>
+                              {avgScore.toFixed(1)}
+                            </div>
                           </div>
 
-                          {/* 평가 항목 */}
-                          <div className="px-4 py-3 space-y-2">
-                            {EVAL_FIELDS.map(({ key, label }) => (
-                              <div key={key} className="flex items-center gap-3">
-                                <span className="text-xs text-gray-500 w-14 shrink-0">{label}</span>
-                                <StarRating
+                          {/* 별점 항목들 */}
+                          <div className="bg-white px-4 pt-3 pb-2 space-y-3">
+                            {EVAL_FIELDS.map(({ key, label, emoji, guide }) => (
+                              <div key={key} className="flex items-center gap-2">
+                                <div className="flex items-center gap-1 w-24 shrink-0">
+                                  <span className="text-base">{emoji}</span>
+                                  <span className="text-xs font-medium text-gray-600">{label}</span>
+                                  <GuideTooltip guide={guide} />
+                                </div>
+                                <ScoreInput
                                   value={evalData[key]}
                                   onChange={v => handleEvalChange(asgn.id, key, v)}
                                 />
@@ -702,50 +831,120 @@ export default function AttendanceContent() {
                             ))}
                           </div>
 
-                          {/* 재투입 + 장단점 */}
-                          <div className="px-4 pb-3 space-y-2">
-                            <div className="flex items-center gap-3">
-                              <span className="text-xs text-gray-500 w-14 shrink-0">재투입</span>
-                              <div className="flex gap-2">
-                                {[true, false].map(v => (
+                          {/* 재투입 여부 */}
+                          <div className="bg-white px-4 pt-1 pb-3 border-t border-gray-50">
+                            <div className="flex items-center gap-3 mb-2.5">
+                              <span className="text-xs font-medium text-gray-500 w-24 shrink-0">재투입 추천</span>
+                              <div className="flex gap-1.5">
+                                {([true, false] as const).map(v => (
                                   <button
                                     key={String(v)}
-                                    onClick={() => setEvalMap(prev => ({ ...prev, [asgn.id]: { ...prev[asgn.id], re_recommend: v, dirty: true } }))}
-                                    className={`px-3 py-0.5 rounded-full text-xs font-medium transition-colors ${evalData.re_recommend === v
-                                      ? v ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
-                                      : 'bg-gray-100 text-gray-500'
+                                    onClick={() => setEvalMap(prev => ({
+                                      ...prev,
+                                      [asgn.id]: { ...prev[asgn.id], re_recommend: v, dirty: true }
+                                    }))}
+                                    className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${
+                                      evalData.re_recommend === v
+                                        ? v
+                                          ? 'bg-green-500 text-white shadow-sm'
+                                          : 'bg-red-400 text-white shadow-sm'
+                                        : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
                                     }`}
                                   >
-                                    {v ? '추천' : '비추천'}
+                                    {v ? '✓ 추천' : '✕ 비추천'}
                                   </button>
                                 ))}
                               </div>
                             </div>
+
+                            {/* 장점 / 개선점 */}
                             <div className="grid grid-cols-2 gap-2">
-                              <Input
-                                value={evalData.strengths}
-                                onChange={e => setEvalMap(prev => ({ ...prev, [asgn.id]: { ...prev[asgn.id], strengths: e.target.value, dirty: true } }))}
-                                placeholder="장점 (선택)"
-                                className="h-7 text-xs"
-                              />
-                              <Input
-                                value={evalData.improvements}
-                                onChange={e => setEvalMap(prev => ({ ...prev, [asgn.id]: { ...prev[asgn.id], improvements: e.target.value, dirty: true } }))}
-                                placeholder="개선점 (선택)"
-                                className="h-7 text-xs"
-                              />
+                              <div>
+                                <label className="text-[10px] text-gray-400 mb-0.5 block">장점</label>
+                                <Input
+                                  value={evalData.strengths}
+                                  onChange={e => setEvalMap(prev => ({
+                                    ...prev,
+                                    [asgn.id]: { ...prev[asgn.id], strengths: e.target.value, dirty: true }
+                                  }))}
+                                  placeholder="예: 시간 엄수, 의사소통 탁월"
+                                  className="h-8 text-xs"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-gray-400 mb-0.5 block">개선점</label>
+                                <Input
+                                  value={evalData.improvements}
+                                  onChange={e => setEvalMap(prev => ({
+                                    ...prev,
+                                    [asgn.id]: { ...prev[asgn.id], improvements: e.target.value, dirty: true }
+                                  }))}
+                                  placeholder="예: 보고 누락, 장비 미숙"
+                                  className="h-8 text-xs"
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* 크루 프로필 업데이트 (접이식 아님 - 항상 표시) */}
+                          <div className="bg-gradient-to-b from-gray-50 to-white px-4 py-3 border-t border-dashed border-gray-200">
+                            <p className="text-[10px] text-gray-400 font-medium mb-2 uppercase tracking-wide">크루 프로필 업데이트</p>
+                            <div className="grid grid-cols-3 gap-2">
+                              <div>
+                                <label className="text-[10px] text-gray-400 mb-0.5 block">키 (cm)</label>
+                                <Input
+                                  value={evalData.height}
+                                  onChange={e => setEvalMap(prev => ({
+                                    ...prev,
+                                    [asgn.id]: { ...prev[asgn.id], height: e.target.value, dirty: true }
+                                  }))}
+                                  placeholder="170"
+                                  type="number"
+                                  className="h-8 text-xs text-center"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-gray-400 mb-0.5 block">몸무게 (kg)</label>
+                                <Input
+                                  value={evalData.weight}
+                                  onChange={e => setEvalMap(prev => ({
+                                    ...prev,
+                                    [asgn.id]: { ...prev[asgn.id], weight: e.target.value, dirty: true }
+                                  }))}
+                                  placeholder="65"
+                                  type="number"
+                                  className="h-8 text-xs text-center"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-gray-400 mb-0.5 block">MBTI</label>
+                                <Input
+                                  value={evalData.mbti}
+                                  onChange={e => setEvalMap(prev => ({
+                                    ...prev,
+                                    [asgn.id]: { ...prev[asgn.id], mbti: e.target.value.toUpperCase(), dirty: true }
+                                  }))}
+                                  placeholder="ISTJ"
+                                  maxLength={4}
+                                  className="h-8 text-xs text-center uppercase"
+                                />
+                              </div>
                             </div>
                           </div>
 
                           {/* 저장 버튼 */}
-                          <div className="px-4 pb-3">
+                          <div className="px-4 pb-4 pt-2 bg-white">
                             <Button
                               size="sm"
                               onClick={() => handleSaveEval(asgn)}
-                              className={`w-full text-xs h-7 ${evalData.dirty ? 'bg-purple-600 hover:bg-purple-700' : 'bg-gray-400'}`}
+                              className={`w-full text-xs h-9 rounded-xl font-semibold transition-all ${
+                                evalData.dirty
+                                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white shadow-md'
+                                  : 'bg-gray-100 text-gray-400 cursor-default'
+                              }`}
                             >
-                              <Save className="h-3.5 w-3.5" />
-                              {existing ? '평가 수정' : '평가 저장'}
+                              <Save className="h-3.5 w-3.5 mr-1.5" />
+                              {existing ? '평가 수정 저장' : '평가 저장'}
                             </Button>
                           </div>
                         </div>
