@@ -14,6 +14,27 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 
+// 행사 날짜 범위 생성 (start ~ end, 최대 31일)
+function getDateRange(start?: string, end?: string): string[] {
+  if (!start) return []
+  const s = new Date(start)
+  const e = end ? new Date(end) : s
+  const dates: string[] = []
+  const curr = new Date(s)
+  while (curr <= e && dates.length < 31) {
+    dates.push(curr.toISOString().slice(0, 10))
+    curr.setDate(curr.getDate() + 1)
+  }
+  return dates
+}
+
+// YYYY-MM-DD → "M/D(요일)" 포맷
+function formatDateTab(dateStr: string): string {
+  const d = new Date(dateStr)
+  const day = ['일', '월', '화', '수', '목', '금', '토'][d.getDay()]
+  return `${d.getMonth() + 1}/${d.getDate()}(${day})`
+}
+
 // 출석 상태 스타일
 const STATUS_STYLE: Record<AttendanceStatus, string> = {
   출석: 'bg-green-500 text-white',
@@ -78,6 +99,8 @@ export default function AttendanceContent() {
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [searchText, setSearchText] = useState('')
   const [activeTab, setActiveTab] = useState<'attendance' | 'evaluation'>('attendance')
+  // 다일 행사: 현재 선택된 날짜 (단일 행사면 null → event_start 사용)
+  const [selectedDate, setSelectedDate] = useState<string | null>(null)
 
   // 출석 편집 상태 (assignmentId → 편집 중인 데이터)
   const [editMap, setEditMap] = useState<Record<string, {
@@ -108,11 +131,35 @@ export default function AttendanceContent() {
 
   useEffect(() => { loadInquiries() }, [loadInquiries])
 
+  // 날짜별 editMap 재구성 (날짜 탭 전환 시 or 초기 로드 시)
+  const buildEditMap = useCallback((
+    asgns: Assignment[],
+    atts: Attendance[],
+    targetDate: string,
+  ) => {
+    const newMap: Record<string, { status: AttendanceStatus | null; clockIn: string; notes: string; dirty: boolean }> = {}
+    asgns.filter(a => a.status !== '취소').forEach(a => {
+      // 해당 날짜의 출석 레코드만 매칭
+      const existing = atts.find(at => at.assignment_id === a.id && at.work_date === targetDate)
+      newMap[a.id] = {
+        status: existing?.status || null,
+        clockIn: existing?.clock_in || '',
+        notes: existing?.notes || '',
+        dirty: false,
+      }
+    })
+    return newMap
+  }, [])
+
   // 행사 선택 시 상세 로드
   const loadDetail = useCallback(async (inq: Inquiry) => {
     setLoadingDetail(true)
     setEditMap({})
     setEvalMap({})
+
+    // 날짜 탭 초기화 (행사 시작일로 설정)
+    const initDate = inq.event_start || new Date().toISOString().slice(0, 10)
+    setSelectedDate(initDate)
 
     const [asgns, atts, evals] = await Promise.all([
       db.list<Assignment>('assignments', {
@@ -129,22 +176,13 @@ export default function AttendanceContent() {
       }),
     ])
 
-    setAssignments(asgns.filter(a => a.status !== '취소'))
+    const activeAsgns = asgns.filter(a => a.status !== '취소')
+    setAssignments(activeAsgns)
     setAttendances(atts)
     setEvaluations(evals)
 
-    // 기존 출석 데이터로 editMap 초기화
-    const newEditMap: typeof editMap = {}
-    asgns.filter(a => a.status !== '취소').forEach(a => {
-      const existing = atts.find(at => at.assignment_id === a.id)
-      newEditMap[a.id] = {
-        status: existing?.status || null,
-        clockIn: existing?.clock_in || '',
-        notes: existing?.notes || '',
-        dirty: false,
-      }
-    })
-    setEditMap(newEditMap)
+    // 시작일 기준으로 editMap 초기화
+    setEditMap(buildEditMap(activeAsgns, atts, initDate))
 
     // 기존 평가 데이터로 evalMap 초기화
     const newEvalMap: typeof evalMap = {}
@@ -169,6 +207,13 @@ export default function AttendanceContent() {
   useEffect(() => {
     if (selectedInq) loadDetail(selectedInq)
   }, [selectedInq, loadDetail])
+
+  // 날짜 탭 전환 → 해당 날짜 출석 데이터로 editMap 재구성
+  function handleDateTabChange(date: string) {
+    if (date === selectedDate) return
+    setSelectedDate(date)
+    setEditMap(buildEditMap(assignments, attendances, date))
+  }
 
   // 출석 상태 변경 (로컬 상태만)
   function handleStatusToggle(assignId: string, status: AttendanceStatus) {
@@ -202,12 +247,13 @@ export default function AttendanceContent() {
       const asgn = assignments.find(a => a.id === assignId)
       if (!asgn) continue
 
-      const existing = attendances.find(a => a.assignment_id === assignId)
+      const targetDate = selectedDate || selectedInq.event_start || new Date().toISOString().slice(0, 10)
+      const existing = attendances.find(a => a.assignment_id === assignId && a.work_date === targetDate)
       const payload = {
         assignment_id: assignId,
         inquiry_id: selectedInq.id,
         staff_name: asgn.staff_name || '',
-        work_date: selectedInq.event_start || new Date().toISOString().slice(0, 10),
+        work_date: targetDate,
         clock_in: data.clockIn || null,
         daily_pay: asgn.pay_rate || 0,
         status: data.status,
@@ -229,12 +275,18 @@ export default function AttendanceContent() {
       }
     }
     toast.success(`출석 ${saved}건 저장 완료`)
+    // dirty 플래그만 초기화 (탭 유지)
     setEditMap(prev => {
       const next = { ...prev }
       Object.keys(next).forEach(k => { next[k] = { ...next[k], dirty: false } })
       return next
     })
-    loadDetail(selectedInq)
+    // 전체 출석 데이터 새로고침 (탭은 유지)
+    const newAtts = await db.list<Attendance>('attendances', {
+      filters: { inquiry_id: selectedInq.id },
+      order: 'created_at', asc: true,
+    })
+    setAttendances(newAtts)
   }
 
   // 전원 출석 처리
@@ -443,7 +495,7 @@ export default function AttendanceContent() {
               </div>
             </div>
 
-            {/* 탭 */}
+            {/* 메인 탭 (출석체크 / 평가입력) */}
             <div className="bg-white border-b border-gray-200 flex">
               <button
                 onClick={() => setActiveTab('attendance')}
@@ -461,6 +513,37 @@ export default function AttendanceContent() {
                 <Award className="h-4 w-4" />평가 입력
               </button>
             </div>
+
+            {/* 날짜 탭 — 다일 행사(2일 이상)일 때만 표시 */}
+            {activeTab === 'attendance' && (() => {
+              const dates = getDateRange(selectedInq.event_start, selectedInq.event_end)
+              if (dates.length <= 1) return null
+              return (
+                <div className="bg-gray-50 border-b border-gray-200 flex overflow-x-auto">
+                  {dates.map(date => {
+                    const isActive = date === selectedDate
+                    // 해당 날짜에 출석 기록이 있는지 확인 (저장된 데이터)
+                    const hasSaved = attendances.some(a => a.work_date === date)
+                    return (
+                      <button
+                        key={date}
+                        onClick={() => handleDateTabChange(date)}
+                        className={`flex flex-col items-center px-4 py-2 text-xs font-medium border-b-2 shrink-0 transition-colors ${
+                          isActive
+                            ? 'border-blue-500 text-blue-700 bg-white'
+                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+                        }`}
+                      >
+                        <span>{formatDateTab(date)}</span>
+                        {hasSaved && (
+                          <span className="mt-0.5 w-1.5 h-1.5 rounded-full bg-green-400" title="출석 기록 있음" />
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              )
+            })()}
 
             {/* 콘텐츠 */}
             <div className="flex-1 overflow-y-auto p-4">
