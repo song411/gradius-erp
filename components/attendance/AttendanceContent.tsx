@@ -96,53 +96,67 @@ interface EvalScores {
   adaptability_score: number
 }
 
-// 별 표시 (읽기 전용)
-function StarDisplay({ value }: { value: number }) {
-  return (
-    <div className="flex gap-0.5">
-      {[1, 2, 3, 4, 5].map(i => (
-        <Star
-          key={i}
-          className={`h-4 w-4 ${
-            value >= i ? 'text-yellow-400 fill-yellow-400' :
-            value >= i - 0.5 ? 'text-yellow-300 fill-yellow-200' :
-            'text-gray-200'
-          }`}
-        />
-      ))}
-    </div>
-  )
-}
-
-// 점수 입력 컴포넌트 (별 표시 + 숫자 직접 입력)
+// 별점 + 숫자 입력 통합 컴포넌트
+// - 별 클릭: 정수/반개 토글
+// - 숫자 입력: 직접 타이핑 (0~5, 0.5 단위 자동 스냅)
 function ScoreInput({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   const [raw, setRaw] = useState(String(value))
+  const [hovered, setHovered] = useState<number | null>(null)
 
-  // 외부 value 변경 시 동기화
   useEffect(() => { setRaw(String(value)) }, [value])
 
-  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+  // 별 클릭 — 같은 정수 클릭 시 반 개 토글
+  function handleStarClick(i: number) {
+    const next = value === i ? i - 0.5 : i
+    onChange(next)
+  }
+
+  // 별 위에서의 표시 값 (호버 중이면 호버 값, 아니면 실제 값)
+  const display = hovered ?? value
+
+  function handleNumChange(e: React.ChangeEvent<HTMLInputElement>) {
     setRaw(e.target.value)
     const num = parseFloat(e.target.value)
     if (!isNaN(num)) {
-      // 0.5 단위로 반올림, 0~5 범위 제한
       const snapped = Math.round(Math.min(5, Math.max(0, num)) * 2) / 2
       onChange(snapped)
     }
   }
 
-  function handleBlur() {
-    setRaw(String(value))
-  }
+  function handleNumBlur() { setRaw(String(value)) }
 
   return (
     <div className="flex items-center gap-2">
-      <StarDisplay value={value} />
+      {/* 클릭 가능한 별 */}
+      <div className="flex gap-0.5" onMouseLeave={() => setHovered(null)}>
+        {[1, 2, 3, 4, 5].map(i => (
+          <button
+            key={i}
+            type="button"
+            onClick={() => handleStarClick(i)}
+            onMouseEnter={() => setHovered(i)}
+            className="focus:outline-none transition-transform hover:scale-110 active:scale-95"
+            title={`${i}점`}
+          >
+            <Star
+              className={`h-5 w-5 transition-colors ${
+                display >= i
+                  ? 'text-yellow-400 fill-yellow-400'
+                  : display >= i - 0.5
+                  ? 'text-yellow-300 fill-yellow-200'
+                  : 'text-gray-200 hover:text-yellow-200'
+              }`}
+            />
+          </button>
+        ))}
+      </div>
+
+      {/* 숫자 직접 입력 */}
       <input
         type="number"
         value={raw}
-        onChange={handleChange}
-        onBlur={handleBlur}
+        onChange={handleNumChange}
+        onBlur={handleNumBlur}
         min={0}
         max={5}
         step={0.5}
