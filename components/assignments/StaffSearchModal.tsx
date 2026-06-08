@@ -13,11 +13,12 @@ import { formatKRW } from '@/lib/utils'
 interface Props {
   open: boolean
   onClose: () => void
-  // 배정 대상 직무 / 기본 단가 (견적에서 가져온 값)
+  // 배정 대상 직무 / 기본 단가 / 기본 일수 (견적에서 가져온 값)
   jobType: string
   defaultPayRate: number
+  defaultDays: number
   // 배정 콜백
-  onAssign: (staff: Staff | null, staffName: string, staffType: string, payRate: number, jobType: string) => void
+  onAssign: (staff: Staff | null, staffName: string, staffType: string, payRate: number, jobType: string, days: number) => void
 }
 
 const JOB_OPTIONS = ['전체', '스탭', '스텝', '안전', '주차', '드라이버', '의전', '경호', '도슨트', '프로모터', '서빙', '설치', '경비', '나레이터', 'MC', '기타']
@@ -39,7 +40,7 @@ function ScoreDots({ score }: { score: number }) {
   )
 }
 
-export default function StaffSearchModal({ open, onClose, jobType, defaultPayRate, onAssign }: Props) {
+export default function StaffSearchModal({ open, onClose, jobType, defaultPayRate, defaultDays, onAssign }: Props) {
   const [staffList, setStaffList] = useState<Staff[]>([])
   const [loading, setLoading] = useState(false)
 
@@ -54,6 +55,7 @@ export default function StaffSearchModal({ open, onClose, jobType, defaultPayRat
   // 선택된 스탭 + 배정 폼
   const [selected, setSelected] = useState<Staff | null>(null)
   const [assignPayRate, setAssignPayRate] = useState(String(defaultPayRate))
+  const [assignDays, setAssignDays] = useState(String(defaultDays || 1))
   const [assignJobType, setAssignJobType] = useState(jobType)
   const [assignStaffType, setAssignStaffType] = useState('외부')
 
@@ -78,9 +80,10 @@ export default function StaffSearchModal({ open, onClose, jobType, defaultPayRat
       setManualMode(false)
       setManualName('')
       setAssignPayRate(String(defaultPayRate))
+      setAssignDays(String(defaultDays || 1))
       setAssignJobType(jobType)
     }
-  }, [open, defaultPayRate, jobType, loadStaff])
+  }, [open, defaultPayRate, defaultDays, jobType, loadStaff])
 
   // 필터링
   const filtered = staffList.filter(s => {
@@ -103,12 +106,13 @@ export default function StaffSearchModal({ open, onClose, jobType, defaultPayRat
 
   function handleConfirm() {
     const payRate = Number(assignPayRate) || 0
+    const days    = Math.max(1, Number(assignDays) || 1)
     if (manualMode) {
       if (!manualName.trim()) return
-      onAssign(null, manualName.trim(), assignStaffType, payRate, assignJobType)
+      onAssign(null, manualName.trim(), assignStaffType, payRate, assignJobType, days)
     } else {
       if (!selected) return
-      onAssign(selected, selected.name, assignStaffType, payRate, assignJobType)
+      onAssign(selected, selected.name, assignStaffType, payRate, assignJobType, days)
     }
     onClose()
   }
@@ -292,25 +296,51 @@ export default function StaffSearchModal({ open, onClose, jobType, defaultPayRat
                   </Select>
                 </div>
 
-                {/* 지급 단가 */}
-                <div>
-                  <label className="text-xs font-medium text-gray-600 mb-1 block">
-                    지급 단가 (일)
-                    {defaultPayRate > 0 && (
-                      <span className="text-gray-400 ml-1">견적: {formatKRW(defaultPayRate)}</span>
-                    )}
-                  </label>
-                  <Input
-                    type="number"
-                    value={assignPayRate}
-                    onChange={e => setAssignPayRate(e.target.value)}
-                    placeholder="일당"
-                    className="h-8 text-sm"
-                  />
-                  {assignPayRate && (
-                    <p className="text-xs text-blue-600 mt-1">{formatKRW(Number(assignPayRate))}/일</p>
-                  )}
+                {/* 지급 단가 + 참여 일수 */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 mb-1 block">
+                      지급 단가 (일)
+                      {defaultPayRate > 0 && (
+                        <span className="text-gray-400 ml-1 text-[10px]">견적: {formatKRW(defaultPayRate)}</span>
+                      )}
+                    </label>
+                    <Input
+                      type="number"
+                      value={assignPayRate}
+                      onChange={e => setAssignPayRate(e.target.value)}
+                      placeholder="일당"
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 mb-1 block">
+                      참여 일수
+                      {defaultDays > 0 && (
+                        <span className="text-gray-400 ml-1 text-[10px]">전체: {defaultDays}일</span>
+                      )}
+                    </label>
+                    <Input
+                      type="number"
+                      value={assignDays}
+                      onChange={e => setAssignDays(e.target.value)}
+                      min={1}
+                      placeholder="일수"
+                      className="h-8 text-sm"
+                    />
+                  </div>
                 </div>
+                {/* 기준금액 미리보기 */}
+                {assignPayRate && assignDays && (
+                  <div className="bg-blue-50 rounded-lg px-3 py-2 text-center">
+                    <p className="text-xs text-gray-500">
+                      {formatKRW(Number(assignPayRate))} × {assignDays}일
+                    </p>
+                    <p className="text-sm font-bold text-blue-700">
+                      = {formatKRW(Number(assignPayRate) * Number(assignDays))}
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 

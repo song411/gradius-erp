@@ -224,9 +224,9 @@ export default function AssignmentsContent() {
     staffType: string,
     payRate: number,
     jobType: string,
+    days: number,
   ) {
     if (!selectedInq) return
-    const days = modalDays || 1
     const payload = {
       inquiry_id: selectedInq.id,
       event_name: selectedInq.event_name,
@@ -713,6 +713,7 @@ export default function AssignmentsContent() {
         onClose={() => setModalOpen(false)}
         jobType={modalJobType}
         defaultPayRate={modalPayRate}
+        defaultDays={modalDays}
         onAssign={handleAssign}
       />
 
