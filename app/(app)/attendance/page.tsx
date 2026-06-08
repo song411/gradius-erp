@@ -4,8 +4,8 @@ import AttendanceContent from '@/components/attendance/AttendanceContent'
 export default function AttendancePage() {
   return (
     <div className="flex flex-col h-full">
-      <Header title="출석부" subtitle="직원 근태 기록 관리" />
-      <div className="flex-1 overflow-y-auto p-6">
+      <Header title="출석 · 평가 관리" subtitle="현장 인원 출석 체크 및 행사 후 평가 입력" />
+      <div className="flex-1 overflow-hidden">
         <AttendanceContent />
       </div>
     </div>
