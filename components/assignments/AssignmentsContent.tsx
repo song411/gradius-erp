@@ -33,7 +33,23 @@ const STATUS_ICON: Record<string, React.ReactNode> = {
   취소:   <XCircle className="h-3.5 w-3.5" />,
 }
 
-// 인라인 단가 수정 컴포넌트
+// ── 구간 타입: 단가 × 일수 쌍 ──────────────────────────
+interface PaySegment { rate: number; days: number }
+
+function parseSegments(memo?: string | null): PaySegment[] | null {
+  if (!memo) return null
+  try {
+    const p = JSON.parse(memo)
+    if (Array.isArray(p.segments) && p.segments.length > 0) return p.segments
+  } catch {}
+  return null
+}
+
+function segmentTotal(segs: PaySegment[]) {
+  return segs.reduce((s, seg) => s + (seg.rate || 0) * (seg.days || 1), 0)
+}
+
+// ── 인라인 단가 수정 ─────────────────────────────────
 function PayRateEditor({ value, onSave }: { value: number; onSave: (v: number) => void }) {
   const [editing, setEditing] = useState(false)
   const [val, setVal] = useState(String(value))
@@ -56,11 +72,116 @@ function PayRateEditor({ value, onSave }: { value: number; onSave: (v: number) =
     <span
       className="cursor-pointer hover:underline text-xs text-gray-700 flex items-center gap-0.5"
       onClick={() => { setVal(String(value)); setEditing(true) }}
-      title="클릭하여 수정"
+      title="클릭하여 단가 수정"
     >
       {formatKRW(value)}
       <Edit2 className="h-2.5 w-2.5 text-gray-400" />
     </span>
+  )
+}
+
+// ── 인라인 일수 수정 ─────────────────────────────────
+function DaysEditor({ value, onSave }: { value: number; onSave: (v: number) => void }) {
+  const [editing, setEditing] = useState(false)
+  const [val, setVal] = useState(String(value))
+  if (editing) {
+    return (
+      <span className="flex items-center gap-1">
+        <Input
+          type="number"
+          value={val}
+          onChange={e => setVal(e.target.value)}
+          className="w-14 h-6 text-xs px-1"
+          autoFocus
+          min={1}
+          onKeyDown={e => {
+            if (e.key === 'Enter') { onSave(Math.max(1, Number(val))); setEditing(false) }
+            if (e.key === 'Escape') setEditing(false)
+          }}
+        />
+        <span className="text-xs text-gray-500">일</span>
+        <button onClick={() => { onSave(Math.max(1, Number(val))); setEditing(false) }} className="text-xs text-blue-600 font-medium">저장</button>
+      </span>
+    )
+  }
+  return (
+    <span
+      className="cursor-pointer hover:underline text-xs text-gray-700 flex items-center gap-0.5"
+      onClick={() => { setVal(String(value)); setEditing(true) }}
+      title="클릭하여 일수 수정"
+    >
+      {value}일
+      <Edit2 className="h-2.5 w-2.5 text-gray-400" />
+    </span>
+  )
+}
+
+// ── 구간별 단가 설정 에디터 ──────────────────────────
+function PaySegmentsEditor({
+  initialSegments, totalDays,
+  onSave, onCancel,
+}: {
+  initialSegments: PaySegment[]
+  totalDays: number
+  onSave: (segs: PaySegment[]) => void
+  onCancel: () => void
+}) {
+  const [segs, setSegs] = useState<PaySegment[]>(
+    initialSegments.length > 0 ? initialSegments : [{ rate: 0, days: totalDays }]
+  )
+
+  function update(i: number, field: keyof PaySegment, v: number) {
+    setSegs(prev => prev.map((s, idx) => idx === i ? { ...s, [field]: v } : s))
+  }
+  function addSeg() { setSegs(prev => [...prev, { rate: 0, days: 1 }]) }
+  function removeSeg(i: number) { setSegs(prev => prev.filter((_, idx) => idx !== i)) }
+
+  const total = segmentTotal(segs)
+  const days  = segs.reduce((s, seg) => s + (seg.days || 1), 0)
+
+  return (
+    <div className="mt-1.5 bg-indigo-50 rounded-lg p-2 space-y-1.5 border border-indigo-200">
+      <p className="text-[10px] font-semibold text-indigo-700 mb-1">구간별 단가 설정</p>
+      {segs.map((seg, i) => (
+        <div key={i} className="flex items-center gap-1.5">
+          <span className="text-[10px] text-gray-500 w-8 shrink-0">{i + 1}구간</span>
+          <Input
+            type="number"
+            value={seg.rate || ''}
+            onChange={e => update(i, 'rate', Number(e.target.value))}
+            placeholder="단가"
+            className="w-24 h-6 text-xs px-1"
+          />
+          <span className="text-[10px] text-gray-400">원 ×</span>
+          <Input
+            type="number"
+            value={seg.days || ''}
+            onChange={e => update(i, 'days', Math.max(1, Number(e.target.value)))}
+            placeholder="일수"
+            className="w-12 h-6 text-xs px-1"
+            min={1}
+          />
+          <span className="text-[10px] text-gray-400">일 =</span>
+          <span className="text-[10px] font-semibold text-indigo-700 w-16 shrink-0">
+            {formatKRW(seg.rate * seg.days)}
+          </span>
+          {segs.length > 1 && (
+            <button onClick={() => removeSeg(i)} className="text-red-400 hover:text-red-600 text-[10px]">✕</button>
+          )}
+        </div>
+      ))}
+      <button onClick={addSeg} className="text-[10px] text-indigo-600 hover:underline">+ 구간 추가</button>
+      <div className="border-t border-indigo-200 pt-1 flex items-center justify-between">
+        <span className="text-[10px] text-gray-500">합계: {days}일 / {formatKRW(total)}</span>
+        <div className="flex gap-1">
+          <button onClick={onCancel} className="text-[10px] text-gray-400 hover:text-gray-600 px-1.5 py-0.5 border rounded">취소</button>
+          <button
+            onClick={() => onSave(segs)}
+            className="text-[10px] text-white bg-indigo-600 hover:bg-indigo-700 px-2 py-0.5 rounded font-medium"
+          >저장</button>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -99,6 +220,9 @@ export default function AssignmentsContent() {
 
   // 배정 수 요약 (문의ID -> 배정수 map)
   const [assignCountMap, setAssignCountMap] = useState<Record<string, number>>({})
+
+  // 구간 편집 중인 배정 ID
+  const [editingSegmentsId, setEditingSegmentsId] = useState<string | null>(null)
 
   // 본사 인원 로드
   const loadCompanyStaff = useCallback(async () => {
@@ -269,10 +393,29 @@ export default function AssignmentsContent() {
 
   // 단가 수정
   async function handlePayRateUpdate(asgn: Assignment, payRate: number) {
-    await db.update('assignments', asgn.id, {
-      pay_rate: payRate,
-    })
+    await db.update('assignments', asgn.id, { pay_rate: payRate })
     toast.success('단가 수정 완료')
+    loadDetail(selectedInq!)
+  }
+
+  // 일수 수정
+  async function handleWorkDaysUpdate(asgn: Assignment, days: number) {
+    await db.update('assignments', asgn.id, { work_days: days })
+    toast.success(`${asgn.staff_name} 참여 일수 → ${days}일`)
+    loadDetail(selectedInq!)
+  }
+
+  // 구간별 단가 저장 (memo에 JSON 보관, pay_rate + work_days 갱신)
+  async function handlePaySegmentsUpdate(asgn: Assignment, segs: PaySegment[]) {
+    const totalDays = segs.reduce((s, seg) => s + (seg.days || 1), 0)
+    const mainRate  = segs[0]?.rate || 0
+    const memoJson  = JSON.stringify({ segments: segs })
+    await db.update('assignments', asgn.id, {
+      pay_rate:  mainRate,
+      work_days: totalDays,
+      memo:      memoJson,
+    })
+    toast.success('구간별 단가 저장 완료')
     loadDetail(selectedInq!)
   }
 
@@ -634,14 +777,66 @@ export default function AssignmentsContent() {
                                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-600">외부</span>
                                   )}
                                 </div>
-                                <div className="flex items-center gap-2 mt-0.5 text-[11px] text-gray-400">
-                                  <PayRateEditor
-                                    value={asgn.pay_rate}
-                                    onSave={v => handlePayRateUpdate(asgn, v)}
-                                  />
-                                  <span>× {asgn.work_days}일</span>
-                                  <span className="font-medium text-gray-600">= {formatKRW((asgn.pay_rate || 0) * (asgn.work_days || 1))}</span>
-                                </div>
+                                {/* 단가 × 일수 표시 (구간 or 단순) */}
+                                {(() => {
+                                  const segs = parseSegments(asgn.memo)
+                                  const isEditing = editingSegmentsId === asgn.id
+                                  if (isEditing) {
+                                    return (
+                                      <PaySegmentsEditor
+                                        initialSegments={segs ?? [{ rate: asgn.pay_rate, days: asgn.work_days }]}
+                                        totalDays={asgn.work_days || 1}
+                                        onSave={async newSegs => {
+                                          await handlePaySegmentsUpdate(asgn, newSegs)
+                                          setEditingSegmentsId(null)
+                                        }}
+                                        onCancel={() => setEditingSegmentsId(null)}
+                                      />
+                                    )
+                                  }
+                                  if (segs) {
+                                    // 구간 모드 표시
+                                    return (
+                                      <div className="mt-0.5 text-[11px] text-gray-500">
+                                        <div className="flex items-center gap-1 flex-wrap">
+                                          {segs.map((seg, i) => (
+                                            <span key={i} className="flex items-center gap-0.5">
+                                              {i > 0 && <span className="text-gray-300">+</span>}
+                                              <span className="bg-indigo-50 text-indigo-700 px-1 py-0.5 rounded text-[10px] font-medium">
+                                                {formatKRW(seg.rate)}×{seg.days}일
+                                              </span>
+                                            </span>
+                                          ))}
+                                          <span className="font-semibold text-gray-700">= {formatKRW(segmentTotal(segs))}</span>
+                                          <button
+                                            onClick={() => setEditingSegmentsId(asgn.id)}
+                                            className="text-[10px] text-indigo-500 hover:underline ml-0.5"
+                                          >수정</button>
+                                        </div>
+                                      </div>
+                                    )
+                                  }
+                                  // 단순 모드
+                                  return (
+                                    <div className="flex items-center gap-2 mt-0.5 text-[11px] text-gray-400 flex-wrap">
+                                      <PayRateEditor
+                                        value={asgn.pay_rate}
+                                        onSave={v => handlePayRateUpdate(asgn, v)}
+                                      />
+                                      <span className="text-gray-300">×</span>
+                                      <DaysEditor
+                                        value={asgn.work_days || 1}
+                                        onSave={v => handleWorkDaysUpdate(asgn, v)}
+                                      />
+                                      <span className="font-medium text-gray-600">= {formatKRW((asgn.pay_rate || 0) * (asgn.work_days || 1))}</span>
+                                      <button
+                                        onClick={() => setEditingSegmentsId(asgn.id)}
+                                        className="text-[10px] text-indigo-400 hover:text-indigo-600 hover:underline border border-indigo-200 px-1 py-0.5 rounded"
+                                        title="날짜별 다른 단가 설정"
+                                      >구간설정</button>
+                                    </div>
+                                  )
+                                })()}
                               </div>
 
                               {/* 상태 */}
@@ -693,7 +888,10 @@ export default function AssignmentsContent() {
                     {formatKRW(
                       allAssignments
                         .filter(a => a.status !== '취소' && a.is_payable)
-                        .reduce((s, a) => s + (a.pay_rate || 0) * (a.work_days || 1), 0)
+                        .reduce((s, a) => {
+                          const segs = parseSegments(a.memo)
+                          return s + (segs ? segmentTotal(segs) : (a.pay_rate || 0) * (a.work_days || 1))
+                        }, 0)
                     )}
                   </span>
                 </div>
