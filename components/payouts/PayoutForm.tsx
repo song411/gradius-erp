@@ -12,6 +12,20 @@ import { Textarea } from '@/components/ui/textarea'
 import { Calculator, User, CreditCard, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
 
+// 구간별 단가 파싱 (인력배정에서 구간 설정 시 memo에 JSON 저장)
+interface PaySegment { rate: number; days: number }
+function parseSegments(memo?: string | null): PaySegment[] | null {
+  if (!memo) return null
+  try {
+    const p = JSON.parse(memo)
+    if (Array.isArray(p.segments) && p.segments.length > 0) return p.segments
+  } catch {}
+  return null
+}
+function segmentTotal(segs: PaySegment[]) {
+  return segs.reduce((s, seg) => s + (seg.rate || 0) * (seg.days || 1), 0)
+}
+
 // 공제율 옵션
 const TAX_RATE_OPTIONS = [
   { label: '없음 (0%)', value: 0 },
@@ -84,7 +98,9 @@ export default function PayoutForm({ open, onClose, assignment, payout, onSaved 
       setDispatchDays(String(payout.dispatch_days || assignment.work_days || 1))
     } else {
       // 신규 등록 - 배정 데이터로 자동 채우기
-      const autoBase = (assignment.pay_rate || 0) * (assignment.work_days || 1)
+      // 구간별 단가가 있으면 구간 합계를 기준금액으로 사용
+      const segs = parseSegments(assignment.memo)
+      const autoBase = segs ? segmentTotal(segs) : (assignment.pay_rate || 0) * (assignment.work_days || 1)
       setBasePay(String(autoBase))
       setOvertimePay('0')
       setMealPay('0')
@@ -196,10 +212,30 @@ export default function PayoutForm({ open, onClose, assignment, payout, onSaved 
             </span>
             <span className="text-xs text-gray-400">{assignment.job_type}</span>
           </div>
-          <div className="flex gap-4 text-xs text-gray-500">
-            <span>배정단가: {formatKRW(assignment.pay_rate)}</span>
-            <span>일수: {assignment.work_days}일</span>
-            <span>기준금액: <strong className="text-gray-800">{formatKRW((assignment.pay_rate || 0) * (assignment.work_days || 1))}</strong></span>
+          <div className="flex gap-4 text-xs text-gray-500 flex-wrap">
+            {(() => {
+              const segs = parseSegments(assignment.memo)
+              if (segs) {
+                // 구간 모드: 각 구간 표시
+                return (
+                  <>
+                    {segs.map((seg, i) => (
+                      <span key={i} className="bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded font-medium">
+                        {formatKRW(seg.rate)}×{seg.days}일
+                      </span>
+                    ))}
+                    <span>기준금액: <strong className="text-gray-800">{formatKRW(segmentTotal(segs))}</strong></span>
+                  </>
+                )
+              }
+              return (
+                <>
+                  <span>배정단가: {formatKRW(assignment.pay_rate)}</span>
+                  <span>일수: {assignment.work_days}일</span>
+                  <span>기준금액: <strong className="text-gray-800">{formatKRW((assignment.pay_rate || 0) * (assignment.work_days || 1))}</strong></span>
+                </>
+              )
+            })()}
           </div>
           {isTeamLeader && (
             <p className="text-xs text-indigo-600 bg-indigo-50 rounded px-2 py-0.5">

@@ -405,14 +405,16 @@ export default function AssignmentsContent() {
     loadDetail(selectedInq!)
   }
 
-  // 구간별 단가 저장 (memo에 JSON 보관, pay_rate + work_days 갱신)
+  // 구간별 단가 저장 (memo에 JSON 보관)
+  // pay_rate = 구간 합산 총액, work_days = 1 로 저장
+  // → pay_rate × work_days = 정확한 총 지급액 (지급관리 자동계산과 호환)
   async function handlePaySegmentsUpdate(asgn: Assignment, segs: PaySegment[]) {
+    const totalPay  = segmentTotal(segs)
     const totalDays = segs.reduce((s, seg) => s + (seg.days || 1), 0)
-    const mainRate  = segs[0]?.rate || 0
-    const memoJson  = JSON.stringify({ segments: segs })
+    const memoJson  = JSON.stringify({ segments: segs, total_days: totalDays })
     await db.update('assignments', asgn.id, {
-      pay_rate:  mainRate,
-      work_days: totalDays,
+      pay_rate:  totalPay,  // 총 지급액 → PayoutForm autoBase = totalPay × 1 = 정확
+      work_days: 1,         // 지급관리 계산 단순화
       memo:      memoJson,
     })
     toast.success('구간별 단가 저장 완료')

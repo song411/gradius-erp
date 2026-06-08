@@ -16,6 +16,20 @@ import {
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
 
+// 구간별 단가 파싱 유틸
+interface PaySegment { rate: number; days: number }
+function parseSegments(memo?: string | null): PaySegment[] | null {
+  if (!memo) return null
+  try {
+    const p = JSON.parse(memo)
+    if (Array.isArray(p.segments) && p.segments.length > 0) return p.segments
+  } catch {}
+  return null
+}
+function segmentTotal(segs: PaySegment[]) {
+  return segs.reduce((s, seg) => s + (seg.rate || 0) * (seg.days || 1), 0)
+}
+
 // 본사 인원 이름 기반 감지 (이름 OR is_payable=false)
 const HQ_NAMES = new Set(['최규성', '송무재', '여지은', '김영찬'])
 function isHQ(a: Assignment) {
@@ -483,7 +497,8 @@ export default function PayoutsContent() {
                 </p>
                 {payableLeaders.filter(a => !currentPayouts.find(p => p.assignment_id === a.id)).map(assign => {
                   const teamMembers = assign.role_type === '팀장' ? getTeamMembers(assign.team_code) : []
-                  const baseAmt = (assign.pay_rate || 0) * (assign.work_days || 1)
+                  const segsAmt = parseSegments(assign.memo)
+                  const baseAmt = segsAmt ? segmentTotal(segsAmt) : (assign.pay_rate || 0) * (assign.work_days || 1)
                   return (
                     <div key={assign.id}
                       className="flex items-start justify-between bg-white border border-orange-200 rounded-lg px-3 py-2.5 gap-2">
@@ -492,9 +507,20 @@ export default function PayoutsContent() {
                           {assign.role_type === '팀장' && <span className="text-[10px] text-indigo-600 font-bold bg-indigo-50 px-1.5 py-0.5 rounded">[팀장]</span>}
                           <span className="text-sm font-semibold text-gray-800">{assign.staff_name}</span>
                           {assign.job_type && <span className="text-xs text-gray-400">{assign.job_type}</span>}
-                          <span className="text-xs text-gray-600">
-                            {formatKRW(assign.pay_rate)} × {assign.work_days}일 = <strong className="text-gray-800">{formatKRW(baseAmt)}</strong>
-                          </span>
+                          {segsAmt ? (
+                            <span className="text-xs text-gray-600 flex items-center gap-1 flex-wrap">
+                              {segsAmt.map((seg, i) => (
+                                <span key={i} className="bg-indigo-50 text-indigo-700 px-1 py-0.5 rounded text-[10px] font-medium">
+                                  {formatKRW(seg.rate)}×{seg.days}일
+                                </span>
+                              ))}
+                              = <strong className="text-gray-800">{formatKRW(baseAmt)}</strong>
+                            </span>
+                          ) : (
+                            <span className="text-xs text-gray-600">
+                              {formatKRW(assign.pay_rate)} × {assign.work_days}일 = <strong className="text-gray-800">{formatKRW(baseAmt)}</strong>
+                            </span>
+                          )}
                         </div>
                         {teamMembers.length > 0 && (
                           <div className="mt-1 flex flex-wrap gap-1">
