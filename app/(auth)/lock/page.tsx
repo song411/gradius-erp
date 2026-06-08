@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import { Shield, Eye, EyeOff, Loader2 } from 'lucide-react'
 
-export default function LockPage() {
+// useSearchParams는 Suspense 경계 안에서만 사용 가능
+function LockForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirectTo = searchParams.get('from') || '/'
@@ -175,5 +176,18 @@ export default function LockPage() {
         }
       `}</style>
     </div>
+  )
+}
+
+// 페이지 컴포넌트: Suspense로 감싸서 useSearchParams 허용
+export default function LockPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white" />
+      </div>
+    }>
+      <LockForm />
+    </Suspense>
   )
 }
