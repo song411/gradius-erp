@@ -49,6 +49,17 @@ function segmentTotal(segs: PaySegment[]) {
   return segs.reduce((s, seg) => s + (seg.rate || 0) * (seg.days || 1), 0)
 }
 
+// 팀 내역 파싱 (팀장 assignment의 memo)
+interface TeamBreakdownItem { name: string; role: string; rate: number; days: number; pay: number }
+function parseTeamBreakdown(memo?: string | null): TeamBreakdownItem[] | null {
+  if (!memo) return null
+  try {
+    const p = JSON.parse(memo)
+    if (Array.isArray(p.team_breakdown) && p.team_breakdown.length > 0) return p.team_breakdown
+  } catch {}
+  return null
+}
+
 // ── 인라인 단가 수정 ─────────────────────────────────
 function PayRateEditor({ value, onSave }: { value: number; onSave: (v: number) => void }) {
   const [editing, setEditing] = useState(false)
@@ -464,7 +475,26 @@ export default function AssignmentsContent() {
     if (!selectedInq) return
     const teamCode = `TEAM-${Date.now().toString(36).toUpperCase()}`
     try {
-      // 팀장 배정
+      // 팀 전체 개별 내역을 memo에 JSON으로 저장 (사업소득대장 등 추후 활용)
+      const teamBreakdown = [
+        ...(data.leaderPresent ? [{
+          name: data.leader.name,
+          role: '팀장',
+          rate: data.leaderRate,
+          days: data.leaderDays,
+          pay: data.leaderRate * data.leaderDays,
+        }] : []),
+        ...data.members.map(m => ({
+          name: m.name,
+          role: '팀원',
+          rate: m.rate,
+          days: m.days,
+          pay: m.rate * m.days,
+        })),
+      ]
+      const teamMemoJson = JSON.stringify({ team_breakdown: teamBreakdown })
+
+      // 팀장 배정: pay_rate = 합산 총액, work_days = 1 (지급관리 자동계산 호환)
       await db.insert('assignments', {
         inquiry_id: selectedInq.id,
         event_name: selectedInq.event_name,
@@ -476,8 +506,8 @@ export default function AssignmentsContent() {
         bank_name: data.leader.bank_name || null,
         account_number: data.leader.account_number || null,
         id_number: data.leader.id_number || null,
-        pay_rate: data.totalPayRate,   // 1인단가 × 현장참여인원 = 팀 총 지급액
-        work_days: teamModalDays,
+        pay_rate: data.totalPayRate,  // 합산 총액
+        work_days: 1,                 // 총액 이미 반영 → 1로 고정
         status: '배정중' as const,
         is_payable: !data.leader.certifications?.includes('본사직원'),
         is_present: data.leaderPresent,
@@ -485,9 +515,10 @@ export default function AssignmentsContent() {
         role_type: '팀장',
         start_date: selectedInq.event_start || null,
         end_date: selectedInq.event_end || null,
-        memo: `팀장 (${data.leaderPresent ? '현장참여' : '현장불참'}) · ${formatKRW(data.perPersonRate)}×${data.presentCount}명=${formatKRW(data.totalPayRate)} 일괄지급`,
+        memo: teamMemoJson,
       })
-      // 하위 멤버 배정 (pay_rate=0, is_payable=false - 팀장에게 일괄 지급)
+
+      // 하위 멤버 배정 (지급은 팀장 일괄 → is_payable=false, 개별 일수/단가는 memo에 보관)
       for (const member of data.members) {
         if (!member.name.trim()) continue
         await db.insert('assignments', {
@@ -498,7 +529,7 @@ export default function AssignmentsContent() {
           staff_type: '외부',
           job_type: data.leaderJobType,
           pay_rate: 0,
-          work_days: teamModalDays,
+          work_days: member.days,  // 개별 참여 일수 저장
           status: '배정중' as const,
           is_payable: false,
           is_present: true,
@@ -506,10 +537,11 @@ export default function AssignmentsContent() {
           role_type: '팀원',
           start_date: selectedInq.event_start || null,
           end_date: selectedInq.event_end || null,
-          memo: `${data.leader.name} 팀 하위멤버`,
+          // 개별 단가/일수/금액 → 사업소득대장용
+          memo: JSON.stringify({ individual_rate: member.rate, individual_days: member.days, individual_pay: member.rate * member.days, team_leader: data.leader.name }),
         })
       }
-      toast.success(`팀 배정 완료: ${data.leader.name} 팀장 + 멤버 ${data.members.length}명`)
+      toast.success(`팀 배정 완료: ${data.leader.name} 팀장 + 멤버 ${data.members.length}명 (합산 ${formatKRW(data.totalPayRate)})`)
       loadDetail(selectedInq)
       loadInquiries()
     } catch (e) {
@@ -779,10 +811,34 @@ export default function AssignmentsContent() {
                                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-600">외부</span>
                                   )}
                                 </div>
-                                {/* 단가 × 일수 표시 (구간 or 단순) */}
+                                {/* 단가 × 일수 표시 (팀내역 / 구간 / 단순) */}
                                 {(() => {
-                                  const segs = parseSegments(asgn.memo)
+                                  const teamBreakdown = asgn.role_type === '팀장' ? parseTeamBreakdown(asgn.memo) : null
+                                  const segs = !teamBreakdown ? parseSegments(asgn.memo) : null
                                   const isEditing = editingSegmentsId === asgn.id
+
+                                  // 팀장 → 팀 내역 표시
+                                  if (teamBreakdown) {
+                                    return (
+                                      <div className="mt-1 text-[11px] text-gray-500 space-y-0.5">
+                                        {teamBreakdown.map((item, i) => (
+                                          <div key={i} className="flex items-center gap-1">
+                                            <span className={`text-[10px] px-1 py-0.5 rounded font-medium ${item.role === '팀장' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'}`}>
+                                              {item.role}
+                                            </span>
+                                            <span className="text-gray-600">{item.name}</span>
+                                            <span className="text-gray-400">{formatKRW(item.rate)}×{item.days}일</span>
+                                            <span className="font-medium text-gray-700">= {formatKRW(item.pay)}</span>
+                                          </div>
+                                        ))}
+                                        <div className="flex items-center gap-1 pt-0.5 border-t border-gray-100">
+                                          <span className="text-blue-700 font-semibold">합산 지급: {formatKRW(asgn.pay_rate)}</span>
+                                        </div>
+                                      </div>
+                                    )
+                                  }
+
+                                  // 구간 편집 중
                                   if (isEditing) {
                                     return (
                                       <PaySegmentsEditor
@@ -796,8 +852,9 @@ export default function AssignmentsContent() {
                                       />
                                     )
                                   }
+
+                                  // 구간 모드
                                   if (segs) {
-                                    // 구간 모드 표시
                                     return (
                                       <div className="mt-0.5 text-[11px] text-gray-500">
                                         <div className="flex items-center gap-1 flex-wrap">
@@ -818,6 +875,7 @@ export default function AssignmentsContent() {
                                       </div>
                                     )
                                   }
+
                                   // 단순 모드
                                   return (
                                     <div className="flex items-center gap-2 mt-0.5 text-[11px] text-gray-400 flex-wrap">
