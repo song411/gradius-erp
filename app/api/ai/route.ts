@@ -20,8 +20,8 @@ async function fetchBusinessContext(): Promise<string> {
   try {
     const [inquiriesRes, settlementsRes, staffRes, payoutsRes, assignmentsRes] = await Promise.all([
       supabase.from('inquiries').select('id, status, event_name, company_name, event_start, event_end, location').order('created_at', { ascending: false }).limit(100),
-      supabase.from('settlements').select('id, inquiry_id, contract_amount, received_amount, status').limit(200),
-      supabase.from('staff').select('id, name, position, is_active, score').eq('is_active', true),
+      supabase.from('settlements').select('id, inquiry_id, invoice_amount, received_amount, deposit_status, progress').limit(200),
+      supabase.from('staff').select('id, name, total_score'),
       supabase.from('payouts').select('id, inquiry_id, final_pay, status').limit(200),
       supabase.from('assignments').select('id, inquiry_id, staff_id, role').limit(200),
     ])
@@ -39,12 +39,12 @@ async function fetchBusinessContext(): Promise<string> {
       i.event_start >= start && i.event_start <= end
     )
 
-    const totalContractAmount = settlements.reduce((s, r) => s + (r.contract_amount || 0), 0)
+    const totalInvoiceAmount = settlements.reduce((s, r) => s + (r.invoice_amount || 0), 0)
     const totalReceivedAmount = settlements.reduce((s, r) => s + (r.received_amount || 0), 0)
-    const pendingAmount = totalContractAmount - totalReceivedAmount
+    const pendingAmount = totalInvoiceAmount - totalReceivedAmount
 
     const totalPayout = payouts.reduce((s, p) => s + (p.final_pay || 0), 0)
-    const pendingPayouts = payouts.filter(p => p.status === '대기' || p.status === '검토완료').length
+    const pendingPayouts = payouts.filter(p => p.status === '대기' || p.status === '확인완료').length
     const completedPayouts = payouts.filter(p => p.status === '지급완료').length
 
     const recentEvents = inquiries.slice(0, 10).map(i =>
@@ -52,7 +52,7 @@ async function fetchBusinessContext(): Promise<string> {
     ).join('\n')
 
     const avgScore = staff.length > 0
-      ? (staff.reduce((s, p) => s + (p.score || 0), 0) / staff.length).toFixed(1)
+      ? (staff.reduce((s, p) => s + (p.total_score || 0), 0) / staff.length).toFixed(1)
       : 'N/A'
 
     return `
@@ -64,7 +64,7 @@ async function fetchBusinessContext(): Promise<string> {
 - ${label} 행사: ${monthlyInquiries.length}건
 
 [정산/매출 현황]
-- 총 계약금액: ${totalContractAmount.toLocaleString()}원
+- 총 청구금액: ${totalInvoiceAmount.toLocaleString()}원
 - 총 입금액: ${totalReceivedAmount.toLocaleString()}원
 - 미수금 (미입금): ${pendingAmount.toLocaleString()}원
 
