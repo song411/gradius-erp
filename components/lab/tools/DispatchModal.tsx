@@ -64,8 +64,9 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
   const [selectedInqId, setSelectedInqId] = useState('')
   const [showGuardPicker, setShowGuardPicker] = useState(false)
 
-  // 신고서 헤더 (모두 수동 편집 가능)
-  const [reportType, setReportType]       = useState<'배치' | '배치폐지'>('배치')
+  // 신고서 헤더 (모두 수동 편집 가능) - 배치/배치폐지 독립 체크
+  const [isBaechi, setIsBaechi]   = useState(true)
+  const [isPyeji,  setIsPyeji]    = useState(true)
   const [receiptNo, setReceiptNo]         = useState('')
   const [location, setLocation]           = useState('')
   const [locationPhone, setLocationPhone] = useState('')
@@ -273,12 +274,19 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
             <h4 className="text-xs font-bold text-gray-600 mb-3 uppercase tracking-wide">신고서 설정</h4>
             <div className="grid grid-cols-4 gap-3">
               <div>
-                <label className="text-[10px] text-gray-500 mb-0.5 block">신고 구분</label>
-                <select value={reportType} onChange={e => setReportType(e.target.value as any)}
-                  className="w-full h-8 text-xs border border-gray-200 rounded-lg px-2">
-                  <option>배치</option>
-                  <option>배치폐지</option>
-                </select>
+                <label className="text-[10px] text-gray-500 mb-1.5 block">신고 구분</label>
+                <div className="flex flex-col gap-1">
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input type="checkbox" checked={isBaechi} onChange={e => setIsBaechi(e.target.checked)}
+                      className="w-3.5 h-3.5 accent-indigo-600" />
+                    <span className="text-xs">배치</span>
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input type="checkbox" checked={isPyeji} onChange={e => setIsPyeji(e.target.checked)}
+                      className="w-3.5 h-3.5 accent-indigo-600" />
+                    <span className="text-xs">배치폐지</span>
+                  </label>
+                </div>
               </div>
               <div>
                 <label className="text-[10px] text-gray-500 mb-0.5 block">제출 경찰서</label>
@@ -307,8 +315,8 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
                 ■ 경비업법 시행규칙 [별지 제15호서식] &lt;개정 2023. 7. 17.&gt;
               </div>
               <div className="text-xl font-bold leading-tight">
-                경비원 [{reportType === '배치' ? 'v' : '\u3000'}] 배치<br />
-                　　[{reportType === '배치폐지' ? 'v' : '\u3000'}] 배치폐지 &nbsp;신고서
+                경비원 [{isBaechi ? 'v' : '\u3000'}] 배치<br />
+                　　[{isPyeji  ? 'v' : '\u3000'}] 배치폐지 &nbsp;신고서
               </div>
             </div>
 
