@@ -10,10 +10,11 @@ import { Select } from '@/components/ui/select'
 import { Card } from '@/components/ui/card'
 import {
   Search, UserPlus, CheckCircle2, Clock, XCircle, ChevronRight,
-  Users, CalendarDays, MapPin, Briefcase, Trash2, AlertCircle, UserX, Edit2
+  Users, CalendarDays, MapPin, Briefcase, Trash2, AlertCircle, UserX, Edit2, Sparkles
 } from 'lucide-react'
 import StaffSearchModal from './StaffSearchModal'
 import TeamAssignModal, { type TeamAssignData } from './TeamAssignModal'
+import StaffRecommendModal from './StaffRecommendModal'
 import { toast } from 'sonner'
 
 // 본사 인원 ID 목록 (certifications에 '본사직원' 포함)
@@ -208,6 +209,7 @@ interface SlotGroup {
 export default function AssignmentsContent() {
   const [inquiries, setInquiries]     = useState<Inquiry[]>([])
   const [selectedInq, setSelectedInq] = useState<Inquiry | null>(null)
+  const [showRecommend, setShowRecommend] = useState(false)
   const [slots, setSlots]             = useState<SlotGroup[]>([])
   const [allAssignments, setAllAssignments] = useState<Assignment[]>([])
   const [loading, setLoading]         = useState(true)
@@ -697,6 +699,10 @@ export default function AssignmentsContent() {
                     <Users className="h-3.5 w-3.5" />
                     팀 배정
                   </Button>
+                  <Button size="sm" variant="outline" onClick={() => setShowRecommend(true)} className="h-7 text-xs border-indigo-300 text-indigo-600 hover:bg-indigo-50">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    추천 인력
+                  </Button>
                 </div>
               </div>
             </div>
@@ -983,6 +989,19 @@ export default function AssignmentsContent() {
         defaultPayRate={teamModalPayRate}
         onAssign={handleTeamAssign}
       />
+
+      {/* 추천 인력 모달 */}
+      {showRecommend && selectedInq && (
+        <StaffRecommendModal
+          inquiry={selectedInq}
+          onClose={() => setShowRecommend(false)}
+          onSelect={(staff) => {
+            setShowRecommend(false)
+            // 추천 인력 선택 → 기본값으로 배정 추가 (이름·직종 자동완성, 단가는 기본 0으로 추가 후 수정 가능)
+            handleAssign(staff, staff.name, '외부', 0, '', 1)
+          }}
+        />
+      )}
     </div>
   )
 }
