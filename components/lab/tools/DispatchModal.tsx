@@ -3,10 +3,32 @@
 import { useEffect, useState, useCallback } from 'react'
 import { db } from '@/lib/supabase/api'
 import type { Inquiry, GuardProfile } from '@/lib/supabase/types'
-import { X, Printer, UserPlus, Trash2, ChevronDown } from 'lucide-react'
+import { X, Printer, UserPlus, Trash2, ChevronDown, Save, FolderOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { formatDate } from '@/lib/utils'
+
+// 저장된 신고서 타입
+interface DispatchReport {
+  id: string
+  title?: string
+  police_station?: string
+  report_date?: string
+  is_baechi?: boolean
+  is_pyeji?: boolean
+  receipt_no?: string
+  location?: string
+  location_phone?: string
+  start_date?: string
+  start_time?: string
+  end_date?: string
+  end_time?: string
+  purpose?: string
+  guard_rows?: GuardRow[]
+  include_docs?: boolean
+  inquiry_id?: string
+  created_at?: string
+}
 
 // 회사 고정 정보
 const COMPANY = {
@@ -63,6 +85,11 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
   const [selectedInqId, setSelectedInqId] = useState('')
   const [showGuardPicker, setShowGuardPicker] = useState(false)
   const [guardSearch, setGuardSearch] = useState('')
+  const [savedReports, setSavedReports] = useState<DispatchReport[]>([])
+  const [showLoadPicker, setShowLoadPicker] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saveMsg, setSaveMsg] = useState('')
+  const [currentReportId, setCurrentReportId] = useState<string | null>(null)
 
   // 신고서 헤더 (모두 수동 편집 가능) - 배치/배치폐지 독립 체크
   const [isBaechi, setIsBaechi]   = useState(true)
@@ -87,18 +114,93 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
   const [showDocs, setShowDocs] = useState(true)
 
   const load = useCallback(async () => {
-    const [inqs, gs] = await Promise.all([
+    const [inqs, gs, reports] = await Promise.all([
       db.list<Inquiry>('inquiries', {
         inFilter: { status: ['체결', '배정완료', '진행중', '완료'] },
         order: 'event_start', asc: false,
       }),
       db.list<GuardProfile>('guard_profiles', { order: 'name', asc: true }),
+      db.list<DispatchReport>('dispatch_reports', { order: 'created_at', asc: false }),
     ])
     setInquiries(inqs)
     setGuards(gs)
+    setSavedReports(reports)
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  // 저장
+  async function handleSave() {
+    setSaving(true)
+    setSaveMsg('')
+    const title = `${reportDate} ${policeStation}경찰서 ${rows.filter(r => r.name).map(r => r.name).join('·') || '(경호원 없음)'}`
+    const payload = {
+      title,
+      inquiry_id: selectedInqId || null,
+      police_station: policeStation,
+      report_date: reportDate,
+      receipt_no: receiptNo,
+      is_baechi: isBaechi,
+      is_pyeji: isPyeji,
+      location,
+      location_phone: locationPhone,
+      start_date: startDate,
+      start_time: startTime,
+      end_date: endDate,
+      end_time: endTime,
+      purpose,
+      guard_rows: rows,
+      include_docs: showDocs,
+    }
+    try {
+      if (currentReportId) {
+        await db.update('dispatch_reports', currentReportId, payload)
+        setSaveMsg('✅ 저장 완료')
+      } else {
+        const created = await db.create<DispatchReport>('dispatch_reports', payload)
+        if (created?.id) setCurrentReportId(created.id)
+        setSaveMsg('✅ 저장 완료')
+      }
+      // 목록 갱신
+      const reports = await db.list<DispatchReport>('dispatch_reports', { order: 'created_at', asc: false })
+      setSavedReports(reports)
+    } catch {
+      setSaveMsg('❌ 저장 실패')
+    } finally {
+      setSaving(false)
+      setTimeout(() => setSaveMsg(''), 2500)
+    }
+  }
+
+  // 불러오기
+  function handleLoadReport(r: DispatchReport) {
+    setCurrentReportId(r.id)
+    setSelectedInqId(r.inquiry_id || '')
+    setPoliceStation(r.police_station || '혜화')
+    setReportDate(r.report_date || new Date().toISOString().slice(0, 10))
+    setReceiptNo(r.receipt_no || '')
+    setIsBaechi(r.is_baechi ?? true)
+    setIsPyeji(r.is_pyeji ?? true)
+    setLocation(r.location || '')
+    setLocationPhone(r.location_phone || '')
+    setStartDate(r.start_date || '')
+    setStartTime(r.start_time || '')
+    setEndDate(r.end_date || '')
+    setEndTime(r.end_time || '')
+    setPurpose(r.purpose || '')
+    setRows(r.guard_rows && r.guard_rows.length > 0 ? r.guard_rows : Array.from({ length: 6 }, emptyRow))
+    setShowDocs(r.include_docs ?? true)
+    setShowLoadPicker(false)
+  }
+
+  // 저장된 신고서 삭제
+  async function handleDeleteReport(id: string, e: React.MouseEvent) {
+    e.stopPropagation()
+    if (!confirm('이 신고서를 삭제할까요?')) return
+    await db.delete('dispatch_reports', id)
+    setSavedReports(prev => prev.filter(r => r.id !== id))
+    if (currentReportId === id) setCurrentReportId(null)
+  }
 
   // 행사 선택 → 기본 정보만 자동완성 (인원은 수동 선택)
   function handleSelectInquiry(inqId: string) {
@@ -306,6 +408,46 @@ ${clone.innerHTML}
             <input type="checkbox" checked={showDocs} onChange={e => setShowDocs(e.target.checked)} className="rounded" />
             서류 첨부 포함
           </label>
+
+          {/* 불러오기 */}
+          <div className="relative">
+            <Button size="sm" onClick={() => setShowLoadPicker(v => !v)}
+              className="bg-gray-700 hover:bg-gray-600 text-xs h-8 gap-1">
+              <FolderOpen className="h-3.5 w-3.5" />불러오기
+            </Button>
+            {showLoadPicker && (
+              <div className="absolute top-9 right-0 bg-white rounded-xl shadow-2xl border border-gray-200 w-80 max-h-72 overflow-y-auto" style={{ zIndex: 10000 }}>
+                <div className="px-3 py-2 border-b border-gray-100 text-xs font-semibold text-gray-500">저장된 신고서</div>
+                {savedReports.length === 0 && (
+                  <div className="px-3 py-4 text-xs text-gray-400 text-center">저장된 신고서가 없습니다.</div>
+                )}
+                {savedReports.map(r => (
+                  <button key={r.id} onClick={() => handleLoadReport(r)}
+                    className="w-full text-left px-3 py-2.5 hover:bg-indigo-50 flex items-center gap-2 border-b border-gray-50 last:border-0">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-medium text-gray-800 truncate">{r.title || '제목 없음'}</div>
+                      <div className="text-[10px] text-gray-400 mt-0.5">
+                        {r.created_at ? new Date(r.created_at).toLocaleDateString('ko-KR') : ''}
+                        {r.id === currentReportId && <span className="ml-1 text-indigo-500 font-semibold">· 현재 편집 중</span>}
+                      </div>
+                    </div>
+                    <button onClick={e => handleDeleteReport(r.id, e)}
+                      className="text-red-300 hover:text-red-500 shrink-0 p-1">
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 저장 */}
+          <Button size="sm" onClick={handleSave} disabled={saving}
+            className="bg-emerald-600 hover:bg-emerald-700 text-xs h-8 gap-1">
+            <Save className="h-3.5 w-3.5" />
+            {saving ? '저장 중...' : currentReportId ? '덮어쓰기' : '저장'}
+          </Button>
+          {saveMsg && <span className="text-xs text-emerald-300">{saveMsg}</span>}
 
           <Button size="sm" onClick={handlePrint}
             className="bg-blue-600 hover:bg-blue-700 text-xs h-8 gap-1">
