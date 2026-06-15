@@ -323,88 +323,52 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
 
   const docRows = rows.filter(r => r.id_doc_url || r.certificate_doc_url || r.crime_check_doc_url)
 
-  // 새 창에서 인쇄 (embed/iframe 이벤트 충돌 완전 회피)
+  // 현재 창에서 직접 인쇄 (팝업 방식 제거 — 브라우저 차단/CDN 로딩 문제 해결)
   function handlePrint() {
     setShowGuardPicker(false)
 
     const area = document.getElementById('dispatch-print-content')
     if (!area) return
 
-    // input 현재 값 → value 어트리뷰트 동기화 (cloneNode는 property만 복사 안함)
+    // input 현재 값 → value attribute 동기화 (cloneNode는 DOM property 복사 안 함)
     area.querySelectorAll('input, textarea').forEach(el => {
       (el as HTMLInputElement).setAttribute('value', (el as HTMLInputElement).value)
     })
 
-    const clone = area.cloneNode(true) as HTMLElement
-    // 화면 전용 요소 제거
-    clone.querySelectorAll('.dispatch-no-print').forEach(el => el.remove())
-    // iframe → embed 로 교체 (인쇄창에서는 embed가 더 안정적)
-    clone.querySelectorAll('iframe').forEach(iframe => {
-      const src = iframe.getAttribute('src') || ''
-      const embed = document.createElement('embed')
-      embed.src = src
-      embed.type = 'application/pdf'
-      embed.style.cssText = 'width:194mm;height:270mm;border:none;'
-      iframe.replaceWith(embed)
-    })
+    // 임시 print 스타일 주입
+    const styleId = 'dispatch-temp-print'
+    document.getElementById(styleId)?.remove()
+    const style = document.createElement('style')
+    style.id = styleId
+    style.textContent = `
+      @media print {
+        @page { size: A4; margin: 0; }
+        body * { visibility: hidden !important; }
+        #dispatch-print-content { visibility: visible !important; position: fixed; top: 0; left: 0; width: 100%; background: white; overflow: visible !important; }
+        #dispatch-print-content * { visibility: visible !important; }
+        .dispatch-no-print { display: none !important; visibility: hidden !important; }
+        .dispatch-page { width: 210mm; padding: 12mm 15mm; margin: 0 auto; box-sizing: border-box; page-break-after: always; background: white; font-family: 'Malgun Gothic','맑은 고딕',sans-serif; font-size: 11px; }
+        .dispatch-doc-page { width: 210mm; min-height: 297mm; padding: 8mm; margin: 0 auto; display: flex; align-items: center; justify-content: center; page-break-before: always; }
+        .dispatch-doc-page img { max-width: 194mm; max-height: 277mm; object-fit: contain; }
+        table { border-collapse: collapse !important; width: 100%; }
+        input, textarea { border: none !important; outline: none !important; background: transparent !important; font-family: inherit; font-size: inherit; }
+        td, th { word-break: keep-all; }
+      }
+    `
+    document.head.appendChild(style)
 
-    const win = window.open('', '_blank', 'width=900,height=800')
-    if (!win) {
-      alert('팝업이 차단되어 있습니다. 브라우저에서 팝업을 허용한 후 다시 시도해주세요.')
-      return
-    }
-
-    win.document.write(`<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>배치신고서</title>
-  <script src="https://cdn.tailwindcss.com"><\/script>
-  <style>
-    body { font-family: 'Malgun Gothic','맑은 고딕',sans-serif; background:white; margin:0; }
-    table { border-collapse: collapse; width:100%; }
-    .dispatch-page { width:210mm; padding:12mm 15mm; margin:0 auto; font-size:11px; box-sizing:border-box; }
-    .dispatch-no-print { display:none !important; }
-    .dispatch-doc-page {
-      width:210mm; min-height:297mm; padding:8mm; margin:0 auto;
-      display:flex; align-items:center; justify-content:center;
-      page-break-before:always;
-    }
-    .dispatch-doc-page img { max-width:194mm; max-height:270mm; object-fit:contain; }
-    .dispatch-doc-page embed { width:194mm; height:270mm; border:none; }
-    input,textarea,select { border:none!important; outline:none!important; background:transparent!important; font-family:inherit; font-size:inherit; }
-    td { word-break:keep-all; }
-    @media print {
-      @page { size:A4; margin:0; }
-      body { margin:0; }
-      .dispatch-page { page-break-after:always; width:210mm; padding:12mm 15mm; }
-      .dispatch-no-print { display:none !important; }
-    }
-  </style>
-</head>
-<body>
-${clone.innerHTML}
-</body>
-</html>`)
-    win.document.close()
-    win.focus()
-    // Tailwind + 리소스 로드 후 인쇄
-    setTimeout(() => win.print(), 2000)
+    setTimeout(() => {
+      window.print()
+      // 인쇄 후 임시 스타일 제거
+      setTimeout(() => document.getElementById(styleId)?.remove(), 1000)
+    }, 150)
   }
 
   return (
     <>
       <style>{`
-        @media screen {
-          .dispatch-page { width: 210mm; padding: 12mm 15mm; background: white; box-sizing: border-box; }
-          .dispatch-doc-page { width: 210mm; padding: 8mm; background: white; min-height: 120px; display: flex; flex-direction: column; box-sizing: border-box; }
-        }
-        @media print {
-          body > *:not(#dispatch-print-content) { visibility: hidden !important; }
-          #dispatch-print-content, #dispatch-print-content * { visibility: visible !important; }
-          .dispatch-no-print { display: none !important; }
-          .dispatch-page { width: 210mm; padding: 12mm 15mm; }
-        }
+        .dispatch-page { width: 210mm; padding: 12mm 15mm; background: white; box-sizing: border-box; font-family: 'Malgun Gothic','맑은 고딕',sans-serif; }
+        .dispatch-doc-page { width: 210mm; padding: 8mm; background: white; min-height: 120px; display: flex; flex-direction: column; box-sizing: border-box; }
       `}</style>
 
       <div className="fixed inset-0 bg-black/70 flex flex-col" style={{ zIndex: 9999 }}>
