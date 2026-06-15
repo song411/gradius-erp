@@ -17,16 +17,15 @@ const COMPANY = {
   phone:   '02-1600-2944',
 }
 
-// PDF/이미지 자동 구분 뷰어
+// PDF/이미지 자동 구분 뷰어 — iframe 사용 (embed는 이벤트 가로채기 문제 있음)
 function DocViewer({ url, label }: { url: string; label: string }) {
-  const isPdf = url.toLowerCase().includes('.pdf') || url.includes('application/pdf')
+  const isPdf = url.toLowerCase().includes('.pdf')
   if (isPdf) {
     return (
-      <embed
+      <iframe
         src={url}
-        type="application/pdf"
-        className="w-full"
-        style={{ minHeight: '270mm', height: '270mm' }}
+        className="w-full border-0"
+        style={{ height: '270mm', minHeight: '270mm' }}
         title={label}
       />
     )
@@ -156,39 +155,74 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
 
   const docRows = rows.filter(r => r.id_doc_url || r.certificate_doc_url || r.crime_check_doc_url)
 
+  // 새 창에서 인쇄 (embed/iframe 이벤트 충돌 완전 회피)
+  function handlePrint() {
+    setShowGuardPicker(false)
+
+    const area = document.getElementById('dispatch-print-content')
+    if (!area) return
+
+    // input 현재 값 → value 어트리뷰트 동기화 (cloneNode는 property만 복사 안함)
+    area.querySelectorAll('input, textarea').forEach(el => {
+      (el as HTMLInputElement).setAttribute('value', (el as HTMLInputElement).value)
+    })
+
+    const clone = area.cloneNode(true) as HTMLElement
+    // 화면 전용 요소 제거
+    clone.querySelectorAll('.dispatch-no-print').forEach(el => el.remove())
+    // iframe → embed 로 교체 (인쇄창에서는 embed가 더 안정적)
+    clone.querySelectorAll('iframe').forEach(iframe => {
+      const src = iframe.getAttribute('src') || ''
+      const embed = document.createElement('embed')
+      embed.src = src
+      embed.type = 'application/pdf'
+      embed.style.cssText = 'width:194mm;height:270mm;border:none;'
+      iframe.replaceWith(embed)
+    })
+
+    const win = window.open('', '_blank', 'width=900,height=800')
+    if (!win) {
+      alert('팝업이 차단되어 있습니다. 브라우저에서 팝업을 허용한 후 다시 시도해주세요.')
+      return
+    }
+
+    win.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>배치신고서</title>
+  <script src="https://cdn.tailwindcss.com"><\/script>
+  <style>
+    body { font-family: 'Malgun Gothic','맑은 고딕',sans-serif; background:white; margin:0; }
+    table { border-collapse: collapse; width:100%; }
+    .dispatch-page { width:210mm; padding:12mm 18mm; margin:0 auto; font-size:11px; }
+    .dispatch-doc-page {
+      width:210mm; min-height:297mm; padding:8mm; margin:0 auto;
+      display:flex; align-items:center; justify-content:center;
+      page-break-before:always;
+    }
+    .dispatch-doc-page img { max-width:194mm; max-height:270mm; object-fit:contain; }
+    .dispatch-doc-page embed { width:194mm; height:270mm; border:none; }
+    input,textarea,select { border:none!important; outline:none!important; background:transparent!important; }
+    @media print {
+      @page { size:A4; margin:0; }
+      .dispatch-page { page-break-after:always; }
+    }
+  </style>
+</head>
+<body>
+${clone.innerHTML}
+</body>
+</html>`)
+    win.document.close()
+    win.focus()
+    // Tailwind + 리소스 로드 후 인쇄
+    setTimeout(() => win.print(), 2000)
+  }
+
   return (
     <>
       <style>{`
-        @media print {
-          /* 인쇄 시 dispatch-print-area 안의 내용만 표시 */
-          body * { visibility: hidden !important; }
-          .dispatch-print-area, .dispatch-print-area * { visibility: visible !important; }
-          .dispatch-print-area {
-            position: fixed !important;
-            left: 0 !important; top: 0 !important;
-            width: 100% !important;
-            background: white !important;
-          }
-          .dispatch-no-print { display: none !important; }
-          .dispatch-page {
-            width: 210mm; min-height: 297mm;
-            padding: 12mm 18mm; margin: 0 auto;
-            page-break-after: always; background: white;
-            box-shadow: none !important;
-          }
-          .dispatch-doc-page {
-            page-break-before: always;
-            width: 210mm; min-height: 297mm;
-            padding: 8mm; margin: 0 auto; background: white;
-            display: flex !important; align-items: center; justify-content: center;
-          }
-          .dispatch-doc-page img,
-          .dispatch-doc-page embed,
-          .dispatch-doc-page object {
-            max-width: 194mm; max-height: 279mm; object-fit: contain;
-          }
-          input, select, textarea { border: none !important; outline: none !important; background: transparent !important; }
-        }
         @media screen {
           .dispatch-page { width: 210mm; padding: 12mm 18mm; background: white; }
           .dispatch-doc-page { width: 210mm; padding: 8mm; background: white; min-height: 120px; display: flex; flex-direction: column; }
@@ -273,13 +307,7 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
             서류 첨부 포함
           </label>
 
-          <Button size="sm" onClick={() => {
-              setShowGuardPicker(false)
-              // PDF embed가 포커스를 가져가면 print가 막히므로 강제 해제
-              ;(document.activeElement as HTMLElement)?.blur?.()
-              document.body.focus()
-              setTimeout(() => window.print(), 200)
-            }}
+          <Button size="sm" onClick={handlePrint}
             className="bg-blue-600 hover:bg-blue-700 text-xs h-8 gap-1">
             <Printer className="h-3.5 w-3.5" />인쇄 / PDF
           </Button>
@@ -288,8 +316,8 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        {/* ── 본문 스크롤 영역 (인쇄 시 이 영역만 출력) ── */}
-        <div className="dispatch-print-area flex-1 overflow-y-auto bg-gray-100 py-6 flex flex-col items-center gap-6"
+        {/* ── 본문 스크롤 영역 ── */}
+        <div id="dispatch-print-content" className="dispatch-print-area flex-1 overflow-y-auto bg-gray-100 py-6 flex flex-col items-center gap-6"
           onClick={() => setShowGuardPicker(false)}>
 
           {/* ── 신고서 설정 패널 (화면 전용) ── */}
