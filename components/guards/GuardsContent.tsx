@@ -14,10 +14,13 @@ import { toast } from 'sonner'
 
 const JOB_CATEGORIES = ['신변보호', '시설경비', '호송경비', '기계경비', '특수경비', '혼합']
 
-// 파일 업로드 유틸
+// 파일 업로드 유틸 - 경로는 타임스탬프 기반으로 생성 (한글 경로 오류 방지)
 async function uploadFile(file: File, guardName: string, docType: string): Promise<string> {
-  const ext = file.name.split('.').pop()
-  const path = `${guardName}/${docType}_${Date.now()}.${ext}`
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
+  const ts = Date.now()
+  // 폴더명: guard_<타임스탬프> 형태로 영문만 사용
+  const folderKey = `guard_${ts}`
+  const path = `${folderKey}/${docType}_${ts}.${ext}`
   const formData = new FormData()
   formData.append('file', file)
   formData.append('path', path)
