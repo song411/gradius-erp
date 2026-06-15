@@ -174,7 +174,7 @@ function ToolModal({ toolId, onClose }: { toolId: string; onClose: () => void })
   if (toolId === 'ai')             return <AiModal        onClose={onClose} />
   if (toolId === 'guide')          return <GuideModal     onClose={onClose} />
   if (toolId === 'income-ledger')  return <IncomeModal    onClose={onClose} />
-  if (toolId === 'dispatch')       return <DispatchModal  onClose={onClose} />
+  if (toolId === 'dispatch' || toolId === 'deploy-report') return <DispatchModal onClose={onClose} />
 
   // kit은 넓은 모달이 필요하므로 별도 max-w 적용
   const isWide = toolId === 'kit'
