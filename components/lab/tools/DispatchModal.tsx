@@ -196,7 +196,8 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
       <div className="fixed inset-0 bg-black/70 flex flex-col" style={{ zIndex: 9999 }}>
 
         {/* ── 상단 컨트롤 바 ── */}
-        <div className="dispatch-no-print flex items-center gap-3 bg-gray-900 px-5 py-3 shrink-0 flex-wrap">
+        <div className="dispatch-no-print flex items-center gap-3 bg-gray-900 px-5 py-3 shrink-0 flex-wrap"
+          onClick={e => { if ((e.target as HTMLElement).closest('.guard-picker-btn') === null) setShowGuardPicker(false) }}>
           <h2 className="text-white font-bold text-sm">📋 배치신고서 작성기</h2>
 
           {/* 행사 선택 */}
@@ -211,14 +212,14 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
           </select>
 
           {/* 경호원 선택 */}
-          <div className="relative">
-            <Button size="sm" onClick={() => setShowGuardPicker(v => !v)}
+          <div className="relative guard-picker-btn">
+            <Button size="sm" onClick={e => { e.stopPropagation(); setShowGuardPicker(v => !v) }}
               className="bg-indigo-600 hover:bg-indigo-700 text-xs h-8 gap-1">
               <UserPlus className="h-3.5 w-3.5" />경호원 선택
               <ChevronDown className="h-3 w-3" />
             </Button>
             {showGuardPicker && (
-              <div className="absolute top-9 left-0 z-50 bg-white rounded-xl shadow-2xl border border-gray-200 w-64 max-h-64 overflow-y-auto">
+              <div className="absolute top-9 left-0 bg-white rounded-xl shadow-2xl border border-gray-200 w-64 max-h-64 overflow-y-auto" style={{ zIndex: 10000 }}>
                 <div className="px-3 py-2 border-b border-gray-100 text-xs font-semibold text-gray-500">
                   경호원 DB에서 선택
                 </div>
@@ -254,7 +255,7 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
             서류 첨부 포함
           </label>
 
-          <Button size="sm" onClick={() => window.print()}
+          <Button size="sm" onClick={() => { setShowGuardPicker(false); setTimeout(() => window.print(), 100) }}
             className="bg-blue-600 hover:bg-blue-700 text-xs h-8 gap-1">
             <Printer className="h-3.5 w-3.5" />인쇄 / PDF
           </Button>
