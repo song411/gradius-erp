@@ -12,76 +12,62 @@ function getMonthRange() {
   return { start, end, label: `${year}년 ${month}월` }
 }
 
-// Supabase에서 핵심 비즈니스 데이터 요약 수집
+// Supabase 실제 데이터를 JSON으로 수집 → AI가 직접 분석
 async function fetchBusinessContext(): Promise<string> {
   const supabase = createAdminClient()
-  const { start, end, label } = getMonthRange()
+  const { label } = getMonthRange()
 
   try {
-    const [inquiriesRes, settlementsRes, staffRes, payoutsRes, assignmentsRes] = await Promise.all([
-      supabase.from('inquiries').select('id, status, event_name, company_name, event_start, event_end, location').order('created_at', { ascending: false }).limit(100),
-      supabase.from('settlements').select('id, inquiry_id, invoice_amount, received_amount, deposit_status, progress').limit(200),
-      supabase.from('staff').select('id, name, total_score'),
-      supabase.from('payouts').select('id, inquiry_id, final_pay, status').limit(200),
-      supabase.from('assignments').select('id, inquiry_id, staff_id, role').limit(200),
+    const [inquiriesRes, settlementsRes, staffRes, payoutsRes] = await Promise.all([
+      supabase.from('inquiries')
+        .select('id, event_name, company_name, event_start, event_end, status, location, required_staff, expected_pay, memo')
+        .order('event_start', { ascending: false })
+        .limit(80),
+      supabase.from('settlements')
+        .select('id, inquiry_id, company_name, site_name, invoice_amount, supply_price, vat, received_amount, payout_amount, deposit_status, progress, profit')
+        .limit(150),
+      supabase.from('staff')
+        .select('id, name, gender, age, region, total_score, attendance_score, performance_score, appearance_score, teamwork_score')
+        .limit(100),
+      supabase.from('payouts')
+        .select('id, inquiry_id, staff_name, site_name, dispatch_days, base_pay, final_pay, status, paid_at')
+        .limit(150),
     ])
 
     const inquiries = inquiriesRes.data || []
     const settlements = settlementsRes.data || []
     const staff = staffRes.data || []
     const payouts = payoutsRes.data || []
-    const assignments = assignmentsRes.data || []
 
+    // 빠른 집계 (AI가 계산하기 쉽도록 요약도 함께 제공)
     const statusCount: Record<string, number> = {}
     inquiries.forEach(i => { statusCount[i.status] = (statusCount[i.status] || 0) + 1 })
 
-    const monthlyInquiries = inquiries.filter(i =>
-      i.event_start >= start && i.event_start <= end
-    )
-
-    const totalInvoiceAmount = settlements.reduce((s, r) => s + (r.invoice_amount || 0), 0)
-    const totalReceivedAmount = settlements.reduce((s, r) => s + (r.received_amount || 0), 0)
-    const pendingAmount = totalInvoiceAmount - totalReceivedAmount
-
-    const totalPayout = payouts.reduce((s, p) => s + (p.final_pay || 0), 0)
-    const pendingPayouts = payouts.filter(p => p.status === '대기' || p.status === '확인완료').length
-    const completedPayouts = payouts.filter(p => p.status === '지급완료').length
-
-    const recentEvents = inquiries.slice(0, 10).map(i =>
-      `- ${i.event_name || '(미정)'}(${i.company_name || ''}) / ${i.event_start || ''} / 상태: ${i.status}`
-    ).join('\n')
-
-    const avgScore = staff.length > 0
-      ? (staff.reduce((s, p) => s + (p.total_score || 0), 0) / staff.length).toFixed(1)
-      : 'N/A'
+    const totalInvoice   = settlements.reduce((s, r) => s + (r.invoice_amount  || 0), 0)
+    const totalReceived  = settlements.reduce((s, r) => s + (r.received_amount || 0), 0)
+    const totalPayout    = payouts.reduce((s, p) => s + (p.final_pay || 0), 0)
+    const paidPayout     = payouts.filter(p => p.status === '지급완료').reduce((s, p) => s + (p.final_pay || 0), 0)
 
     return `
-=== 가디어스 ERP 현황 데이터 (${new Date().toLocaleDateString('ko-KR')} 기준) ===
+=== 가디어스 ERP 실시간 데이터 (${new Date().toLocaleDateString('ko-KR')} / ${label}) ===
 
-[전체 문의 현황]
-- 총 문의 건수: ${inquiries.length}건
-- 상태별: ${Object.entries(statusCount).map(([k, v]) => `${k} ${v}건`).join(', ')}
-- ${label} 행사: ${monthlyInquiries.length}건
+## 📊 집계 요약
+- 전체 문의: ${inquiries.length}건 / 상태별: ${Object.entries(statusCount).map(([k,v])=>`${k} ${v}건`).join(', ')}
+- 총 청구금액: ${totalInvoice.toLocaleString()}원 / 총 입금액: ${totalReceived.toLocaleString()}원 / 미수금: ${(totalInvoice-totalReceived).toLocaleString()}원
+- 총 지급예정: ${totalPayout.toLocaleString()}원 / 지급완료: ${paidPayout.toLocaleString()}원 / 미지급: ${(totalPayout-paidPayout).toLocaleString()}원
+- 크루 인원: ${staff.length}명
 
-[정산/매출 현황]
-- 총 청구금액: ${totalInvoiceAmount.toLocaleString()}원
-- 총 입금액: ${totalReceivedAmount.toLocaleString()}원
-- 미수금 (미입금): ${pendingAmount.toLocaleString()}원
+## 📋 문의 목록 (최근 80건)
+${JSON.stringify(inquiries, null, 0)}
 
-[인력 지급 현황]
-- 총 지급 예정액: ${totalPayout.toLocaleString()}원
-- 지급 대기/검토: ${pendingPayouts}건
-- 지급 완료: ${completedPayouts}건
+## 💰 정산 목록 (최근 150건)
+${JSON.stringify(settlements, null, 0)}
 
-[크루(직원) 현황]
-- 재직 중 인원: ${staff.length}명
-- 평균 평점: ${avgScore}점
+## 👥 크루(직원) 목록
+${JSON.stringify(staff, null, 0)}
 
-[총 배정 건수]
-- 전체 배정: ${assignments.length}건
-
-[최근 행사 목록 (최대 10건)]
-${recentEvents}
+## 💳 지급 목록 (최근 150건)
+${JSON.stringify(payouts, null, 0)}
 `.trim()
   } catch (err) {
     console.error('[AI Context 수집 오류]', err)
