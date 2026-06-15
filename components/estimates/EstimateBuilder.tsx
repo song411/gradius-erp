@@ -374,6 +374,55 @@ export default function EstimateBuilder({
 
       await db.insert('estimate_items', itemsPayload)
 
+      // ── 최종 견적 수정 시 settlements 자동 동기화 ──
+      // is_final=true인 견적을 수정한 경우에만 실행
+      if (editTarget?.is_final && form.inquiry_id) {
+        try {
+          const settlements = await db.list<{
+            id: string
+            received_amount: number
+            deposit_status: string
+          }>('settlements', {
+            filters: { inquiry_id: form.inquiry_id },
+            order: 'created_at', asc: true,
+            limit: 1,
+          })
+
+          if (settlements.length > 0) {
+            const settlement = settlements[0]
+            const newInvoice = finalTotal
+
+            // 금액 관련 필드만 동기화 (수기 입력 필드는 절대 건드리지 않음)
+            const syncPayload: Record<string, unknown> = {
+              invoice_amount:      newInvoice,
+              supply_price:        supplyPrice,
+              vat:                 form.include_vat ? vat : 0,
+              payout_amount:       costPrice,
+              invoice_calc_amount: newInvoice,
+            }
+
+            // 입금 상태 자동 재판정 (미입금은 건드리지 않음)
+            const received = settlement.received_amount || 0
+            if (received > 0) {
+              if (settlement.deposit_status === '입금완료' && newInvoice > received) {
+                syncPayload.deposit_status = '부분입금'
+              } else if (settlement.deposit_status === '부분입금' && received >= newInvoice) {
+                syncPayload.deposit_status = '입금완료'
+              }
+            }
+
+            await db.update('settlements', settlement.id, syncPayload)
+
+            const statusChanged = syncPayload.deposit_status
+              ? ` (입금상태 → ${syncPayload.deposit_status})` : ''
+            toast.info(`청구/정산 금액이 자동 반영되었습니다.${statusChanged}`, { duration: 3000 })
+          }
+        } catch (syncErr) {
+          // 동기화 실패는 조용히 경고만 (견적 저장 자체는 성공)
+          console.warn('settlement 동기화 실패:', syncErr)
+        }
+      }
+
       toast.success(
         editTarget
           ? `견적이 수정되었습니다. (${selectedInq?.company_name})`
