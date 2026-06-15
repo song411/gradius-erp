@@ -63,6 +63,7 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
   const [guards, setGuards]         = useState<GuardProfile[]>([])
   const [selectedInqId, setSelectedInqId] = useState('')
   const [showGuardPicker, setShowGuardPicker] = useState(false)
+  const [guardSearch, setGuardSearch] = useState('')
 
   // 신고서 헤더 (모두 수동 편집 가능) - 배치/배치폐지 독립 체크
   const [isBaechi, setIsBaechi]   = useState(true)
@@ -220,32 +221,48 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
               <ChevronDown className="h-3 w-3" />
             </Button>
             {showGuardPicker && (
-              <div className="absolute top-9 left-0 bg-white rounded-xl shadow-2xl border border-gray-200 w-64 max-h-64 overflow-y-auto" style={{ zIndex: 10000 }}>
-                <div className="px-3 py-2 border-b border-gray-100 text-xs font-semibold text-gray-500">
-                  경호원 DB에서 선택
+              <div className="absolute top-9 left-0 bg-white rounded-xl shadow-2xl border border-gray-200 w-72" style={{ zIndex: 10000 }}>
+                {/* 검색창 */}
+                <div className="px-3 pt-2 pb-1 border-b border-gray-100">
+                  <input
+                    autoFocus
+                    value={guardSearch}
+                    onChange={e => setGuardSearch(e.target.value)}
+                    onClick={e => e.stopPropagation()}
+                    placeholder="이름 검색..."
+                    className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-indigo-400"
+                  />
                 </div>
-                {guards.length === 0 && (
-                  <div className="px-3 py-4 text-xs text-gray-400 text-center">
-                    등록된 경호원이 없습니다.<br/>경호원 관리에서 먼저 등록하세요.
-                  </div>
-                )}
-                {guards.map(g => (
-                  <button key={g.id} onClick={() => handlePickGuard(g)}
-                    className="w-full text-left px-3 py-2 hover:bg-indigo-50 flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center shrink-0">
-                      {g.name[0]}
+                <div className="max-h-60 overflow-y-auto">
+                  {guards.length === 0 && (
+                    <div className="px-3 py-4 text-xs text-gray-400 text-center">
+                      등록된 경호원이 없습니다.<br/>경호원 관리에서 먼저 등록하세요.
                     </div>
-                    <div>
-                      <div className="text-xs font-medium text-gray-800">{g.name}</div>
-                      <div className="text-[10px] text-gray-400">{g.job_category} · {g.certificate_number || '이수증 미등록'}</div>
-                    </div>
-                    <div className="ml-auto flex gap-0.5">
-                      {g.id_doc_url && <span className="w-1.5 h-1.5 rounded-full bg-green-400" title="신분증" />}
-                      {g.certificate_doc_url && <span className="w-1.5 h-1.5 rounded-full bg-blue-400" title="이수증" />}
-                      {g.crime_check_doc_url && <span className="w-1.5 h-1.5 rounded-full bg-purple-400" title="회보서" />}
-                    </div>
-                  </button>
-                ))}
+                  )}
+                  {guards
+                    .filter(g => !guardSearch.trim() || g.name.includes(guardSearch.trim()))
+                    .map(g => (
+                      <button key={g.id} onClick={() => { handlePickGuard(g); setGuardSearch('') }}
+                        className="w-full text-left px-3 py-2 hover:bg-indigo-50 flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center shrink-0">
+                          {g.name[0]}
+                        </div>
+                        <div>
+                          <div className="text-xs font-medium text-gray-800">{g.name}</div>
+                          <div className="text-[10px] text-gray-400">{g.job_category} · {g.certificate_number || '이수증 미등록'}</div>
+                        </div>
+                        <div className="ml-auto flex gap-0.5">
+                          {g.id_doc_url && <span className="w-1.5 h-1.5 rounded-full bg-green-400" title="신분증" />}
+                          {g.certificate_doc_url && <span className="w-1.5 h-1.5 rounded-full bg-blue-400" title="이수증" />}
+                          {g.crime_check_doc_url && <span className="w-1.5 h-1.5 rounded-full bg-purple-400" title="회보서" />}
+                        </div>
+                      </button>
+                    ))
+                  }
+                  {guardSearch.trim() && guards.filter(g => g.name.includes(guardSearch.trim())).length === 0 && (
+                    <div className="px-3 py-3 text-xs text-gray-400 text-center">"{guardSearch}" 검색 결과 없음</div>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -256,7 +273,13 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
             서류 첨부 포함
           </label>
 
-          <Button size="sm" onClick={() => { setShowGuardPicker(false); setTimeout(() => window.print(), 100) }}
+          <Button size="sm" onClick={() => {
+              setShowGuardPicker(false)
+              // PDF embed가 포커스를 가져가면 print가 막히므로 강제 해제
+              ;(document.activeElement as HTMLElement)?.blur?.()
+              document.body.focus()
+              setTimeout(() => window.print(), 200)
+            }}
             className="bg-blue-600 hover:bg-blue-700 text-xs h-8 gap-1">
             <Printer className="h-3.5 w-3.5" />인쇄 / PDF
           </Button>
