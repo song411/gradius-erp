@@ -46,12 +46,13 @@ function ScoreBar({ label, score, max = 5 }: { label: string; score: number; max
 }
 
 // 평균 점수 원형 게이지 (4개 항목의 평균, 0~5점 만점)
-function ScoreCircle({ attendance, performance, appearance, teamwork }: {
-  attendance: number; performance: number; appearance: number; teamwork: number
+function ScoreCircle({ attendance, performance, appearance, teamwork, adaptability }: {
+  attendance: number; performance: number; appearance: number; teamwork: number; adaptability: number
 }) {
-  const filled  = [attendance, performance, appearance, teamwork].filter(v => v > 0).length
+  const all     = [attendance, performance, appearance, teamwork, adaptability]
+  const filled  = all.filter(v => v > 0).length
   const avg     = filled > 0
-    ? (attendance + performance + appearance + teamwork) / 4
+    ? all.reduce((a, b) => a + b, 0) / 5
     : 0
   const pct     = Math.min(100, (avg / 5) * 100)
   const r       = 36
@@ -163,12 +164,14 @@ export default function CrewProfileCard({ staff, onClose, onEdit }: Props) {
                   performance={staff.performance_score}
                   appearance={staff.appearance_score}
                   teamwork={staff.teamwork_score}
+                  adaptability={staff.adaptability_score}
                 />
               <div className="w-full space-y-2">
-                <ScoreBar label="근태" score={staff.attendance_score} max={5} />
-                <ScoreBar label="수행능력" score={staff.performance_score} max={5} />
-                <ScoreBar label="외모/용모" score={staff.appearance_score} max={5} />
-                <ScoreBar label="팀워크" score={staff.teamwork_score} max={5} />
+                <ScoreBar label="근태"       score={staff.attendance_score}   max={5} />
+                <ScoreBar label="직무·서비스" score={staff.performance_score}  max={5} />
+                <ScoreBar label="외형"        score={staff.appearance_score}   max={5} />
+                <ScoreBar label="팀워크·보고" score={staff.teamwork_score}     max={5} />
+                <ScoreBar label="상황대응"    score={staff.adaptability_score} max={5} />
               </div>
             </div>
 
