@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import Groq from 'groq-sdk'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 // 오늘 날짜 기준 월 범위 반환
@@ -18,7 +18,6 @@ async function fetchBusinessContext(): Promise<string> {
   const { start, end, label } = getMonthRange()
 
   try {
-    // 이번달 문의 현황
     const [inquiriesRes, settlementsRes, staffRes, payoutsRes, assignmentsRes] = await Promise.all([
       supabase.from('inquiries').select('id, status, event_name, company_name, event_start, event_end, location').order('created_at', { ascending: false }).limit(100),
       supabase.from('settlements').select('id, inquiry_id, contract_amount, received_amount, status').limit(200),
@@ -33,36 +32,30 @@ async function fetchBusinessContext(): Promise<string> {
     const payouts = payoutsRes.data || []
     const assignments = assignmentsRes.data || []
 
-    // 문의 상태별 집계
     const statusCount: Record<string, number> = {}
     inquiries.forEach(i => { statusCount[i.status] = (statusCount[i.status] || 0) + 1 })
 
-    // 이번달 행사만 필터
     const monthlyInquiries = inquiries.filter(i =>
       i.event_start >= start && i.event_start <= end
     )
 
-    // 정산 집계
     const totalContractAmount = settlements.reduce((s, r) => s + (r.contract_amount || 0), 0)
     const totalReceivedAmount = settlements.reduce((s, r) => s + (r.received_amount || 0), 0)
     const pendingAmount = totalContractAmount - totalReceivedAmount
 
-    // 지급 집계
     const totalPayout = payouts.reduce((s, p) => s + (p.final_pay || 0), 0)
     const pendingPayouts = payouts.filter(p => p.status === '대기' || p.status === '검토완료').length
     const completedPayouts = payouts.filter(p => p.status === '지급완료').length
 
-    // 최근 행사 목록 (최대 10개)
     const recentEvents = inquiries.slice(0, 10).map(i =>
       `- ${i.event_name || '(미정)'}(${i.company_name || ''}) / ${i.event_start || ''} / 상태: ${i.status}`
     ).join('\n')
 
-    // 스태프 통계
     const avgScore = staff.length > 0
       ? (staff.reduce((s, p) => s + (p.score || 0), 0) / staff.length).toFixed(1)
       : 'N/A'
 
-    const context = `
+    return `
 === 가디어스 ERP 현황 데이터 (${new Date().toLocaleDateString('ko-KR')} 기준) ===
 
 [전체 문의 현황]
@@ -90,8 +83,6 @@ async function fetchBusinessContext(): Promise<string> {
 [최근 행사 목록 (최대 10건)]
 ${recentEvents}
 `.trim()
-
-    return context
   } catch (err) {
     console.error('[AI Context 수집 오류]', err)
     return '(데이터 조회 오류 — 일반 질문에는 답변 가능합니다)'
@@ -99,9 +90,9 @@ ${recentEvents}
 }
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.GEMINI_API_KEY
-  if (!apiKey || apiKey === '여기에_발급받은_키_붙여넣기') {
-    return NextResponse.json({ error: 'GEMINI_API_KEY가 설정되지 않았습니다. .env.local 파일을 확인해주세요.' }, { status: 503 })
+  const apiKey = process.env.GROQ_API_KEY
+  if (!apiKey) {
+    return NextResponse.json({ error: 'GROQ_API_KEY가 설정되지 않았습니다.' }, { status: 503 })
   }
 
   let body: { messages: { role: string; content: string }[] }
@@ -116,7 +107,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '메시지가 없습니다.' }, { status: 400 })
   }
 
-  // Supabase 컨텍스트 수집
   const businessContext = await fetchBusinessContext()
 
   const systemPrompt = `당신은 가디어스(Guardius) 경호·에이전시 전용 ERP의 AI 업무 도우미입니다.
@@ -132,33 +122,28 @@ export async function POST(req: NextRequest) {
 ${businessContext}`
 
   try {
-    // systemInstruction은 getGenerativeModel()에 전달해야 함 (startChat 아님)
-    const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-2.0-flash-lite',
-      systemInstruction: systemPrompt,
+    const groq = new Groq({ apiKey })
+
+    // Groq 형식으로 메시지 변환 (system 메시지는 별도, user/assistant만)
+    const chatMessages = messages.map(m => ({
+      role: m.role as 'user' | 'assistant',
+      content: m.content,
+    }))
+
+    const completion = await groq.chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...chatMessages,
+      ],
+      temperature: 0.7,
+      max_tokens: 1024,
     })
 
-    // 대화 히스토리를 Gemini 형식으로 변환 (마지막 메시지 제외 → history)
-    // Gemini 규칙: history는 반드시 'user' 메시지로 시작해야 함
-    // → 앞쪽의 'model'(assistant 환영 메시지 등) 제거
-    const rawHistory = messages.slice(0, -1).map(m => ({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content }],
-    }))
-    const firstUserIdx = rawHistory.findIndex(m => m.role === 'user')
-    const history = firstUserIdx >= 0 ? rawHistory.slice(firstUserIdx) : []
-
-    const lastMessage = messages[messages.length - 1].content
-
-    const chat = model.startChat({ history })
-
-    const result = await chat.sendMessage(lastMessage)
-    const text = result.response.text()
-
-    return NextResponse.json({ reply: text })
+    const reply = completion.choices[0]?.message?.content || '응답을 받지 못했습니다.'
+    return NextResponse.json({ reply })
   } catch (err: unknown) {
-    console.error('[Gemini API 오류]', err)
+    console.error('[Groq API 오류]', err)
     const message = err instanceof Error ? err.message : '알 수 없는 오류'
     return NextResponse.json({ error: `AI 응답 오류: ${message}` }, { status: 500 })
   }

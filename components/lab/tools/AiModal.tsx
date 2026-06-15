@@ -142,7 +142,7 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
           </div>
           <div className="flex-1 min-w-0">
             <h2 className="text-white font-bold text-base leading-tight">가디어스 AI 업무 도우미</h2>
-            <p className="text-violet-200 text-xs mt-0.5">Gemini 2.0 Flash Lite · 실시간 ERP 데이터 연동</p>
+            <p className="text-violet-200 text-xs mt-0.5">LLaMA 3.3 70B (Groq) · 실시간 ERP 데이터 연동</p>
           </div>
           <div className="flex items-center gap-2">
             <button
