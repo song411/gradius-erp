@@ -3,10 +3,61 @@
 import { useEffect, useState, useCallback } from 'react'
 import { db } from '@/lib/supabase/api'
 import type { Inquiry, GuardProfile } from '@/lib/supabase/types'
-import { X, Printer, UserPlus, Trash2, ChevronDown, Save, FolderOpen } from 'lucide-react'
+import { X, Printer, UserPlus, Trash2, ChevronDown, Save, FolderOpen, Mail, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { formatDate } from '@/lib/utils'
+
+// ── 경찰서 연락처 데이터 (전국 경비업 담당) ──────────────────────
+interface PoliceStation { region: string; name: string; phone: string; email: string }
+const POLICE_DATA: PoliceStation[] = [
+  { region:'서울청', name:'중부경찰서', phone:'02-3396-9151', email:'su1bbse@police.go.kr' },
+  { region:'서울청', name:'종로경찰서', phone:'02-3701-4130', email:'su2bbse@police.go.kr' },
+  { region:'서울청', name:'남대문경찰서', phone:'02-2096-8563', email:'su3bbse@police.go.kr' },
+  { region:'서울청', name:'서대문경찰서', phone:'02-335-8175', email:'su4bbse@police.go.kr' },
+  { region:'서울청', name:'혜화경찰서', phone:'02-3158-7891', email:'su5bbse@police.go.kr' },
+  { region:'서울청', name:'용산경찰서', phone:'02-2198-0274', email:'su6bbse@police.go.kr' },
+  { region:'서울청', name:'성북경찰서', phone:'02-920-1411', email:'su7bbse@police.go.kr' },
+  { region:'서울청', name:'동대문경찰서', phone:'02-961-4137', email:'su8bbse@police.go.kr' },
+  { region:'서울청', name:'마포경찰서', phone:'02-3149-6129', email:'su9bbse@police.go.kr' },
+  { region:'서울청', name:'영등포경찰서', phone:'02-2118-9438', email:'su10bbse@police.go.kr' },
+  { region:'서울청', name:'성동경찰서', phone:'02-2286-0440', email:'su11bbse@police.go.kr' },
+  { region:'서울청', name:'동작경찰서', phone:'02-811-9346', email:'su12bbse@police.go.kr' },
+  { region:'서울청', name:'광진경찰서', phone:'02-2285-7141', email:'su13bbse@police.go.kr' },
+  { region:'서울청', name:'서부경찰서', phone:'02-335-9546', email:'su14bbse@police.go.kr' },
+  { region:'서울청', name:'강북경찰서', phone:'02-944-4457', email:'su15bbse@police.go.kr' },
+  { region:'서울청', name:'금천경찰서', phone:'02-801-5307', email:'su16bbse@police.go.kr' },
+  { region:'서울청', name:'중랑경찰서', phone:'02-2171-0137', email:'su17bbse@police.go.kr' },
+  { region:'서울청', name:'강남경찰서', phone:'02-3673-9138', email:'su18bbse@police.go.kr' },
+  { region:'서울청', name:'관악경찰서', phone:'02-870-0183', email:'su19bbse@police.go.kr' },
+  { region:'서울청', name:'강서경찰서', phone:'02-2620-9143', email:'su20bbse@police.go.kr' },
+  { region:'서울청', name:'강동경찰서', phone:'02-3449-7285', email:'su21bbse@police.go.kr' },
+  { region:'서울청', name:'종암경찰서', phone:'02-3396-7522', email:'su22bbse@police.go.kr' },
+  { region:'서울청', name:'구로경찰서', phone:'02-840-8909', email:'su23bbse@police.go.kr' },
+  { region:'서울청', name:'서초경찰서', phone:'02-3483-9492', email:'su24bbse@police.go.kr' },
+  { region:'서울청', name:'양천경찰서', phone:'02-2093-8151', email:'su25bbse@police.go.kr' },
+  { region:'서울청', name:'송파경찰서', phone:'02-3402-6456', email:'su26bbse@police.go.kr' },
+  { region:'서울청', name:'노원경찰서', phone:'02-2092-0284', email:'su27bbse@police.go.kr' },
+  { region:'서울청', name:'방배경찰서', phone:'02-3403-8130', email:'su30bbse@police.go.kr' },
+  { region:'서울청', name:'은평경찰서', phone:'02-350-1311', email:'su29bbse@police.go.kr' },
+  { region:'서울청', name:'도봉경찰서', phone:'02-2289-9344', email:'su28bbse@police.go.kr' },
+  { region:'서울청', name:'수서경찰서', phone:'02-2155-9143', email:'su31bbse@police.go.kr' },
+  { region:'부산청', name:'중부경찰서', phone:'051-664-0345', email:'ps1bbse@police.go.kr' },
+  { region:'부산청', name:'동래경찰서', phone:'051-559-7346', email:'ps2bbse@police.go.kr' },
+  { region:'부산청', name:'해운대경찰서', phone:'051-665-0332', email:'ps8bbse@police.go.kr' },
+  { region:'인천청', name:'중부경찰서', phone:'032-760-8131', email:'ic1bbse@police.go.kr' },
+  { region:'인천청', name:'부평경찰서', phone:'032-363-1230', email:'ic4bbse@police.go.kr' },
+  { region:'대구청', name:'중부경찰서', phone:'053-420-1096', email:'dg1bbse@police.go.kr' },
+  { region:'광주청', name:'동부경찰서', phone:'062-609-4346', email:'jn1bbse@police.go.kr' },
+  { region:'대전청', name:'중부경찰서', phone:'042-220-7546', email:'cn1bbse@police.go.kr' },
+  { region:'경기남부청', name:'수원장안경찰서', phone:'031-299-5343', email:'kk2bbse@police.go.kr' },
+  { region:'경기남부청', name:'분당경찰서', phone:'031-786-5345', email:'kk14bbse@police.go.kr' },
+  { region:'경기북부청', name:'의정부경찰서', phone:'031-849-3146', email:'kk6bbse@police.go.kr' },
+  { region:'경기북부청', name:'고양경찰서', phone:'031-930-5343', email:'kk15bbse@police.go.kr' },
+  { region:'강원청', name:'춘천경찰서', phone:'033-245-0607', email:'kw1bbse@police.go.kr' },
+  { region:'충북청', name:'청주흥덕경찰서', phone:'043-270-3346', email:'cb2bbse@police.go.kr' },
+  { region:'충남청', name:'천안서북경찰서', phone:'041-536-1277', email:'cn7bbse@police.go.kr' },
+]
 
 // 저장된 신고서 타입
 interface DispatchReport {
@@ -136,6 +187,10 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
   const [saving, setSaving] = useState(false)
   const [saveMsg, setSaveMsg] = useState('')
   const [currentReportId, setCurrentReportId] = useState<string | null>(null)
+
+  // 이메일 발송 관련 상태
+  const [showEmailPicker, setShowEmailPicker] = useState(false)
+  const [emailSearch, setEmailSearch] = useState('')
 
   // 회사 정보 (편집 가능)
   const [companyName,    setCompanyName]    = useState(COMPANY.name)
@@ -323,14 +378,109 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
 
   const docRows = rows.filter(r => r.id_doc_url || r.certificate_doc_url || r.crime_check_doc_url)
 
-  // 인쇄 / PDF 저장
+  // 인쇄 / PDF 저장 — 팝업 새 창 방식 (Tailwind CDN 없이 inline style만 사용)
   function handlePrint() {
+    setShowGuardPicker(false)
+
+    const area = document.getElementById('dispatch-print-content')
+    if (!area) { alert('인쇄 영역을 찾을 수 없습니다.'); return }
+
     // input 현재 값 → value attribute 동기화
-    document.querySelectorAll('.dispatch-print-area input, .dispatch-print-area textarea').forEach(el => {
+    area.querySelectorAll('input, textarea').forEach(el => {
       (el as HTMLInputElement).setAttribute('value', (el as HTMLInputElement).value)
     })
-    window.print()
+
+    const clone = area.cloneNode(true) as HTMLElement
+    // 화면 전용 요소 제거
+    clone.querySelectorAll('.dispatch-no-print').forEach(el => el.remove())
+    // 배경색 초기화
+    clone.style.background = 'white'
+    clone.style.padding = '0'
+    clone.style.overflow = 'visible'
+
+    const win = window.open('', '_blank', 'width=900,height=850')
+    if (!win) {
+      alert('팝업이 차단되어 있습니다. 브라우저에서 팝업을 허용한 후 다시 시도해주세요.')
+      return
+    }
+
+    win.document.write(`<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>배치신고서</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Malgun Gothic','맑은 고딕',sans-serif; background: white; margin: 0; padding: 0; }
+    table { border-collapse: collapse; width: 100%; }
+    td, th { word-break: keep-all; }
+    .dispatch-page { width: 210mm; padding: 12mm 15mm; margin: 0 auto; font-size: 11px; background: white; }
+    .dispatch-doc-page {
+      width: 210mm; min-height: 297mm; padding: 8mm; margin: 0 auto;
+      display: flex; align-items: center; justify-content: center;
+      page-break-before: always; background: white;
+    }
+    .dispatch-doc-page img { max-width: 194mm; max-height: 277mm; object-fit: contain; }
+    .dispatch-no-print { display: none !important; }
+    input, textarea, select {
+      border: none !important; outline: none !important;
+      background: transparent !important;
+      font-family: 'Malgun Gothic','맑은 고딕',sans-serif; font-size: inherit;
+    }
+    @media print {
+      @page { size: A4; margin: 0; }
+      body { margin: 0; }
+      .dispatch-page { page-break-after: always; }
+    }
+  </style>
+</head>
+<body>
+${clone.innerHTML}
+</body>
+</html>`)
+    win.document.close()
+    win.focus()
+    // CDN 없으므로 500ms면 충분
+    setTimeout(() => { try { win.print() } catch { win.close() } }, 500)
   }
+
+  // 이메일 발송 — mailto: 링크로 이메일 클라이언트 실행
+  function handleSendEmail(station: PoliceStation) {
+    const guardNames = rows.filter(r => r.name.trim()).map(r => r.name).join(', ') || '(경호원 미입력)'
+    const subject = encodeURIComponent(`[배치신고] ${companyName} / ${location || '장소 미입력'} / ${startDate || reportDate}`)
+    const body = encodeURIComponent([
+      `${station.region} ${station.name} 경비업 담당자님께`,
+      '',
+      `안녕하세요. ${companyName}입니다.`,
+      `아래와 같이 경비원 배치신고서를 제출합니다.`,
+      '',
+      '■ 신고 내용',
+      `- 신고 구분: ${[isBaechi ? '배치' : '', isPyeji ? '배치폐지' : ''].filter(Boolean).join(' / ')}`,
+      `- 경비원 배치 장소: ${location || '(미입력)'}`,
+      `- 전화번호: ${locationPhone || '(미입력)'}`,
+      `- 배치 기간: ${startDate || '(미입력)'} ~ ${endDate || '(미입력)'}`,
+      `- 경비 목적: ${purpose || '(미입력)'}`,
+      '',
+      '■ 배치 인원',
+      guardNames,
+      '',
+      `※ 배치신고서 및 관련 서류는 첨부파일을 확인해 주시기 바랍니다.`,
+      `   (인쇄/PDF 버튼으로 생성 후 직접 첨부해 주세요)`,
+      '',
+      `${companyName}`,
+      `담당자 연락처: ${companyPhone}`,
+      `주소: ${companyAddress}`,
+    ].join('\n'))
+    window.location.href = `mailto:${station.email}?subject=${subject}&body=${body}`
+    setShowEmailPicker(false)
+  }
+
+  // 이메일 검색 필터
+  const filteredStations = POLICE_DATA.filter(s =>
+    !emailSearch.trim() ||
+    s.name.includes(emailSearch.trim()) ||
+    s.region.includes(emailSearch.trim())
+  )
 
   return (
     <>
@@ -373,7 +523,10 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
 
         {/* ── 상단 컨트롤 바 ── */}
         <div className="dispatch-no-print flex items-center gap-3 bg-gray-900 px-5 py-3 shrink-0 flex-wrap"
-          onClick={e => { if ((e.target as HTMLElement).closest('.guard-picker-btn') === null) setShowGuardPicker(false) }}>
+          onClick={e => {
+            if ((e.target as HTMLElement).closest('.guard-picker-btn') === null) setShowGuardPicker(false)
+            if ((e.target as HTMLElement).closest('.email-picker-btn') === null) setShowEmailPicker(false)
+          }}>
           <h2 className="text-white font-bold text-sm">📋 배치신고서 작성기</h2>
 
           {/* 행사 선택 */}
@@ -491,6 +644,51 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
             className="bg-blue-600 hover:bg-blue-700 text-xs h-8 gap-1">
             <Printer className="h-3.5 w-3.5" />인쇄 / PDF
           </Button>
+
+          {/* 이메일 발송 버튼 */}
+          <div className="relative email-picker-btn">
+            <Button size="sm" onClick={e => { e.stopPropagation(); setShowEmailPicker(v => !v) }}
+              className="bg-violet-600 hover:bg-violet-700 text-xs h-8 gap-1">
+              <Mail className="h-3.5 w-3.5" />이메일 발송
+            </Button>
+            {showEmailPicker && (
+              <div className="absolute top-9 right-0 bg-white rounded-xl shadow-2xl border border-gray-200 w-80" style={{ zIndex: 10000 }}
+                onClick={e => e.stopPropagation()}>
+                <div className="px-3 pt-2.5 pb-1.5 border-b border-gray-100">
+                  <p className="text-[10px] text-gray-400 mb-1.5">경찰서 선택 시 이메일 앱이 열립니다</p>
+                  <div className="relative">
+                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                    <input
+                      autoFocus
+                      value={emailSearch}
+                      onChange={e => setEmailSearch(e.target.value)}
+                      placeholder="경찰서 또는 지역 검색..."
+                      className="w-full text-xs border border-gray-200 rounded-lg pl-7 pr-2.5 py-1.5 outline-none focus:border-violet-400"
+                    />
+                  </div>
+                </div>
+                <div className="max-h-64 overflow-y-auto">
+                  {filteredStations.length === 0 && (
+                    <div className="px-3 py-4 text-xs text-gray-400 text-center">검색 결과 없음</div>
+                  )}
+                  {filteredStations.map((s, i) => (
+                    <button key={i} onClick={() => handleSendEmail(s)}
+                      className="w-full text-left px-3 py-2 hover:bg-violet-50 border-b border-gray-50 last:border-0 flex items-start gap-2">
+                      <div className="shrink-0 mt-0.5">
+                        <span className="inline-block text-[9px] bg-violet-100 text-violet-700 rounded px-1 py-0.5 font-semibold">{s.region}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-medium text-gray-800">{s.name}</div>
+                        <div className="text-[10px] text-gray-400 truncate">{s.email}</div>
+                      </div>
+                      <Mail className="h-3 w-3 text-violet-400 shrink-0 mt-1" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
           <button onClick={onClose} className="text-gray-400 hover:text-white ml-auto">
             <X className="h-5 w-5" />
           </button>
