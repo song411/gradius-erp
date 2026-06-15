@@ -30,6 +30,35 @@ interface DispatchReport {
   created_at?: string
 }
 
+// 공통 테이블 셀 스타일 (공식 서식과 동일한 border 규격)
+const S = {
+  th: {
+    border: '1px solid #374151',
+    padding: '4px 6px',
+    background: '#f3f4f6',
+    fontWeight: '500',
+    fontSize: '11px',
+    verticalAlign: 'middle' as const,
+  },
+  td: {
+    border: '1px solid #374151',
+    padding: '4px 6px',
+    fontSize: '11px',
+    verticalAlign: 'middle' as const,
+  },
+  vLabel: {
+    border: '1px solid #374151',
+    padding: '4px 2px',
+    background: '#f3f4f6',
+    fontWeight: 'bold',
+    textAlign: 'center' as const,
+    verticalAlign: 'middle' as const,
+    fontSize: '11px',
+    writingMode: 'vertical-rl' as const,
+    letterSpacing: '2px',
+  },
+}
+
 // 회사 고정 정보
 const COMPANY = {
   name:    '주식회사 가디어스',
@@ -297,7 +326,8 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
   <style>
     body { font-family: 'Malgun Gothic','맑은 고딕',sans-serif; background:white; margin:0; }
     table { border-collapse: collapse; width:100%; }
-    .dispatch-page { width:210mm; padding:12mm 18mm; margin:0 auto; font-size:11px; }
+    .dispatch-page { width:210mm; padding:12mm 15mm; margin:0 auto; font-size:11px; box-sizing:border-box; }
+    .dispatch-no-print { display:none !important; }
     .dispatch-doc-page {
       width:210mm; min-height:297mm; padding:8mm; margin:0 auto;
       display:flex; align-items:center; justify-content:center;
@@ -305,10 +335,13 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
     }
     .dispatch-doc-page img { max-width:194mm; max-height:270mm; object-fit:contain; }
     .dispatch-doc-page embed { width:194mm; height:270mm; border:none; }
-    input,textarea,select { border:none!important; outline:none!important; background:transparent!important; }
+    input,textarea,select { border:none!important; outline:none!important; background:transparent!important; font-family:inherit; font-size:inherit; }
+    td { word-break:keep-all; }
     @media print {
       @page { size:A4; margin:0; }
-      .dispatch-page { page-break-after:always; }
+      body { margin:0; }
+      .dispatch-page { page-break-after:always; width:210mm; padding:12mm 15mm; }
+      .dispatch-no-print { display:none !important; }
     }
   </style>
 </head>
@@ -326,8 +359,14 @@ ${clone.innerHTML}
     <>
       <style>{`
         @media screen {
-          .dispatch-page { width: 210mm; padding: 12mm 18mm; background: white; }
-          .dispatch-doc-page { width: 210mm; padding: 8mm; background: white; min-height: 120px; display: flex; flex-direction: column; }
+          .dispatch-page { width: 210mm; padding: 12mm 15mm; background: white; box-sizing: border-box; }
+          .dispatch-doc-page { width: 210mm; padding: 8mm; background: white; min-height: 120px; display: flex; flex-direction: column; box-sizing: border-box; }
+        }
+        @media print {
+          body > *:not(#dispatch-print-content) { visibility: hidden !important; }
+          #dispatch-print-content, #dispatch-print-content * { visibility: visible !important; }
+          .dispatch-no-print { display: none !important; }
+          .dispatch-page { width: 210mm; padding: 12mm 15mm; }
         }
       `}</style>
 
@@ -499,154 +538,147 @@ ${clone.innerHTML}
             </div>
           </div>
 
-          {/* ── A4 신고서 양식 ── */}
-          <div className="dispatch-page shadow-xl rounded-sm text-xs" onClick={e => e.stopPropagation()}>
+          {/* ── A4 신고서 양식 (경비업법 시행규칙 별지 제15호서식) ── */}
+          <div className="dispatch-page shadow-xl rounded-sm" onClick={e => e.stopPropagation()}
+            style={{ fontFamily: "'Malgun Gothic','맑은 고딕',sans-serif", fontSize: '11px' }}>
+
+            {/* 상단 법령 표기 */}
+            <div style={{ fontSize: '9px', marginBottom: '2px' }}>
+              ■ 경비업법 시행규칙 [별지 제15호서식] &lt;개정 2023. 7. 17.&gt;
+            </div>
 
             {/* 제목 */}
-            <div className="text-center mb-3">
-              <div className="text-[10px] text-left mb-1">
-                ■ 경비업법 시행규칙 [별지 제15호서식] &lt;개정 2023. 7. 17.&gt;
-              </div>
-              <div className="text-xl font-bold leading-tight">
-                경비원 [{isBaechi ? 'v' : '\u3000'}] 배치<br />
-                　　[{isPyeji  ? 'v' : '\u3000'}] 배치폐지 &nbsp;신고서
+            <div style={{ textAlign: 'center', marginBottom: '6px' }}>
+              <div style={{ fontSize: '18px', fontWeight: 'bold', lineHeight: '1.6' }}>
+                경비원 &nbsp;[{isBaechi ? 'v' : '\u3000'}] 배치<br />
+                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[{isPyeji ? 'v' : '\u3000'}] 배치폐지 &nbsp;신고서
               </div>
             </div>
 
-            {/* 접수 행 */}
-            <table className="w-full border-collapse" style={{borderTop:'2px solid #000', fontSize:'11px'}}>
+            {/* ① 접수 행 */}
+            <table style={{ width: '100%', borderCollapse: 'collapse', borderTop: '2px solid #000' }}>
               <tbody>
                 <tr>
-                  <td className="border border-gray-700 px-2 py-1 bg-gray-50 font-medium w-20">접수번호</td>
-                  <td className="border border-gray-700 px-2 py-1 w-36">{receiptNo || ''}</td>
-                  <td className="border border-gray-700 px-2 py-1 bg-gray-50 font-medium w-16">접수일자</td>
-                  <td className="border border-gray-700 px-2 py-1 w-32"></td>
-                  <td className="border border-gray-700 px-2 py-1 bg-gray-50 font-medium w-16">처리기간</td>
-                  <td className="border border-gray-700 px-2 py-1">즉시</td>
+                  <td style={S.th}>접수번호</td>
+                  <td style={{ ...S.td, width: '25%' }}>{receiptNo}</td>
+                  <td style={S.th}>접수일자</td>
+                  <td style={{ ...S.td, width: '20%' }}></td>
+                  <td style={S.th}>처리기간</td>
+                  <td style={{ ...S.td, width: '10%', textAlign: 'center' }}>즉시</td>
                 </tr>
               </tbody>
             </table>
 
-            {/* 신고인 정보 */}
-            <table className="w-full border-collapse" style={{fontSize:'11px'}}>
+            {/* ② 신고인 */}
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <tbody>
                 <tr>
-                  <td className="border border-gray-700 px-1.5 py-1 bg-gray-100 font-bold text-center w-10" rowSpan={4}>신<br/>고<br/>인</td>
-                  <td className="border border-gray-700 px-2 py-1 bg-gray-50 font-medium w-28">법인 명칭</td>
-                  <td className="border border-gray-700 px-2 py-1 w-44">{COMPANY.name}</td>
-                  <td className="border border-gray-700 px-2 py-1 bg-gray-50 font-medium w-24">대표자 성명</td>
-                  <td className="border border-gray-700 px-2 py-1">{COMPANY.ceo}</td>
+                  <td style={{ ...S.vLabel, width: '22px' }} rowSpan={4}>신<br/>고<br/>인</td>
+                  <td style={{ ...S.th, width: '80px' }}>법인 명칭</td>
+                  <td style={{ ...S.td, width: '32%' }}>{COMPANY.name}</td>
+                  <td style={{ ...S.th, width: '70px' }}>대표자 성명</td>
+                  <td style={S.td}>{COMPANY.ceo}</td>
                 </tr>
                 <tr>
-                  <td className="border border-gray-700 px-2 py-1 bg-gray-50 font-medium"></td>
-                  <td className="border border-gray-700 px-2 py-1"></td>
-                  <td className="border border-gray-700 px-2 py-1 bg-gray-50 font-medium">허가번호</td>
-                  <td className="border border-gray-700 px-2 py-1 text-[10px]">{COMPANY.license}</td>
+                  <td style={S.th}></td>
+                  <td style={S.td}></td>
+                  <td style={S.th}>허가번호</td>
+                  <td style={{ ...S.td, fontSize: '9px' }}>{COMPANY.license}</td>
                 </tr>
                 <tr>
-                  <td className="border border-gray-700 px-2 py-1 bg-gray-50 font-medium">소재지</td>
-                  <td className="border border-gray-700 px-2 py-1" colSpan={3}>{COMPANY.address}</td>
+                  <td style={S.th}>소재지</td>
+                  <td style={S.td}>{COMPANY.address}</td>
+                  <td style={S.th}>전화번호</td>
+                  <td style={S.td}>{COMPANY.phone}</td>
                 </tr>
                 <tr>
-                  <td className="border border-gray-700 px-2 py-1 bg-gray-50 font-medium">전화번호</td>
-                  <td className="border border-gray-700 px-2 py-1">{COMPANY.phone}</td>
-                  <td className="border border-gray-700 px-2 py-1 bg-gray-50 font-medium">배치장소(구체적으로 기재)</td>
-                  <td className="border border-gray-700 px-2 py-1">
+                  <td style={S.th}>배치장소<br/>(구체적으로 기재)</td>
+                  <td style={S.td}>
                     <input value={location} onChange={e => setLocation(e.target.value)}
-                      className="w-full outline-none bg-transparent" placeholder="배치장소 입력" />
+                      style={{ width: '100%', outline: 'none', background: 'transparent' }} placeholder="배치장소 입력" />
                   </td>
-                </tr>
-                <tr>
-                  <td className="border border-gray-700 px-1.5 py-1 bg-gray-100"></td>
-                  <td className="border border-gray-700 px-2 py-1 bg-gray-50 font-medium">배치장소(구체적으로 기재)</td>
-                  <td className="border border-gray-700 px-2 py-1">
-                    <input value={location} onChange={e => setLocation(e.target.value)}
-                      className="w-full outline-none bg-transparent" placeholder="배치장소 입력" />
-                  </td>
-                  <td className="border border-gray-700 px-2 py-1 bg-gray-50 font-medium">전화번호(경호원)</td>
-                  <td className="border border-gray-700 px-2 py-1">
+                  <td style={S.th}>전화번호<br/>(경호원)</td>
+                  <td style={S.td}>
                     <input value={locationPhone} onChange={e => setLocationPhone(e.target.value)}
-                      className="w-full outline-none bg-transparent" placeholder="010-0000-0000" />
+                      style={{ width: '100%', outline: 'none', background: 'transparent' }} placeholder="010-0000-0000" />
                   </td>
                 </tr>
               </tbody>
             </table>
 
-            {/* 배치 내용 */}
-            <table className="w-full border-collapse" style={{fontSize:'11px'}}>
+            {/* ③ 경비원 배치(폐지) 내용 */}
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <tbody>
                 <tr>
-                  <td className="border border-gray-700 px-1.5 py-1 bg-gray-100 font-bold text-center w-10" rowSpan={2}>
+                  <td style={{ ...S.vLabel, width: '22px' }} rowSpan={2}>
                     경<br/>비<br/>원<br/>배<br/>치<br/>(폐<br/>지)<br/>내<br/>용
                   </td>
-                  <td className="border border-gray-700 px-2 py-1 bg-gray-50 font-medium w-28">배치일시</td>
-                  <td className="border border-gray-700 px-2 py-1">
-                    <div className="flex gap-2">
-                      <input value={startDate} onChange={e => setStartDate(e.target.value)}
-                        className="outline-none bg-transparent w-32" placeholder="2026. 06. 08." />
-                      <input value={startTime} onChange={e => setStartTime(e.target.value)}
-                        className="outline-none bg-transparent w-16" placeholder="14:00" />
-                    </div>
+                  <td style={{ ...S.th, width: '80px' }}>배치일시</td>
+                  <td style={{ ...S.td }}>
+                    <input value={startDate} onChange={e => setStartDate(e.target.value)}
+                      style={{ outline: 'none', background: 'transparent', width: '110px' }} placeholder="2026. 06. 08." />
+                    <input value={startTime} onChange={e => setStartTime(e.target.value)}
+                      style={{ outline: 'none', background: 'transparent', width: '55px' }} placeholder="14:00" />
                   </td>
-                  <td className="border border-gray-700 px-2 py-1 bg-gray-50 font-medium w-32">배치폐지(예정)일시</td>
-                  <td className="border border-gray-700 px-2 py-1">
-                    <div className="flex gap-2">
-                      <input value={endDate} onChange={e => setEndDate(e.target.value)}
-                        className="outline-none bg-transparent w-32" placeholder="2026. 06. 08." />
-                      <input value={endTime} onChange={e => setEndTime(e.target.value)}
-                        className="outline-none bg-transparent w-16" placeholder="17:00" />
-                    </div>
+                  <td style={{ ...S.th, width: '95px' }}>배치폐지(예정)일시</td>
+                  <td style={S.td}>
+                    <input value={endDate} onChange={e => setEndDate(e.target.value)}
+                      style={{ outline: 'none', background: 'transparent', width: '110px' }} placeholder="2026. 06. 08." />
+                    <input value={endTime} onChange={e => setEndTime(e.target.value)}
+                      style={{ outline: 'none', background: 'transparent', width: '55px' }} placeholder="17:00" />
                   </td>
                 </tr>
                 <tr>
-                  <td className="border border-gray-700 px-2 py-1 bg-gray-50 font-medium">경비의 목적 또는 내용(구체적으로 기재)</td>
-                  <td className="border border-gray-700 px-2 py-1" colSpan={3}>
+                  <td style={{ ...S.th, fontSize: '10px' }}>경비의 목적 또는 내용<br/>(구체적으로 기재)</td>
+                  <td style={S.td} colSpan={3}>
                     <input value={purpose} onChange={e => setPurpose(e.target.value)}
-                      className="w-full outline-none bg-transparent" placeholder="경비 목적 입력" />
+                      style={{ width: '100%', outline: 'none', background: 'transparent' }} placeholder="경비의 목적 또는 내용을 구체적으로 기재" />
                   </td>
                 </tr>
               </tbody>
             </table>
 
-            {/* 경호원 명단 */}
-            <table className="w-full border-collapse" style={{fontSize:'11px'}}>
-              <thead>
-                <tr className="bg-gray-100">
-                  <td className="border border-gray-700 px-1.5 py-1 font-bold text-center w-10" rowSpan={2}>경<br/>비<br/>원<br/>명<br/>단</td>
-                  <td className="border border-gray-700 px-2 py-1 font-medium text-center w-8">연번</td>
-                  <td className="border border-gray-700 px-2 py-1 font-medium text-center w-16">성명</td>
-                  <td className="border border-gray-700 px-2 py-1 font-medium text-center w-36">주민등록번호</td>
-                  <td className="border border-gray-700 px-2 py-1 font-medium text-center w-24">배치 경비업무</td>
-                  <td className="border border-gray-700 px-2 py-1 font-medium text-center">경비원 신임교육<br/>이수증 교부번호</td>
-                  <td className="border border-gray-700 px-1 py-1 text-center no-print w-6"></td>
-                </tr>
-              </thead>
+            {/* ④ 경비원 명단 */}
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <tbody>
+                {/* 헤더 행 */}
+                <tr style={{ backgroundColor: '#f3f4f6' }}>
+                  <td style={{ ...S.vLabel, width: '22px' }} rowSpan={rows.length + 1}>
+                    경<br/>비<br/>원<br/>명<br/>단
+                  </td>
+                  <td style={{ ...S.th, width: '28px', textAlign: 'center' }}>연번</td>
+                  <td style={{ ...S.th, width: '52px', textAlign: 'center' }}>성명</td>
+                  <td style={{ ...S.th, width: '100px', textAlign: 'center' }}>주민등록번호</td>
+                  <td style={{ ...S.th, width: '70px', textAlign: 'center' }}>배치 경비업무</td>
+                  <td style={{ ...S.th, textAlign: 'center' }}>경비원 신임교육<br/>이수증 교부번호</td>
+                  {/* 화면에서만 보이는 삭제 컬럼 헤더 */}
+                  <td className="dispatch-no-print" style={{ border: '1px solid #374151', width: '22px' }}></td>
+                </tr>
+                {/* 데이터 행 */}
                 {rows.map((row, idx) => (
                   <tr key={idx}>
-                    <td className="border border-gray-700 px-1.5 py-0.5 text-center text-gray-300 text-[9px]">
-                      {idx === 0 ? '경비원명단' : ''}
-                    </td>
-                    <td className="border border-gray-700 px-2 py-1 text-center">{idx + 1}</td>
-                    <td className="border border-gray-700 px-1 py-1">
+                    <td style={{ ...S.td, textAlign: 'center', padding: '3px 2px' }}>{idx + 1}</td>
+                    <td style={{ ...S.td, padding: '2px' }}>
                       <input value={row.name} onChange={e => updateRow(idx, 'name', e.target.value)}
-                        className="w-full outline-none bg-transparent text-center" />
+                        style={{ width: '100%', outline: 'none', background: 'transparent', textAlign: 'center' }} />
                     </td>
-                    <td className="border border-gray-700 px-1 py-1">
+                    <td style={{ ...S.td, padding: '2px' }}>
                       <input value={row.id_number} onChange={e => updateRow(idx, 'id_number', e.target.value)}
-                        className="w-full outline-none bg-transparent text-center" />
+                        style={{ width: '100%', outline: 'none', background: 'transparent', textAlign: 'center' }}
+                        placeholder="000000-0000000" />
                     </td>
-                    <td className="border border-gray-700 px-1 py-1">
+                    <td style={{ ...S.td, padding: '2px' }}>
                       <input value={row.job_category} onChange={e => updateRow(idx, 'job_category', e.target.value)}
-                        className="w-full outline-none bg-transparent text-center" />
+                        style={{ width: '100%', outline: 'none', background: 'transparent', textAlign: 'center' }} />
                     </td>
-                    <td className="border border-gray-700 px-1 py-1">
+                    <td style={{ ...S.td, padding: '2px' }}>
                       <input value={row.certificate_number} onChange={e => updateRow(idx, 'certificate_number', e.target.value)}
-                        className="w-full outline-none bg-transparent text-center" />
+                        style={{ width: '100%', outline: 'none', background: 'transparent', textAlign: 'center' }} />
                     </td>
-                    <td className="border border-gray-700 px-1 py-0.5 text-center dispatch-no-print">
-                      <button onClick={() => removeRow(idx)} className="text-red-300 hover:text-red-500">
-                        <Trash2 className="h-3 w-3" />
+                    {/* 화면에서만 보이는 삭제 버튼 */}
+                    <td className="dispatch-no-print" style={{ border: '1px solid #374151', textAlign: 'center', padding: '2px' }}>
+                      <button onClick={() => removeRow(idx)} style={{ color: '#fca5a5', cursor: 'pointer', lineHeight: 1 }}>
+                        <Trash2 style={{ width: '11px', height: '11px' }} />
                       </button>
                     </td>
                   </tr>
@@ -654,43 +686,57 @@ ${clone.innerHTML}
               </tbody>
             </table>
 
-            {/* 행 추가 버튼 */}
+            {/* 행 추가 버튼 (화면 전용) */}
             <button onClick={addEmptyRow}
-              className="dispatch-no-print mt-1 w-full text-[10px] text-gray-400 border border-dashed border-gray-200 rounded py-1 hover:border-blue-300 hover:text-blue-500 flex items-center justify-center gap-1">
-              <UserPlus className="h-3 w-3" />빈 행 추가
+              className="dispatch-no-print"
+              style={{ marginTop: '3px', width: '100%', fontSize: '10px', color: '#9ca3af',
+                border: '1px dashed #d1d5db', borderRadius: '4px', padding: '3px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', cursor: 'pointer' }}>
+              <UserPlus style={{ width: '11px', height: '11px' }} />빈 행 추가
             </button>
 
-            {/* 신고 문구 */}
-            <div className="mt-4 text-[11px] leading-relaxed">
-              「경비업법」 제18조제2항, 같은 법 시행규칙 제24조에 따라 위와 같이 경비원의 (배치·배치폐지)를 신고합니다.
+            {/* ⑤ 신고 문구 */}
+            <div style={{ marginTop: '12px', fontSize: '11px', lineHeight: '1.6' }}>
+              &nbsp;&nbsp;「경비업법」 제18조제2항, 같은 법 시행규칙 제24조에 따라 위와 같이 경비원의 (배치·배치폐지)를 신고합니다.
             </div>
-            <div className="mt-3 text-right text-[11px]">
-              <div className="mb-2">{reportDateFormatted}</div>
-              <div className="flex items-center justify-end gap-6">
-                <span>신고인(대표자) &nbsp; 가디어스 대표이사 &nbsp; {COMPANY.ceo}</span>
-                <span className="inline-flex items-center justify-center w-10 h-10 border border-gray-400 rounded-full text-gray-300 text-[9px]">(인)</span>
+
+            {/* ⑥ 날짜 및 서명 */}
+            <div style={{ marginTop: '10px', textAlign: 'right', fontSize: '11px' }}>
+              <div style={{ marginBottom: '8px' }}>{reportDateFormatted}</div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '16px' }}>
+                <span>신고인(대표자) &nbsp;&nbsp; 가디어스 대표이사 &nbsp;&nbsp; {COMPANY.ceo} &nbsp;&nbsp;</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  width: '36px', height: '36px', border: '1px solid #9ca3af', borderRadius: '50%',
+                  fontSize: '9px', color: '#9ca3af' }}>(인)</span>
               </div>
             </div>
-            <div className="mt-2 text-base font-bold">&nbsp;&nbsp;{policeStation} 경찰서장 &nbsp; 귀하</div>
+            <div style={{ marginTop: '6px', fontSize: '14px', fontWeight: 'bold' }}>
+              &nbsp;&nbsp;{policeStation} 경찰서장 &nbsp;&nbsp; 귀하
+            </div>
 
-            {/* 첨부서류 */}
-            <table className="w-full border-collapse mt-3" style={{fontSize:'11px'}}>
+            {/* ⑦ 첨부서류 */}
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '10px', borderTop: '2px solid #000' }}>
               <tbody>
                 <tr>
-                  <td className="border border-gray-700 px-2 py-1 bg-gray-100 font-medium w-16">첨부서류</td>
-                  <td className="border border-gray-700 px-2 py-1">
+                  <td style={{ ...S.th, width: '55px', verticalAlign: 'middle' }}>첨부서류</td>
+                  <td style={{ ...S.td }}>
                     병력(兵歷)신고 및 개인정보 이용 동의서(특수경비원의 배치신고에만 해당합니다)
                   </td>
-                  <td className="border border-gray-700 px-2 py-1 text-center w-14">수수<br/>없음</td>
+                  <td style={{ ...S.th, width: '40px', textAlign: 'center' }}>수수<br/>없음</td>
                 </tr>
               </tbody>
             </table>
 
-            {/* 작성요령 */}
-            <div className="mt-2 bg-gray-50 border border-gray-200 rounded p-2 text-[10px] text-gray-600">
-              <div className="font-bold text-center mb-1">작성요령</div>
+            {/* ⑧ 작성요령 */}
+            <div style={{ marginTop: '6px', border: '1px solid #000', padding: '4px 8px', fontSize: '9px', color: '#374151' }}>
+              <div style={{ fontWeight: 'bold', textAlign: 'center', marginBottom: '2px' }}>작&nbsp;&nbsp;&nbsp;성&nbsp;&nbsp;&nbsp;요&nbsp;&nbsp;&nbsp;령</div>
               <div>1. 경비원 신임교육 이수증 번호는 신임교육을 받은 경비원만 적습니다.</div>
               <div>2. 배치·배치폐지 경비원 명단 작성 시 필요하면 별지를 사용하시기 바랍니다.</div>
+            </div>
+
+            {/* 용지 규격 표기 */}
+            <div style={{ textAlign: 'right', fontSize: '8px', color: '#9ca3af', marginTop: '4px' }}>
+              210mm×297mm[백상지 80g/㎡ (재활용품)]
             </div>
           </div>
 
