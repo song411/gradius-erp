@@ -415,13 +415,46 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
     table { border-collapse: collapse; width: 100%; }
     td, th { word-break: keep-all; }
     .dispatch-page { width: 210mm; padding: 12mm 15mm; margin: 0 auto; font-size: 11px; background: white; }
+
+    /* ── 서류 페이지: A4 정확히 1장 = 297mm × 210mm ── */
     .dispatch-doc-page {
-      width: 210mm; min-height: 297mm; padding: 8mm; margin: 0 auto;
-      display: flex; align-items: center; justify-content: center;
-      page-break-before: always; background: white;
+      width: 210mm;
+      height: 297mm;          /* 정확히 A4 1장 높이 */
+      padding: 10mm;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      page-break-before: always;
+      page-break-after: always;
+      page-break-inside: avoid;
+      break-before: page;
+      break-after: page;
+      break-inside: avoid;
+      background: white;
+      overflow: hidden;        /* 넘치는 내용 차단 */
     }
-    .dispatch-doc-page img { max-width: 194mm; max-height: 277mm; object-fit: contain; }
+    /* 서류 레이블 (화면 전용이므로 팝업에서는 이미 제거됨) */
     .dispatch-no-print { display: none !important; }
+
+    /* 이미지: A4 인쇄 여백 제외 최대 크기 */
+    .dispatch-doc-page img {
+      max-width: 190mm;
+      max-height: 270mm;
+      width: auto;
+      height: auto;
+      object-fit: contain;
+      display: block;
+    }
+    /* PDF iframe: 고정 크기로 잘림 방지 */
+    .dispatch-doc-page iframe {
+      width: 190mm;
+      height: 270mm;
+      border: none;
+      display: block;
+    }
+
     input, textarea, select {
       border: none !important; outline: none !important;
       background: transparent !important;
@@ -430,7 +463,7 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
     @media print {
       @page { size: A4; margin: 0; }
       body { margin: 0; }
-      .dispatch-page { page-break-after: always; }
+      .dispatch-page { page-break-after: always; break-after: page; }
     }
   </style>
 </head>
@@ -489,33 +522,18 @@ ${clone.innerHTML}
           width: 210mm; padding: 12mm 15mm; background: white;
           box-sizing: border-box; font-family: 'Malgun Gothic','맑은 고딕',sans-serif;
         }
+        /* 화면: 서류 미리보기 영역 */
         .dispatch-doc-page {
-          width: 210mm; padding: 8mm; background: white;
-          min-height: 120px; display: flex; flex-direction: column; box-sizing: border-box;
+          width: 210mm; padding: 10mm; background: white;
+          display: flex; flex-direction: column; align-items: center;
+          justify-content: center; box-sizing: border-box; min-height: 200px;
         }
-        @media print {
-          @page { size: A4; margin: 0; }
-          body > * { display: none !important; }
-          body > div:has(.dispatch-print-area) { display: block !important; }
-          .dispatch-print-area { display: flex !important; flex-direction: column; align-items: center; background: white; }
-          .dispatch-no-print { display: none !important; }
-          .dispatch-page {
-            width: 210mm; padding: 12mm 15mm; margin: 0 auto;
-            box-sizing: border-box; page-break-after: always;
-            background: white; font-size: 11px;
-          }
-          .dispatch-doc-page {
-            width: 210mm; min-height: 297mm; padding: 8mm;
-            margin: 0 auto; display: flex; align-items: center;
-            justify-content: center; page-break-before: always;
-          }
-          .dispatch-doc-page img { max-width: 194mm; max-height: 277mm; object-fit: contain; }
-          table { border-collapse: collapse !important; }
-          input, textarea {
-            border: none !important; outline: none !important;
-            background: transparent !important;
-            font-family: inherit !important; font-size: inherit !important;
-          }
+        .dispatch-doc-page img {
+          max-width: 190mm; max-height: 270mm; width: auto; height: auto;
+          object-fit: contain; display: block;
+        }
+        .dispatch-doc-page iframe {
+          width: 190mm; height: 270mm; border: none; display: block;
         }
       `}</style>
 
