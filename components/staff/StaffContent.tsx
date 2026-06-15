@@ -37,6 +37,7 @@ const emptyForm = {
   performance_score: '',
   appearance_score: '',
   teamwork_score: '',
+  adaptability_score: '',
 }
 
 const RECOMMEND_COLOR: Record<string, string> = {
@@ -49,11 +50,16 @@ const RECOMMEND_COLOR: Record<string, string> = {
 const SCORE_COLOR = (avg: number) =>
   avg >= 4 ? 'text-emerald-600 font-bold' : avg >= 3 ? 'text-blue-600 font-semibold' : avg >= 2 ? 'text-yellow-600' : 'text-gray-500'
 
-// 4개 항목의 평균 계산 (0점인 항목 포함해서 단순 평균)
+// 5개 항목 평균 (0~5점 표시용)
 function calcAvg(s: Staff) {
-  const sum = (s.attendance_score || 0) + (s.performance_score || 0) +
-              (s.appearance_score || 0) + (s.teamwork_score || 0)
-  return sum / 4
+  const scores = [
+    s.attendance_score   || 0,
+    s.performance_score  || 0,
+    s.appearance_score   || 0,
+    s.teamwork_score     || 0,
+    s.adaptability_score || 0,
+  ]
+  return scores.reduce((a, b) => a + b, 0) / 5
 }
 
 // 필터 상태 타입
@@ -124,6 +130,7 @@ export default function StaffContent() {
       performance_score: String(s.performance_score || ''),
       appearance_score: String(s.appearance_score || ''),
       teamwork_score: String(s.teamwork_score || ''),
+      adaptability_score: String(s.adaptability_score || ''),
     })
     setError('')
     setShowModal(true)
@@ -135,12 +142,13 @@ export default function StaffContent() {
     setSaving(true)
     setError('')
 
-    const attendance  = Number(form.attendance_score)  || 0
-    const performance = Number(form.performance_score) || 0
-    const appearance  = Number(form.appearance_score)  || 0
-    const teamwork    = Number(form.teamwork_score)    || 0
-    // total_score = 4개 합산 (최대 20점, 소수점 포함)
-    const totalScore  = Math.round((attendance + performance + appearance + teamwork) * 100) / 100
+    const attendance    = Number(form.attendance_score)    || 0
+    const performance   = Number(form.performance_score)   || 0
+    const appearance    = Number(form.appearance_score)    || 0
+    const teamwork      = Number(form.teamwork_score)      || 0
+    const adaptability  = Number(form.adaptability_score)  || 0
+    // total_score = 5개 평균 (0~5점, AttendanceContent 기준과 동일)
+    const totalScore = Math.round(((attendance + performance + appearance + teamwork + adaptability) / 5) * 100) / 100
 
     const payload = {
       name: form.name.trim(),
@@ -164,6 +172,7 @@ export default function StaffContent() {
       performance_score: performance,
       appearance_score: appearance,
       teamwork_score: teamwork,
+      adaptability_score: adaptability,
       total_score: totalScore,
     }
 
@@ -568,21 +577,22 @@ export default function StaffContent() {
 
           {/* 평가 점수 */}
           <div>
-            <h4 className="text-xs font-semibold text-gray-700 mb-2">평가 점수 (각 0~5점, 합계 20점)</h4>
-            <div className="grid grid-cols-4 gap-3">
+            <h4 className="text-xs font-semibold text-gray-700 mb-2">평가 점수 (각 0~5점, 합계 25점)</h4>
+            <div className="grid grid-cols-5 gap-2">
               {[
-                { key: 'attendance_score',  label: '근태' },
-                { key: 'performance_score', label: '수행' },
-                { key: 'appearance_score',  label: '외모' },
-                { key: 'teamwork_score',    label: '팀워크' },
+                { key: 'attendance_score',   label: '근태' },
+                { key: 'performance_score',  label: '직무·서비스' },
+                { key: 'appearance_score',   label: '외형' },
+                { key: 'teamwork_score',     label: '팀워크·보고' },
+                { key: 'adaptability_score', label: '상황대응' },
               ].map(({ key, label }) => (
                 <div key={key}>
-                  <label className="text-xs text-gray-500 mb-1 block">{label} <span className="text-gray-300">/5</span></label>
+                  <label className="text-[10px] text-gray-500 mb-1 block">{label} <span className="text-gray-300">/5</span></label>
                   <Input
                     type="number" min={0} max={5} step={0.5}
                     value={(form as Record<string, string>)[key]}
                     onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
-                    className="text-center"
+                    className="text-center text-sm"
                   />
                 </div>
               ))}
