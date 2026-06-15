@@ -12,62 +12,84 @@ function getMonthRange() {
   return { start, end, label: `${year}년 ${month}월` }
 }
 
-// Supabase 실제 데이터를 JSON으로 수집 → AI가 직접 분석
+// Supabase 데이터 수집 — 토큰 절약형 요약
 async function fetchBusinessContext(): Promise<string> {
   const supabase = createAdminClient()
-  const { label } = getMonthRange()
+  const { start, end, label } = getMonthRange()
 
   try {
     const [inquiriesRes, settlementsRes, staffRes, payoutsRes] = await Promise.all([
       supabase.from('inquiries')
-        .select('id, event_name, company_name, event_start, event_end, status, location, required_staff, expected_pay, memo')
+        .select('event_name, company_name, event_start, event_end, status, location, required_staff')
         .order('event_start', { ascending: false })
-        .limit(80),
+        .limit(30),
       supabase.from('settlements')
-        .select('id, inquiry_id, company_name, site_name, invoice_amount, supply_price, vat, received_amount, payout_amount, deposit_status, progress, profit')
-        .limit(150),
+        .select('company_name, site_name, invoice_amount, received_amount, deposit_status, progress')
+        .limit(50),
       supabase.from('staff')
-        .select('id, name, gender, age, region, total_score, attendance_score, performance_score, appearance_score, teamwork_score')
-        .limit(100),
+        .select('name, gender, age, region, total_score, attendance_score, performance_score, teamwork_score')
+        .limit(50),
       supabase.from('payouts')
-        .select('id, inquiry_id, staff_name, site_name, dispatch_days, base_pay, final_pay, status, paid_at')
-        .limit(150),
+        .select('staff_name, site_name, final_pay, status, paid_at')
+        .limit(50),
     ])
 
-    const inquiries = inquiriesRes.data || []
+    const inquiries  = inquiriesRes.data  || []
     const settlements = settlementsRes.data || []
-    const staff = staffRes.data || []
-    const payouts = payoutsRes.data || []
+    const staff      = staffRes.data      || []
+    const payouts    = payoutsRes.data    || []
 
-    // 빠른 집계 (AI가 계산하기 쉽도록 요약도 함께 제공)
+    // 집계
     const statusCount: Record<string, number> = {}
     inquiries.forEach(i => { statusCount[i.status] = (statusCount[i.status] || 0) + 1 })
 
-    const totalInvoice   = settlements.reduce((s, r) => s + (r.invoice_amount  || 0), 0)
-    const totalReceived  = settlements.reduce((s, r) => s + (r.received_amount || 0), 0)
-    const totalPayout    = payouts.reduce((s, p) => s + (p.final_pay || 0), 0)
-    const paidPayout     = payouts.filter(p => p.status === '지급완료').reduce((s, p) => s + (p.final_pay || 0), 0)
+    const monthlyInq    = inquiries.filter(i => i.event_start >= start && i.event_start <= end)
+    const totalInvoice  = settlements.reduce((s, r) => s + (r.invoice_amount  || 0), 0)
+    const totalReceived = settlements.reduce((s, r) => s + (r.received_amount || 0), 0)
+    const totalPayout   = payouts.reduce((s, p) => s + (p.final_pay || 0), 0)
+    const paidPayout    = payouts.filter(p => p.status === '지급완료').reduce((s, p) => s + (p.final_pay || 0), 0)
+    const avgScore      = staff.length > 0 ? (staff.reduce((s,p)=>s+(p.total_score||0),0)/staff.length).toFixed(1) : 'N/A'
+
+    // 최근 행사 목록 (텍스트 압축)
+    const inqList = inquiries.slice(0, 15).map(i =>
+      `${i.event_start||'?'} | ${i.company_name||''} | ${i.event_name} | ${i.status} | ${i.location||''}`
+    ).join('\n')
+
+    // 정산 목록
+    const settlList = settlements.slice(0, 15).map(r =>
+      `${r.company_name||r.site_name||''} | 청구:${(r.invoice_amount||0).toLocaleString()} | 입금:${(r.received_amount||0).toLocaleString()} | ${r.deposit_status}`
+    ).join('\n')
+
+    // 크루 목록
+    const staffList = staff.map(s =>
+      `${s.name}(${s.gender||'?'}/${s.age||'?'}세/${s.region||'?'}) 종합:${s.total_score||0} 근태:${s.attendance_score||0} 직무:${s.performance_score||0} 팀워크:${s.teamwork_score||0}`
+    ).join('\n')
+
+    // 지급 목록
+    const payoutList = payouts.slice(0, 15).map(p =>
+      `${p.staff_name||''} | ${p.site_name||''} | ${(p.final_pay||0).toLocaleString()}원 | ${p.status}`
+    ).join('\n')
 
     return `
-=== 가디어스 ERP 실시간 데이터 (${new Date().toLocaleDateString('ko-KR')} / ${label}) ===
+=== 가디어스 ERP 데이터 (${new Date().toLocaleDateString('ko-KR')} / ${label}) ===
 
-## 📊 집계 요약
-- 전체 문의: ${inquiries.length}건 / 상태별: ${Object.entries(statusCount).map(([k,v])=>`${k} ${v}건`).join(', ')}
-- 총 청구금액: ${totalInvoice.toLocaleString()}원 / 총 입금액: ${totalReceived.toLocaleString()}원 / 미수금: ${(totalInvoice-totalReceived).toLocaleString()}원
-- 총 지급예정: ${totalPayout.toLocaleString()}원 / 지급완료: ${paidPayout.toLocaleString()}원 / 미지급: ${(totalPayout-paidPayout).toLocaleString()}원
-- 크루 인원: ${staff.length}명
+[요약]
+문의 총 ${inquiries.length}건 (${Object.entries(statusCount).map(([k,v])=>`${k}:${v}`).join(', ')}) / ${label} ${monthlyInq.length}건
+청구 ${totalInvoice.toLocaleString()}원 / 입금 ${totalReceived.toLocaleString()}원 / 미수금 ${(totalInvoice-totalReceived).toLocaleString()}원
+지급예정 ${totalPayout.toLocaleString()}원 / 완료 ${paidPayout.toLocaleString()}원 / 미지급 ${(totalPayout-paidPayout).toLocaleString()}원
+크루 ${staff.length}명 / 평균평점 ${avgScore}점
 
-## 📋 문의 목록 (최근 80건)
-${JSON.stringify(inquiries, null, 0)}
+[최근 행사 (최대 15건)]
+${inqList}
 
-## 💰 정산 목록 (최근 150건)
-${JSON.stringify(settlements, null, 0)}
+[정산 현황 (최대 15건)]
+${settlList}
 
-## 👥 크루(직원) 목록
-${JSON.stringify(staff, null, 0)}
+[크루 목록]
+${staffList}
 
-## 💳 지급 목록 (최근 150건)
-${JSON.stringify(payouts, null, 0)}
+[지급 현황 (최대 15건)]
+${payoutList}
 `.trim()
   } catch (err) {
     console.error('[AI Context 수집 오류]', err)
