@@ -17,6 +17,25 @@ const COMPANY = {
   phone:   '02-1600-2944',
 }
 
+// PDF/이미지 자동 구분 뷰어
+function DocViewer({ url, label }: { url: string; label: string }) {
+  const isPdf = url.toLowerCase().includes('.pdf') || url.includes('application/pdf')
+  if (isPdf) {
+    return (
+      <embed
+        src={url}
+        type="application/pdf"
+        className="w-full"
+        style={{ minHeight: '270mm', height: '270mm' }}
+        title={label}
+      />
+    )
+  }
+  return (
+    <img src={url} alt={label} className="max-w-full object-contain" style={{ maxHeight: '270mm' }} />
+  )
+}
+
 // 명단 한 행
 interface GuardRow {
   name: string
@@ -139,21 +158,34 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
     <>
       <style>{`
         @media print {
+          /* 인쇄 시 dispatch-print-area 안의 내용만 표시 */
+          body * { visibility: hidden !important; }
+          .dispatch-print-area, .dispatch-print-area * { visibility: visible !important; }
+          .dispatch-print-area {
+            position: fixed !important;
+            left: 0 !important; top: 0 !important;
+            width: 100% !important;
+            background: white !important;
+          }
           .dispatch-no-print { display: none !important; }
           .dispatch-page {
             width: 210mm; min-height: 297mm;
-            padding: 12mm 18mm; margin: 0;
+            padding: 12mm 18mm; margin: 0 auto;
             page-break-after: always; background: white;
             box-shadow: none !important;
           }
           .dispatch-doc-page {
             page-break-before: always;
             width: 210mm; min-height: 297mm;
-            padding: 8mm; background: white;
+            padding: 8mm; margin: 0 auto; background: white;
             display: flex !important; align-items: center; justify-content: center;
           }
-          .dispatch-doc-page img { max-width: 194mm; max-height: 279mm; object-fit: contain; }
-          .dispatch-input { border: none !important; outline: none !important; background: transparent !important; }
+          .dispatch-doc-page img,
+          .dispatch-doc-page embed,
+          .dispatch-doc-page object {
+            max-width: 194mm; max-height: 279mm; object-fit: contain;
+          }
+          input, select, textarea { border: none !important; outline: none !important; background: transparent !important; }
         }
         @media screen {
           .dispatch-page { width: 210mm; padding: 12mm 18mm; background: white; }
@@ -231,8 +263,8 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        {/* ── 본문 스크롤 영역 ── */}
-        <div className="flex-1 overflow-y-auto bg-gray-100 py-6 flex flex-col items-center gap-6"
+        {/* ── 본문 스크롤 영역 (인쇄 시 이 영역만 출력) ── */}
+        <div className="dispatch-print-area flex-1 overflow-y-auto bg-gray-100 py-6 flex flex-col items-center gap-6"
           onClick={() => setShowGuardPicker(false)}>
 
           {/* ── 신고서 설정 패널 (화면 전용) ── */}
@@ -466,19 +498,19 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
               {row.id_doc_url && (
                 <div className="dispatch-doc-page shadow-xl rounded-sm">
                   <div className="dispatch-no-print text-xs text-gray-500 mb-2">{row.name} — 신분증 사본</div>
-                  <img src={row.id_doc_url} alt={`${row.name} 신분증`} className="max-w-full object-contain" />
+                  <DocViewer url={row.id_doc_url} label={`${row.name} 신분증`} />
                 </div>
               )}
               {row.certificate_doc_url && (
                 <div className="dispatch-doc-page shadow-xl rounded-sm">
                   <div className="dispatch-no-print text-xs text-gray-500 mb-2">{row.name} — 이수증</div>
-                  <img src={row.certificate_doc_url} alt={`${row.name} 이수증`} className="max-w-full object-contain" />
+                  <DocViewer url={row.certificate_doc_url} label={`${row.name} 이수증`} />
                 </div>
               )}
               {row.crime_check_doc_url && (
                 <div className="dispatch-doc-page shadow-xl rounded-sm">
                   <div className="dispatch-no-print text-xs text-gray-500 mb-2">{row.name} — 성범죄 회보서</div>
-                  <img src={row.crime_check_doc_url} alt={`${row.name} 성범죄 회보서`} className="max-w-full object-contain" />
+                  <DocViewer url={row.crime_check_doc_url} label={`${row.name} 성범죄 회보서`} />
                 </div>
               )}
             </div>
