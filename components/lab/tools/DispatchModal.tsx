@@ -139,34 +139,32 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
     <>
       <style>{`
         @media print {
-          body > *:not(.dispatch-root) { display: none !important; }
-          .dispatch-root { display: block !important; position: static !important; }
-          .no-print { display: none !important; }
-          .print-only-block { display: block !important; }
-          .print-page {
+          .dispatch-no-print { display: none !important; }
+          .dispatch-page {
             width: 210mm; min-height: 297mm;
             padding: 12mm 18mm; margin: 0;
             page-break-after: always; background: white;
+            box-shadow: none !important;
           }
-          .doc-page {
+          .dispatch-doc-page {
             page-break-before: always;
             width: 210mm; min-height: 297mm;
             padding: 8mm; background: white;
-            display: flex; align-items: center; justify-content: center;
+            display: flex !important; align-items: center; justify-content: center;
           }
-          .doc-page img { max-width: 194mm; max-height: 279mm; object-fit: contain; }
-          input, select, textarea { border: none !important; outline: none !important; background: transparent !important; }
+          .dispatch-doc-page img { max-width: 194mm; max-height: 279mm; object-fit: contain; }
+          .dispatch-input { border: none !important; outline: none !important; background: transparent !important; }
         }
         @media screen {
-          .print-page { width: 210mm; padding: 12mm 18mm; background: white; }
-          .doc-page { width: 210mm; padding: 8mm; background: white; min-height: 150px; }
+          .dispatch-page { width: 210mm; padding: 12mm 18mm; background: white; }
+          .dispatch-doc-page { width: 210mm; padding: 8mm; background: white; min-height: 120px; display: flex; flex-direction: column; }
         }
       `}</style>
 
-      <div className="dispatch-root fixed inset-0 z-50 bg-black/70 flex flex-col">
+      <div className="fixed inset-0 bg-black/70 flex flex-col" style={{ zIndex: 9999 }}>
 
         {/* ── 상단 컨트롤 바 ── */}
-        <div className="no-print flex items-center gap-3 bg-gray-900 px-5 py-3 shrink-0 flex-wrap">
+        <div className="dispatch-no-print flex items-center gap-3 bg-gray-900 px-5 py-3 shrink-0 flex-wrap">
           <h2 className="text-white font-bold text-sm">📋 배치신고서 작성기</h2>
 
           {/* 행사 선택 */}
@@ -238,7 +236,7 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
           onClick={() => setShowGuardPicker(false)}>
 
           {/* ── 신고서 설정 패널 (화면 전용) ── */}
-          <div className="no-print w-[210mm] bg-white rounded-xl border border-gray-200 p-4 shadow">
+          <div className="dispatch-no-print w-[210mm] bg-white rounded-xl border border-gray-200 p-4 shadow">
             <h4 className="text-xs font-bold text-gray-600 mb-3 uppercase tracking-wide">신고서 설정</h4>
             <div className="grid grid-cols-4 gap-3">
               <div>
@@ -268,7 +266,7 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
           </div>
 
           {/* ── A4 신고서 양식 ── */}
-          <div className="print-page shadow-xl rounded-sm text-xs" onClick={e => e.stopPropagation()}>
+          <div className="dispatch-page shadow-xl rounded-sm text-xs" onClick={e => e.stopPropagation()}>
 
             {/* 제목 */}
             <div className="text-center mb-3">
@@ -412,7 +410,7 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
                       <input value={row.certificate_number} onChange={e => updateRow(idx, 'certificate_number', e.target.value)}
                         className="w-full outline-none bg-transparent text-center" />
                     </td>
-                    <td className="border border-gray-700 px-1 py-0.5 text-center no-print">
+                    <td className="border border-gray-700 px-1 py-0.5 text-center dispatch-no-print">
                       <button onClick={() => removeRow(idx)} className="text-red-300 hover:text-red-500">
                         <Trash2 className="h-3 w-3" />
                       </button>
@@ -424,7 +422,7 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
 
             {/* 행 추가 버튼 */}
             <button onClick={addEmptyRow}
-              className="no-print mt-1 w-full text-[10px] text-gray-400 border border-dashed border-gray-200 rounded py-1 hover:border-blue-300 hover:text-blue-500 flex items-center justify-center gap-1">
+              className="dispatch-no-print mt-1 w-full text-[10px] text-gray-400 border border-dashed border-gray-200 rounded py-1 hover:border-blue-300 hover:text-blue-500 flex items-center justify-center gap-1">
               <UserPlus className="h-3 w-3" />빈 행 추가
             </button>
 
@@ -466,20 +464,20 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
           {showDocs && docRows.map((row, ri) => (
             <div key={ri} className="flex flex-col items-center gap-4 w-full">
               {row.id_doc_url && (
-                <div className="doc-page shadow-xl rounded-sm">
-                  <div className="no-print text-xs text-gray-500 mb-2 self-start">{row.name} — 신분증 사본</div>
+                <div className="dispatch-doc-page shadow-xl rounded-sm">
+                  <div className="dispatch-no-print text-xs text-gray-500 mb-2">{row.name} — 신분증 사본</div>
                   <img src={row.id_doc_url} alt={`${row.name} 신분증`} className="max-w-full object-contain" />
                 </div>
               )}
               {row.certificate_doc_url && (
-                <div className="doc-page shadow-xl rounded-sm">
-                  <div className="no-print text-xs text-gray-500 mb-2 self-start">{row.name} — 이수증</div>
+                <div className="dispatch-doc-page shadow-xl rounded-sm">
+                  <div className="dispatch-no-print text-xs text-gray-500 mb-2">{row.name} — 이수증</div>
                   <img src={row.certificate_doc_url} alt={`${row.name} 이수증`} className="max-w-full object-contain" />
                 </div>
               )}
               {row.crime_check_doc_url && (
-                <div className="doc-page shadow-xl rounded-sm">
-                  <div className="no-print text-xs text-gray-500 mb-2 self-start">{row.name} — 성범죄 회보서</div>
+                <div className="dispatch-doc-page shadow-xl rounded-sm">
+                  <div className="dispatch-no-print text-xs text-gray-500 mb-2">{row.name} — 성범죄 회보서</div>
                   <img src={row.crime_check_doc_url} alt={`${row.name} 성범죄 회보서`} className="max-w-full object-contain" />
                 </div>
               )}
