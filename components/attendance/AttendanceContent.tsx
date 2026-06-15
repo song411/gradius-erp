@@ -482,6 +482,7 @@ export default function AttendanceContent() {
         // 점수 집계
         const staffEvals = await db.list<Evaluation>('evaluations', {
           filters: { staff_id: asgn.staff_id },
+          order: 'evaluated_at', asc: true,
         })
         const staffUpdate: Record<string, unknown> = {}
         if (staffEvals.length > 0) {
