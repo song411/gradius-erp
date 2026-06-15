@@ -62,7 +62,7 @@ const TOOLS: Tool[] = [
     name: '배치신고서 작성기',
     desc: '인원배정 DB 연동 → 경비업법 표준 양식 자동 완성',
     category: '경비업무',
-    status: 'ready',
+    status: 'beta',
     gradient: 'from-sky-500 to-cyan-600',
   },
   {
