@@ -148,10 +148,54 @@ export default function PayoutsContent() {
   const payoutTotalDeduction = currentPayouts.reduce((s, p) => s + (p.tax_deduction || 0), 0)
 
   async function handleBulkConfirm() {
-    const toConfirm = currentPayouts.filter(p => p.status === '대기')
-    if (!toConfirm.length) { toast.info('검토할 대기 지급 건이 없습니다.'); return }
-    await Promise.all(toConfirm.map(p => db.update('payouts', p.id, { status: '확인완료' })))
-    toast.success(`${toConfirm.length}건 검토 완료`)
+    if (!selectedGroup) return
+
+    // 1) 기존 '대기' 레코드 → '확인완료' 업데이트
+    const toUpdate = currentPayouts.filter(p => p.status === '대기')
+
+    // 2) 미등록 인원 → 기본금액으로 자동 생성 + '확인완료'
+    const unregisteredAssigns = payableLeaders.filter(
+      a => !currentPayouts.find(p => p.assignment_id === a.id)
+    )
+
+    if (!toUpdate.length && !unregisteredAssigns.length) {
+      toast.info('검토할 지급 건이 없습니다.')
+      return
+    }
+
+    const ops: Promise<unknown>[] = []
+
+    // 업데이트
+    toUpdate.forEach(p =>
+      ops.push(db.update('payouts', p.id, { status: '확인완료' }))
+    )
+
+    // 자동 생성 (기본금액, 공제 없음)
+    unregisteredAssigns.forEach(assign => {
+      const segs = parseSegments(assign.memo)
+      const base = segs ? segmentTotal(segs) : (assign.pay_rate || 0) * (assign.work_days || 1)
+      const payload = {
+        inquiry_id: assign.inquiry_id,
+        assignment_id: assign.id,
+        staff_name: assign.staff_name || '',
+        bank_name: assign.bank_name || null,
+        account_number: assign.account_number || null,
+        subtotal: base,
+        tax_deduction: 0,
+        final_pay: base,
+        status: '확인완료',
+        memo: null,
+      }
+      ops.push(db.insert('payouts', payload))
+    })
+
+    await Promise.all(ops)
+
+    const total = toUpdate.length + unregisteredAssigns.length
+    const parts = []
+    if (toUpdate.length)          parts.push(`기존 ${toUpdate.length}건 확인완료`)
+    if (unregisteredAssigns.length) parts.push(`신규 ${unregisteredAssigns.length}건 자동 등록`)
+    toast.success(`전체 검토완료 (${parts.join(', ')})`)
     load()
   }
 
