@@ -53,18 +53,17 @@ const S = {
     fontSize: '11px',
     verticalAlign: 'middle' as const,
   },
-  // 좁은 셀에서 자연 줄바꿈으로 세로 표현 (공식 서식과 동일)
+  // 좁은 셀 — <br/>로 줄바꿈하여 세로 표현 (공식 서식과 동일)
   vLabel: {
     border: '1px solid #000',
-    padding: '4px 3px',
+    padding: '4px 2px',
     background: '#f5f5f5',
     fontWeight: 'bold',
     textAlign: 'center' as const,
     verticalAlign: 'middle' as const,
     fontSize: '11px',
-    width: '38px',
-    lineHeight: '1.5',
-    wordBreak: 'keep-all' as const,
+    width: '32px',
+    lineHeight: '1.6',
   },
   input: {
     width: '100%',
@@ -641,7 +640,7 @@ ${clone.innerHTML}
               <tbody>
                 {/* 행1: 법인명칭 | 대표자성명 | 허가번호 */}
                 <tr>
-                  <td style={S.vLabel} rowSpan={3}>신고인</td>
+                  <td style={S.vLabel} rowSpan={3}>신<br/>고<br/>인</td>
                   <td style={S.th}>법인 명칭</td>
                   <td style={S.td}>
                     <input value={companyName} onChange={e => setCompanyName(e.target.value)} style={S.input} />
@@ -694,7 +693,7 @@ ${clone.innerHTML}
               </colgroup>
               <tbody>
                 <tr>
-                  <td style={S.vLabel} rowSpan={2}>경비원{'\n'}배치(폐지){'\n'}내용</td>
+                  <td style={S.vLabel} rowSpan={2}>경비원<br/>배치(폐지)<br/>내용</td>
                   <td style={S.th}>배치일시</td>
                   <td style={S.td}>
                     <input value={startDate} onChange={e => setStartDate(e.target.value)}
@@ -736,7 +735,7 @@ ${clone.innerHTML}
               <tbody>
                 {/* 헤더 행 */}
                 <tr style={{ backgroundColor: '#f5f5f5' }}>
-                  <td style={S.vLabel} rowSpan={rows.length + 1}>경비원{'\n'}명단</td>
+                  <td style={S.vLabel} rowSpan={rows.length + 1}>경비원<br/>명단</td>
                   <td style={{ ...S.th, width: '28px', textAlign: 'center' }}>연번</td>
                   <td style={{ ...S.th, width: '52px', textAlign: 'center' }}>성명</td>
                   <td style={{ ...S.th, width: '100px', textAlign: 'center' }}>주민등록번호</td>
