@@ -11,6 +11,7 @@ import AiModal from './tools/AiModal'
 import GuideModal from './tools/GuideModal'
 import KitModal from './tools/KitModal'
 import IncomeModal from './tools/IncomeModal'
+import DispatchModal from './tools/DispatchModal'
 
 // ───────── 도구 정의 ─────────
 type ToolStatus = 'ready' | 'beta' | 'soon'
@@ -61,7 +62,7 @@ const TOOLS: Tool[] = [
     name: '배치신고서 작성기',
     desc: '인원배정 DB 연동 → 경비업법 표준 양식 자동 완성',
     category: '경비업무',
-    status: 'soon',
+    status: 'ready',
     gradient: 'from-sky-500 to-cyan-600',
   },
   {
@@ -170,9 +171,10 @@ const STATUS_META: Record<ToolStatus, { label: string; cls: string }> = {
 // AI 모달은 전체화면 오버레이로 직접 렌더 (다른 모달보다 크므로 분리)
 function ToolModal({ toolId, onClose }: { toolId: string; onClose: () => void }) {
   // AI 모달은 자체 오버레이를 포함하므로 별도 처리
-  if (toolId === 'ai')             return <AiModal     onClose={onClose} />
-  if (toolId === 'guide')          return <GuideModal  onClose={onClose} />
-  if (toolId === 'income-ledger')  return <IncomeModal onClose={onClose} />
+  if (toolId === 'ai')             return <AiModal        onClose={onClose} />
+  if (toolId === 'guide')          return <GuideModal     onClose={onClose} />
+  if (toolId === 'income-ledger')  return <IncomeModal    onClose={onClose} />
+  if (toolId === 'dispatch')       return <DispatchModal  onClose={onClose} />
 
   // kit은 넓은 모달이 필요하므로 별도 max-w 적용
   const isWide = toolId === 'kit'
