@@ -39,29 +39,32 @@ interface DispatchReport {
 // 공통 테이블 셀 스타일 (공식 서식과 동일한 border 규격)
 const S = {
   th: {
-    border: '1px solid #374151',
-    padding: '4px 6px',
-    background: '#f3f4f6',
+    border: '1px solid #000',
+    padding: '3px 5px',
+    background: '#f5f5f5',
     fontWeight: '500',
     fontSize: '11px',
     verticalAlign: 'middle' as const,
+    whiteSpace: 'nowrap' as const,
   },
   td: {
-    border: '1px solid #374151',
-    padding: '4px 6px',
+    border: '1px solid #000',
+    padding: '3px 5px',
     fontSize: '11px',
     verticalAlign: 'middle' as const,
   },
+  // 좁은 셀에서 자연 줄바꿈으로 세로 표현 (공식 서식과 동일)
   vLabel: {
-    border: '1px solid #374151',
-    padding: '6px 2px',
-    background: '#f3f4f6',
+    border: '1px solid #000',
+    padding: '4px 3px',
+    background: '#f5f5f5',
     fontWeight: 'bold',
     textAlign: 'center' as const,
     verticalAlign: 'middle' as const,
-    fontSize: '10px',
-    writingMode: 'vertical-rl' as const,
-    whiteSpace: 'nowrap' as const,
+    fontSize: '11px',
+    width: '38px',
+    lineHeight: '1.5',
+    wordBreak: 'keep-all' as const,
   },
   input: {
     width: '100%',
@@ -70,6 +73,7 @@ const S = {
     border: 'none',
     fontSize: '11px',
     fontFamily: 'inherit',
+    display: 'block' as const,
   } as React.CSSProperties,
 }
 
@@ -581,78 +585,96 @@ ${clone.innerHTML}
               ■ 경비업법 시행규칙 [별지 제15호서식] &lt;개정 2023. 7. 17.&gt;
             </div>
 
-            {/* 제목 */}
-            <div style={{ textAlign: 'center', marginBottom: '6px' }}>
-              <div style={{ fontSize: '18px', fontWeight: 'bold', lineHeight: '1.6' }}>
-                경비원 &nbsp;[{isBaechi ? 'v' : '\u3000'}] 배치<br />
-                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[{isPyeji ? 'v' : '\u3000'}] 배치폐지 &nbsp;신고서
+            {/* 제목 — 공식 서식 동일 */}
+            <div style={{ textAlign: 'center', margin: '6px 0 8px' }}>
+              <div style={{ fontSize: '22px', fontWeight: 'bold', lineHeight: '1.7' }}>
+                경비원 &nbsp;[{isBaechi ? 'v' : '\u00a0'}] 배치<br />
+                <span style={{ paddingLeft: '4.5em' }}>[{isPyeji ? 'v' : '\u00a0'}] 배치폐지</span>
+                &nbsp;&nbsp;<span style={{ letterSpacing: '0.2em' }}>신고서</span>
               </div>
             </div>
 
             {/* ① 접수 행 */}
             <table style={{ width: '100%', borderCollapse: 'collapse', borderTop: '2px solid #000' }}>
+              <colgroup>
+                <col style={{ width: '13%' }} />
+                <col style={{ width: '30%' }} />
+                <col style={{ width: '13%' }} />
+                <col style={{ width: '27%' }} />
+                <col style={{ width: '10%' }} />
+                <col style={{ width: '7%' }} />
+              </colgroup>
               <tbody>
                 <tr>
                   <td style={S.th}>접수번호</td>
-                  <td style={{ ...S.td, width: '25%' }}>
+                  <td style={S.td}>
                     <input value={receiptNo} onChange={e => setReceiptNo(e.target.value)}
-                      style={S.input} placeholder="(기재 불요)" />
+                      style={S.input} placeholder="" />
                   </td>
                   <td style={S.th}>접수일자</td>
-                  <td style={{ ...S.td, width: '20%' }}>
+                  <td style={S.td}>
                     <input value={receiptDate} onChange={e => setReceiptDate(e.target.value)}
-                      style={S.input} placeholder="20  .    .    ." />
+                      style={S.input} placeholder="" />
                   </td>
                   <td style={S.th}>처리기간</td>
-                  <td style={{ ...S.td, width: '10%', textAlign: 'center' }}>즉시</td>
+                  <td style={{ ...S.td, textAlign: 'center' }}>즉시</td>
                 </tr>
               </tbody>
             </table>
 
-            {/* ② 신고인 */}
+            {/* ② 신고인 — 공식 서식과 동일: 3행 7열 구조 */}
+            {/*
+                Col0=신고인(rs=3) | Col1=label | Col2=value | Col3=label | Col4=value | Col5=label | Col6=value
+                Row2: Col1=소재지 | Col2~4=value(cs=3) | Col5=전화번호 | Col6=value
+                Row3: Col1=배치장소 | Col2~4=value(cs=3) | Col5=전화번호 | Col6=value
+            */}
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <colgroup>
+                <col style={{ width: '38px' }} />
+                <col style={{ width: '13%' }} />
+                <col style={{ width: '20%' }} />
+                <col style={{ width: '11%' }} />
+                <col style={{ width: '18%' }} />
+                <col style={{ width: '11%' }} />
+                <col />
+              </colgroup>
               <tbody>
+                {/* 행1: 법인명칭 | 대표자성명 | 허가번호 */}
                 <tr>
-                  <td style={{ ...S.vLabel, width: '22px' }} rowSpan={4}>신고인</td>
-                  <td style={{ ...S.th, width: '80px' }}>법인 명칭</td>
-                  <td style={{ ...S.td, width: '32%' }}>
-                    <input value={companyName} onChange={e => setCompanyName(e.target.value)}
-                      style={S.input} />
-                  </td>
-                  <td style={{ ...S.th, width: '70px' }}>대표자 성명</td>
+                  <td style={S.vLabel} rowSpan={3}>신고인</td>
+                  <td style={S.th}>법인 명칭</td>
                   <td style={S.td}>
-                    <input value={companyCeo} onChange={e => setCompanyCeo(e.target.value)}
-                      style={S.input} />
+                    <input value={companyName} onChange={e => setCompanyName(e.target.value)} style={S.input} />
                   </td>
-                </tr>
-                <tr>
-                  <td style={S.th}></td>
-                  <td style={S.td}></td>
+                  <td style={S.th}>대표자 성명</td>
+                  <td style={S.td}>
+                    <input value={companyCeo} onChange={e => setCompanyCeo(e.target.value)} style={S.input} />
+                  </td>
                   <td style={S.th}>허가번호</td>
-                  <td style={{ ...S.td }}>
+                  <td style={S.td}>
                     <input value={companyLicense} onChange={e => setCompanyLicense(e.target.value)}
-                      style={{ ...S.input, fontSize: '9px' }} />
+                      style={{ ...S.input, fontSize: '9.5px' }} />
                   </td>
                 </tr>
+                {/* 행2: 소재지 | 전화번호 */}
                 <tr>
                   <td style={S.th}>소재지</td>
-                  <td style={S.td}>
-                    <input value={companyAddress} onChange={e => setCompanyAddress(e.target.value)}
-                      style={S.input} />
+                  <td style={S.td} colSpan={3}>
+                    <input value={companyAddress} onChange={e => setCompanyAddress(e.target.value)} style={S.input} />
                   </td>
                   <td style={S.th}>전화번호</td>
                   <td style={S.td}>
-                    <input value={companyPhone} onChange={e => setCompanyPhone(e.target.value)}
-                      style={S.input} />
+                    <input value={companyPhone} onChange={e => setCompanyPhone(e.target.value)} style={S.input} />
                   </td>
                 </tr>
+                {/* 행3: 배치장소 | 전화번호 */}
                 <tr>
                   <td style={S.th}>배치장소(구체적으로 기재)</td>
-                  <td style={S.td}>
+                  <td style={S.td} colSpan={3}>
                     <input value={location} onChange={e => setLocation(e.target.value)}
                       style={S.input} placeholder="배치장소 입력" />
                   </td>
-                  <td style={S.th}>전화번호(경호원)</td>
+                  <td style={S.th}>전화번호</td>
                   <td style={S.td}>
                     <input value={locationPhone} onChange={e => setLocationPhone(e.target.value)}
                       style={S.input} placeholder="010-0000-0000" />
@@ -663,22 +685,31 @@ ${clone.innerHTML}
 
             {/* ③ 경비원 배치(폐지) 내용 */}
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <colgroup>
+                <col style={{ width: '38px' }} />
+                <col style={{ width: '14%' }} />
+                <col />
+                <col style={{ width: '18%' }} />
+                <col />
+              </colgroup>
               <tbody>
                 <tr>
-                  <td style={{ ...S.vLabel, width: '22px' }} rowSpan={2}>경비원배치(폐지)내용</td>
-                  <td style={{ ...S.th, width: '80px' }}>배치일시</td>
-                  <td style={{ ...S.td }}>
+                  <td style={S.vLabel} rowSpan={2}>경비원{'\n'}배치(폐지){'\n'}내용</td>
+                  <td style={S.th}>배치일시</td>
+                  <td style={S.td}>
                     <input value={startDate} onChange={e => setStartDate(e.target.value)}
-                      style={{ ...S.input, width: '110px' }} placeholder="2026. 06. 08." />
+                      style={{ ...S.input, display: 'inline', width: 'auto', minWidth: '100px' }} placeholder="2026. 06. 08." />
+                    &nbsp;
                     <input value={startTime} onChange={e => setStartTime(e.target.value)}
-                      style={{ ...S.input, width: '55px' }} placeholder="14:00" />
+                      style={{ ...S.input, display: 'inline', width: '50px' }} placeholder="14:00" />
                   </td>
-                  <td style={{ ...S.th, width: '95px' }}>배치폐지(예정)일시</td>
+                  <td style={S.th}>배치폐지(예정)일시</td>
                   <td style={S.td}>
                     <input value={endDate} onChange={e => setEndDate(e.target.value)}
-                      style={{ ...S.input, width: '110px' }} placeholder="2026. 06. 08." />
+                      style={{ ...S.input, display: 'inline', width: 'auto', minWidth: '100px' }} placeholder="2026. 06. 08." />
+                    &nbsp;
                     <input value={endTime} onChange={e => setEndTime(e.target.value)}
-                      style={{ ...S.input, width: '55px' }} placeholder="17:00" />
+                      style={{ ...S.input, display: 'inline', width: '50px' }} placeholder="17:00" />
                   </td>
                 </tr>
                 <tr>
@@ -693,10 +724,19 @@ ${clone.innerHTML}
 
             {/* ④ 경비원 명단 */}
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <colgroup>
+                <col style={{ width: '38px' }} />
+                <col style={{ width: '28px' }} />
+                <col style={{ width: '50px' }} />
+                <col style={{ width: '100px' }} />
+                <col style={{ width: '70px' }} />
+                <col />
+                <col className="dispatch-no-print" style={{ width: '22px' }} />
+              </colgroup>
               <tbody>
                 {/* 헤더 행 */}
-                <tr style={{ backgroundColor: '#f3f4f6' }}>
-                  <td style={{ ...S.vLabel, width: '22px' }} rowSpan={rows.length + 1}>경비원명단</td>
+                <tr style={{ backgroundColor: '#f5f5f5' }}>
+                  <td style={S.vLabel} rowSpan={rows.length + 1}>경비원{'\n'}명단</td>
                   <td style={{ ...S.th, width: '28px', textAlign: 'center' }}>연번</td>
                   <td style={{ ...S.th, width: '52px', textAlign: 'center' }}>성명</td>
                   <td style={{ ...S.th, width: '100px', textAlign: 'center' }}>주민등록번호</td>
@@ -747,29 +787,34 @@ ${clone.innerHTML}
             </button>
 
             {/* ⑤ 신고 문구 */}
-            <div style={{ marginTop: '12px', fontSize: '11px', lineHeight: '1.6' }}>
+            <div style={{ marginTop: '14px', fontSize: '11px', lineHeight: '1.8' }}>
               &nbsp;&nbsp;「경비업법」 제18조제2항, 같은 법 시행규칙 제24조에 따라 위와 같이 경비원의 (배치·배치폐지)를 신고합니다.
             </div>
 
-            {/* ⑥ 날짜 및 서명 */}
-            <div style={{ marginTop: '10px', textAlign: 'right', fontSize: '11px' }}>
-              <div style={{ marginBottom: '8px' }}>{reportDateFormatted}</div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
-                <span>신고인(대표자) &nbsp;&nbsp;</span>
-                <input value={companyName} onChange={e => setCompanyName(e.target.value)}
-                  style={{ ...S.input, width: '120px', textAlign: 'right', display: 'inline-block' }} />
-                <span>대표이사 &nbsp;</span>
-                <input value={companyCeo} onChange={e => setCompanyCeo(e.target.value)}
-                  style={{ ...S.input, width: '60px', textAlign: 'center', display: 'inline-block' }} />
-                <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                  width: '36px', height: '36px', border: '1px solid #9ca3af', borderRadius: '50%',
-                  fontSize: '9px', color: '#9ca3af', flexShrink: 0 }}>(인)</span>
+            {/* ⑥ 날짜 및 서명 — 공식 서식: 날짜는 우측, 신고인은 좌측, 서명란은 우측 */}
+            <div style={{ marginTop: '16px', marginBottom: '4px' }}>
+              {/* 날짜: 우측 정렬 */}
+              <div style={{ textAlign: 'right', fontSize: '11px', marginBottom: '8px' }}>
+                {reportDateFormatted}
+              </div>
+              {/* 신고인(대표자) 좌측 / (서명 또는 인) 우측 */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px' }}>
+                <div>
+                  신고인(대표자) &nbsp;&nbsp;
+                  <input value={companyName} onChange={e => setCompanyName(e.target.value)}
+                    style={{ ...S.input, display: 'inline', width: '110px' }} />
+                  &nbsp;대표이사&nbsp;
+                  <input value={companyCeo} onChange={e => setCompanyCeo(e.target.value)}
+                    style={{ ...S.input, display: 'inline', width: '55px' }} />
+                </div>
+                <div style={{ fontSize: '10px', color: '#555' }}>(서명 또는 인)</div>
               </div>
             </div>
-            <div style={{ marginTop: '6px', fontSize: '14px', fontWeight: 'bold' }}>
-              &nbsp;&nbsp;
+
+            {/* 경찰서장 귀하 */}
+            <div style={{ marginTop: '8px', fontSize: '16px', fontWeight: 'bold' }}>
               <input value={policeStation} onChange={e => setPoliceStation(e.target.value)}
-                style={{ ...S.input, display: 'inline-block', width: '60px', fontSize: '14px', fontWeight: 'bold' }} />
+                style={{ ...S.input, display: 'inline', width: '50px', fontSize: '16px', fontWeight: 'bold' }} />
               경찰서장 &nbsp;&nbsp; 귀하
             </div>
 
