@@ -352,10 +352,18 @@ export default function AttendanceContent() {
   // 출석 일괄 저장
   async function handleSaveAttendance() {
     if (!selectedInq) return
-    const dirtyEntries = Object.entries(editMap).filter(([, v]) => v.dirty && v.status)
-    if (!dirtyEntries.length) { toast.info('변경된 출석 정보가 없습니다.'); return }
+
+    // 상태 미선택 인원 수 파악
+    const allDirty = Object.entries(editMap).filter(([, v]) => v.dirty)
+    const dirtyEntries = allDirty.filter(([, v]) => v.status)
+    const skipped = allDirty.length - dirtyEntries.length
+
+    if (!allDirty.length) { toast.info('변경된 출석 정보가 없습니다.'); return }
+    if (!dirtyEntries.length) { toast.warning('출석 상태를 선택한 인원이 없습니다.'); return }
 
     let saved = 0
+    const errors: string[] = []
+
     for (const [assignId, data] of dirtyEntries) {
       if (!data.status) continue
       const asgn = assignments.find(a => a.id === assignId)
@@ -384,11 +392,20 @@ export default function AttendanceContent() {
           is_present: data.status !== '결근',
         })
         saved++
-      } catch {
-        // 개별 실패는 계속 진행
+      } catch (e) {
+        errors.push(`${asgn.staff_name}: ${(e as Error).message}`)
       }
     }
-    toast.success(`출석 ${saved}건 저장 완료`)
+
+    // 결과 알림
+    if (errors.length > 0) {
+      toast.error(`저장 실패 ${errors.length}건\n${errors.slice(0, 3).join('\n')}`)
+    }
+    if (saved > 0) {
+      const skipMsg = skipped > 0 ? ` (상태 미선택 ${skipped}명 제외)` : ''
+      toast.success(`출석 ${saved}건 저장 완료${skipMsg}`)
+    }
+
     // dirty 플래그만 초기화 (탭 유지)
     setEditMap(prev => {
       const next = { ...prev }
