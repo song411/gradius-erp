@@ -80,6 +80,7 @@ export interface Staff {
   performance_score: number
   appearance_score: number
   teamwork_score: number
+  adaptability_score: number
   bank_name?: string
   account_number?: string
   id_number?: string
