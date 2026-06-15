@@ -157,8 +157,8 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
         await db.update('dispatch_reports', currentReportId, payload)
         setSaveMsg('✅ 저장 완료')
       } else {
-        const created = await db.create<DispatchReport>('dispatch_reports', payload)
-        if (created?.id) setCurrentReportId(created.id)
+        const created = await db.insert<DispatchReport>('dispatch_reports', payload)
+        if (created?.[0]?.id) setCurrentReportId(created[0].id)
         setSaveMsg('✅ 저장 완료')
       }
       // 목록 갱신
