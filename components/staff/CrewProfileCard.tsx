@@ -144,6 +144,8 @@ export default function CrewProfileCard({ staff, onClose, onEdit }: Props) {
                 {staff.gender && <span className="text-white/80 text-sm">{staff.gender}</span>}
                 {staff.age    && <span className="text-white/80 text-sm">· {staff.age}세</span>}
                 {staff.height && <span className="text-white/80 text-sm">· {staff.height}cm</span>}
+                {staff.weight && <span className="text-white/80 text-sm">· {staff.weight}kg</span>}
+                {staff.mbti   && <span className="text-white/70 text-xs font-semibold bg-white/15 rounded-full px-2 py-0.5">{staff.mbti}</span>}
               </div>
               <span className={`inline-block mt-2 text-xs font-semibold px-2.5 py-0.5 rounded-full border ${theme.badge} bg-white`}>
                 {staff.recommend === '우선투입' && <Star className="inline h-3 w-3 mr-0.5 fill-current" />}
@@ -220,6 +222,12 @@ export default function CrewProfileCard({ staff, onClose, onEdit }: Props) {
                 )}
                 {staff.phone && (
                   <InfoChip icon={<Phone className="h-3.5 w-3.5" />} label="연락처" value={staff.phone} />
+                )}
+                {staff.mbti && (
+                  <InfoChip icon={<span className="text-[10px] font-bold">MB</span>} label="MBTI" value={staff.mbti} />
+                )}
+                {staff.weight && (
+                  <InfoChip icon={<span className="text-[10px] font-bold">kg</span>} label="몸무게" value={`${staff.weight}kg`} />
                 )}
                 {staff.bank_name && staff.account_number && (
                   <InfoChip icon={<CreditCard className="h-3.5 w-3.5" />} label="계좌"

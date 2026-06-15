@@ -22,6 +22,8 @@ const emptyForm = {
   gender: '',
   age: '',
   height: '',
+  weight: '',
+  mbti: '',
   english_skill: '',
   driving: '',
   region: '',
@@ -115,6 +117,8 @@ export default function StaffContent() {
       gender: s.gender || '',
       age: String(s.age || ''),
       height: String(s.height || ''),
+      weight: String(s.weight || ''),
+      mbti: s.mbti || '',
       english_skill: s.english_skill || '',
       driving: s.driving || '',
       region: s.region || '',
@@ -155,6 +159,8 @@ export default function StaffContent() {
       gender: form.gender || null,
       age: form.age ? Number(form.age) : null,
       height: form.height ? Number(form.height) : null,
+      weight: form.weight ? Number(form.weight) : null,
+      mbti: form.mbti?.toUpperCase() || null,
       english_skill: form.english_skill || null,
       driving: form.driving || null,
       region: form.region || null,
@@ -513,6 +519,15 @@ export default function StaffContent() {
             <div>
               <label className="text-xs font-medium text-gray-600 mb-1 block">키 (cm)</label>
               <Input type="number" value={form.height} onChange={e => setForm(f => ({ ...f, height: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-1 block">몸무게 (kg)</label>
+              <Input type="number" value={form.weight} onChange={e => setForm(f => ({ ...f, weight: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-1 block">MBTI</label>
+              <Input value={form.mbti} onChange={e => setForm(f => ({ ...f, mbti: e.target.value.toUpperCase() }))}
+                placeholder="ENFP" maxLength={4} />
             </div>
             <div>
               <label className="text-xs font-medium text-gray-600 mb-1 block">이동가능지역</label>
