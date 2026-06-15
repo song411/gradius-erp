@@ -323,52 +323,50 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
 
   const docRows = rows.filter(r => r.id_doc_url || r.certificate_doc_url || r.crime_check_doc_url)
 
-  // 현재 창에서 직접 인쇄 (팝업 방식 제거 — 브라우저 차단/CDN 로딩 문제 해결)
+  // 인쇄 / PDF 저장
   function handlePrint() {
-    setShowGuardPicker(false)
-
-    const area = document.getElementById('dispatch-print-content')
-    if (!area) return
-
-    // input 현재 값 → value attribute 동기화 (cloneNode는 DOM property 복사 안 함)
-    area.querySelectorAll('input, textarea').forEach(el => {
+    // input 현재 값 → value attribute 동기화
+    document.querySelectorAll('.dispatch-print-area input, .dispatch-print-area textarea').forEach(el => {
       (el as HTMLInputElement).setAttribute('value', (el as HTMLInputElement).value)
     })
-
-    // 임시 print 스타일 주입
-    const styleId = 'dispatch-temp-print'
-    document.getElementById(styleId)?.remove()
-    const style = document.createElement('style')
-    style.id = styleId
-    style.textContent = `
-      @media print {
-        @page { size: A4; margin: 0; }
-        body * { visibility: hidden !important; }
-        #dispatch-print-content { visibility: visible !important; position: fixed; top: 0; left: 0; width: 100%; background: white; overflow: visible !important; }
-        #dispatch-print-content * { visibility: visible !important; }
-        .dispatch-no-print { display: none !important; visibility: hidden !important; }
-        .dispatch-page { width: 210mm; padding: 12mm 15mm; margin: 0 auto; box-sizing: border-box; page-break-after: always; background: white; font-family: 'Malgun Gothic','맑은 고딕',sans-serif; font-size: 11px; }
-        .dispatch-doc-page { width: 210mm; min-height: 297mm; padding: 8mm; margin: 0 auto; display: flex; align-items: center; justify-content: center; page-break-before: always; }
-        .dispatch-doc-page img { max-width: 194mm; max-height: 277mm; object-fit: contain; }
-        table { border-collapse: collapse !important; width: 100%; }
-        input, textarea { border: none !important; outline: none !important; background: transparent !important; font-family: inherit; font-size: inherit; }
-        td, th { word-break: keep-all; }
-      }
-    `
-    document.head.appendChild(style)
-
-    setTimeout(() => {
-      window.print()
-      // 인쇄 후 임시 스타일 제거
-      setTimeout(() => document.getElementById(styleId)?.remove(), 1000)
-    }, 150)
+    window.print()
   }
 
   return (
     <>
       <style>{`
-        .dispatch-page { width: 210mm; padding: 12mm 15mm; background: white; box-sizing: border-box; font-family: 'Malgun Gothic','맑은 고딕',sans-serif; }
-        .dispatch-doc-page { width: 210mm; padding: 8mm; background: white; min-height: 120px; display: flex; flex-direction: column; box-sizing: border-box; }
+        .dispatch-page {
+          width: 210mm; padding: 12mm 15mm; background: white;
+          box-sizing: border-box; font-family: 'Malgun Gothic','맑은 고딕',sans-serif;
+        }
+        .dispatch-doc-page {
+          width: 210mm; padding: 8mm; background: white;
+          min-height: 120px; display: flex; flex-direction: column; box-sizing: border-box;
+        }
+        @media print {
+          @page { size: A4; margin: 0; }
+          body > * { display: none !important; }
+          body > div:has(.dispatch-print-area) { display: block !important; }
+          .dispatch-print-area { display: flex !important; flex-direction: column; align-items: center; background: white; }
+          .dispatch-no-print { display: none !important; }
+          .dispatch-page {
+            width: 210mm; padding: 12mm 15mm; margin: 0 auto;
+            box-sizing: border-box; page-break-after: always;
+            background: white; font-size: 11px;
+          }
+          .dispatch-doc-page {
+            width: 210mm; min-height: 297mm; padding: 8mm;
+            margin: 0 auto; display: flex; align-items: center;
+            justify-content: center; page-break-before: always;
+          }
+          .dispatch-doc-page img { max-width: 194mm; max-height: 277mm; object-fit: contain; }
+          table { border-collapse: collapse !important; }
+          input, textarea {
+            border: none !important; outline: none !important;
+            background: transparent !important;
+            font-family: inherit !important; font-size: inherit !important;
+          }
+        }
       `}</style>
 
       <div className="fixed inset-0 bg-black/70 flex flex-col" style={{ zIndex: 9999 }}>
