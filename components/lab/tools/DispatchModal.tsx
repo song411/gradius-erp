@@ -398,6 +398,28 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
     clone.style.padding = '0'
     clone.style.overflow = 'visible'
 
+    // iframe(PDF)은 팝업에서 무한 로딩 유발 → 이미지로 대체 불가이므로
+    // "PDF 파일" 안내 박스로 교체 (이미지 파일은 <img>로 그대로 출력됨)
+    clone.querySelectorAll('iframe').forEach(iframe => {
+      const src = iframe.getAttribute('src') || ''
+      const label = iframe.getAttribute('title') || 'PDF 파일'
+      const placeholder = document.createElement('div')
+      placeholder.style.cssText = [
+        'width:190mm', 'height:240mm', 'border:2px dashed #ccc',
+        'display:flex', 'flex-direction:column', 'align-items:center',
+        'justify-content:center', 'gap:12px', 'color:#555',
+        'font-size:14px', 'text-align:center',
+      ].join(';')
+      placeholder.innerHTML = `
+        <div style="font-size:48px">📄</div>
+        <div style="font-weight:bold">${label}</div>
+        <div style="font-size:11px;color:#999;max-width:150mm;word-break:break-all">${src}</div>
+        <div style="font-size:11px;color:#aaa;margin-top:8px">
+          PDF 파일은 별도로 인쇄하여 함께 제출해 주세요
+        </div>`
+      iframe.replaceWith(placeholder)
+    })
+
     const win = window.open('', '_blank', 'width=900,height=850')
     if (!win) {
       alert('팝업이 차단되어 있습니다. 브라우저에서 팝업을 허용한 후 다시 시도해주세요.')
@@ -416,48 +438,21 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
     td, th { word-break: keep-all; }
     .dispatch-page { width: 210mm; padding: 12mm 15mm; margin: 0 auto; font-size: 11px; background: white; }
 
-    /* ── 서류 페이지: A4 정확히 1장 = 297mm × 210mm ── */
+    /* ── 서류 페이지: A4 정확히 1장 ── */
     .dispatch-doc-page {
-      width: 210mm;
-      height: 297mm;          /* 정확히 A4 1장 높이 */
-      padding: 10mm;
-      margin: 0 auto;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      page-break-before: always;
-      page-break-after: always;
-      page-break-inside: avoid;
-      break-before: page;
-      break-after: page;
-      break-inside: avoid;
-      background: white;
-      overflow: hidden;        /* 넘치는 내용 차단 */
+      width: 210mm; height: 297mm; padding: 10mm; margin: 0 auto;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      page-break-before: always; page-break-after: always; page-break-inside: avoid;
+      break-before: page; break-after: page; break-inside: avoid;
+      background: white; overflow: hidden;
     }
-    /* 서류 레이블 (화면 전용이므로 팝업에서는 이미 제거됨) */
     .dispatch-no-print { display: none !important; }
-
-    /* 이미지: A4 인쇄 여백 제외 최대 크기 */
     .dispatch-doc-page img {
-      max-width: 190mm;
-      max-height: 270mm;
-      width: auto;
-      height: auto;
-      object-fit: contain;
-      display: block;
+      max-width: 190mm; max-height: 270mm; width: auto; height: auto;
+      object-fit: contain; display: block;
     }
-    /* PDF iframe: 고정 크기로 잘림 방지 */
-    .dispatch-doc-page iframe {
-      width: 190mm;
-      height: 270mm;
-      border: none;
-      display: block;
-    }
-
     input, textarea, select {
-      border: none !important; outline: none !important;
-      background: transparent !important;
+      border: none !important; outline: none !important; background: transparent !important;
       font-family: 'Malgun Gothic','맑은 고딕',sans-serif; font-size: inherit;
     }
     @media print {
@@ -473,8 +468,21 @@ ${clone.innerHTML}
 </html>`)
     win.document.close()
     win.focus()
-    // CDN 없으므로 500ms면 충분
-    setTimeout(() => { try { win.print() } catch { win.close() } }, 500)
+
+    // 이미지 로딩 완료 후 인쇄 (모든 img onload 대기)
+    win.onload = () => {
+      const imgs = Array.from(win.document.querySelectorAll('img'))
+      if (imgs.length === 0) {
+        win.print()
+        return
+      }
+      let loaded = 0
+      const tryPrint = () => { if (++loaded >= imgs.length) win.print() }
+      imgs.forEach(img => {
+        if (img.complete) tryPrint()
+        else { img.onload = tryPrint; img.onerror = tryPrint }
+      })
+    }
   }
 
   // 이메일 발송 — mailto: 링크로 이메일 클라이언트 실행
