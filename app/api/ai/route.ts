@@ -135,7 +135,7 @@ ${businessContext}`
     // systemInstruction은 getGenerativeModel()에 전달해야 함 (startChat 아님)
     const genAI = new GoogleGenerativeAI(apiKey)
     const model = genAI.getGenerativeModel({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-1.5-flash-8b',
       systemInstruction: systemPrompt,
     })
 
