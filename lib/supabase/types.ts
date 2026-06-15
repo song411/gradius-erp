@@ -369,6 +369,26 @@ export interface SettlementWithInquiry extends Settlement {
   inquiries?: Inquiry
 }
 
+// 경호원 프로필 (배치신고 전용)
+export interface GuardProfile {
+  id: string
+  staff_id?: string                // 크루관리와 연결 (선택)
+  name: string
+  id_number?: string               // 주민등록번호
+  job_category?: string            // 신변보호 / 시설경비 등
+  certificate_number?: string      // 이수증 교부번호
+  certificate_issued_at?: string   // 이수증 발급일
+  certificate_issuer?: string      // 발급기관
+  crime_check_issued_at?: string   // 성범죄 회보서 발급일
+  crime_check_expiry?: string      // 유효기간
+  id_doc_url?: string              // 신분증 파일 URL
+  certificate_doc_url?: string     // 이수증 파일 URL
+  crime_check_doc_url?: string     // 성범죄 회보서 파일 URL
+  memo?: string
+  created_at: string
+  updated_at?: string
+}
+
 // 대시보드 집계 타입
 export interface DashboardStats {
   totalInquiries: number
