@@ -486,11 +486,14 @@ export default function AttendanceContent() {
         })
         const staffUpdate: Record<string, unknown> = {}
         if (staffEvals.length > 0) {
-          staffUpdate.attendance_score  = Math.round(staffEvals.reduce((s, e) => s + e.attendance_score, 0) / staffEvals.length * 10) / 10
-          staffUpdate.performance_score = Math.round(staffEvals.reduce((s, e) => s + e.performance_score, 0) / staffEvals.length * 10) / 10
-          staffUpdate.appearance_score  = Math.round(staffEvals.reduce((s, e) => s + e.appearance_score, 0) / staffEvals.length * 10) / 10
-          staffUpdate.teamwork_score    = Math.round(staffEvals.reduce((s, e) => s + e.teamwork_score, 0) / staffEvals.length * 10) / 10
-          staffUpdate.total_score       = Math.round(staffEvals.reduce((s, e) => s + e.total_score, 0) / staffEvals.length * 10) / 10
+          const avg = (key: keyof Evaluation) =>
+            Math.round(staffEvals.reduce((s, e) => s + (e[key] as number), 0) / staffEvals.length * 10) / 10
+          staffUpdate.attendance_score   = avg('attendance_score')
+          staffUpdate.performance_score  = avg('performance_score')
+          staffUpdate.appearance_score   = avg('appearance_score')
+          staffUpdate.teamwork_score     = avg('teamwork_score')
+          staffUpdate.adaptability_score = avg('adaptability_score')
+          staffUpdate.total_score        = avg('total_score')
         }
         // 키/몸무게/MBTI 저장 (입력된 경우만)
         if (data.height) staffUpdate.height = parseFloat(data.height)
