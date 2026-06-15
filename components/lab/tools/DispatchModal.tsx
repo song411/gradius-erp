@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { db } from '@/lib/supabase/api'
 import type { Inquiry, GuardProfile } from '@/lib/supabase/types'
 import { X, Printer, UserPlus, Trash2, ChevronDown, Save, FolderOpen, Mail, Search } from 'lucide-react'
@@ -136,21 +136,96 @@ const COMPANY = {
   phone:   '02-1600-2944',
 }
 
-// PDF/이미지 자동 구분 뷰어 — iframe 사용 (embed는 이벤트 가로채기 문제 있음)
+// PDF → 캔버스 이미지 뷰어 (pdfjs-dist 사용, iframe 완전 제거)
+// 렌더링된 결과가 <img> 태그이므로 팝업 클론 시 완벽하게 복사됨
+function PdfCanvasViewer({ url, label }: { url: string; label: string }) {
+  const [pages, setPages] = useState<string[]>([])   // base64 dataURL 배열
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const mounted = useRef(true)
+
+  useEffect(() => {
+    mounted.current = true
+    setLoading(true)
+    setError('')
+    setPages([])
+
+    async function render() {
+      try {
+        // pdfjs-dist 동적 임포트 (Next.js SSR 방지)
+        const pdfjsLib = await import('pdfjs-dist')
+        // 워커: 번들 포함 경로 사용
+        const workerUrl = new URL(
+          'pdfjs-dist/build/pdf.worker.min.mjs',
+          import.meta.url
+        ).toString()
+        pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
+
+        const pdf = await pdfjsLib.getDocument({ url, cMapPacked: true }).promise
+        const imgs: string[] = []
+
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i)
+          const scale = 2.0   // 고화질 (인쇄 품질)
+          const viewport = page.getViewport({ scale })
+          const canvas = document.createElement('canvas')
+          canvas.width = viewport.width
+          canvas.height = viewport.height
+          const ctx = canvas.getContext('2d')
+          if (!ctx) continue
+          await page.render({ canvasContext: ctx, viewport, canvas }).promise
+          imgs.push(canvas.toDataURL('image/jpeg', 0.92))
+        }
+
+        if (mounted.current) {
+          setPages(imgs)
+          setLoading(false)
+        }
+      } catch (e) {
+        if (mounted.current) {
+          setError('PDF를 불러올 수 없습니다.')
+          setLoading(false)
+        }
+      }
+    }
+
+    render()
+    return () => { mounted.current = false }
+  }, [url])
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-8 text-gray-400">
+        <div className="animate-spin w-8 h-8 border-2 border-gray-300 border-t-indigo-500 rounded-full" />
+        <span className="text-xs">PDF 렌더링 중...</span>
+      </div>
+    )
+  }
+  if (error) {
+    return <div className="text-xs text-red-400 text-center py-6">{error}</div>
+  }
+  return (
+    <>
+      {pages.map((src, i) => (
+        <img
+          key={i}
+          src={src}
+          alt={`${label} ${i + 1}페이지`}
+          style={{ maxWidth: '100%', width: '100%', display: 'block', marginBottom: i < pages.length - 1 ? '4px' : 0 }}
+        />
+      ))}
+    </>
+  )
+}
+
+// 이미지 / PDF 자동 분기 뷰어
 function DocViewer({ url, label }: { url: string; label: string }) {
   const isPdf = url.toLowerCase().includes('.pdf')
   if (isPdf) {
-    return (
-      <iframe
-        src={url}
-        className="w-full border-0"
-        style={{ height: '270mm', minHeight: '270mm' }}
-        title={label}
-      />
-    )
+    return <PdfCanvasViewer url={url} label={label} />
   }
   return (
-    <img src={url} alt={label} className="max-w-full object-contain" style={{ maxHeight: '270mm' }} />
+    <img src={url} alt={label} style={{ maxWidth: '100%', maxHeight: '270mm', width: 'auto', height: 'auto', objectFit: 'contain', display: 'block' }} />
   )
 }
 
@@ -378,12 +453,18 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
 
   const docRows = rows.filter(r => r.id_doc_url || r.certificate_doc_url || r.crime_check_doc_url)
 
-  // 인쇄 / PDF 저장 — 팝업 새 창 방식 (Tailwind CDN 없이 inline style만 사용)
+  // 인쇄 / PDF 저장 — 팝업 새 창 방식 (PDF는 canvas→img로 미리 렌더링됨)
   function handlePrint() {
     setShowGuardPicker(false)
 
     const area = document.getElementById('dispatch-print-content')
     if (!area) { alert('인쇄 영역을 찾을 수 없습니다.'); return }
+
+    // PDF 렌더링 스피너가 아직 돌고 있으면 완료 대기 안내
+    if (area.querySelector('.animate-spin')) {
+      alert('PDF 파일을 아직 불러오는 중입니다. 잠시 후 다시 시도해주세요.')
+      return
+    }
 
     // input 현재 값 → value attribute 동기화
     area.querySelectorAll('input, textarea').forEach(el => {
@@ -398,27 +479,9 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
     clone.style.padding = '0'
     clone.style.overflow = 'visible'
 
-    // iframe(PDF)은 팝업에서 무한 로딩 유발 → 이미지로 대체 불가이므로
-    // "PDF 파일" 안내 박스로 교체 (이미지 파일은 <img>로 그대로 출력됨)
-    clone.querySelectorAll('iframe').forEach(iframe => {
-      const src = iframe.getAttribute('src') || ''
-      const label = iframe.getAttribute('title') || 'PDF 파일'
-      const placeholder = document.createElement('div')
-      placeholder.style.cssText = [
-        'width:190mm', 'height:240mm', 'border:2px dashed #ccc',
-        'display:flex', 'flex-direction:column', 'align-items:center',
-        'justify-content:center', 'gap:12px', 'color:#555',
-        'font-size:14px', 'text-align:center',
-      ].join(';')
-      placeholder.innerHTML = `
-        <div style="font-size:48px">📄</div>
-        <div style="font-weight:bold">${label}</div>
-        <div style="font-size:11px;color:#999;max-width:150mm;word-break:break-all">${src}</div>
-        <div style="font-size:11px;color:#aaa;margin-top:8px">
-          PDF 파일은 별도로 인쇄하여 함께 제출해 주세요
-        </div>`
-      iframe.replaceWith(placeholder)
-    })
+    // DocViewer가 PDF를 canvas→img로 미리 렌더링했으므로
+    // iframe이 없음 → 팝업에서도 img 태그로 완벽 복사됨
+    // (PDF 렌더링이 완료되지 않은 경우 로딩 스피너 div가 표시됨)
 
     const win = window.open('', '_blank', 'width=900,height=850')
     if (!win) {
