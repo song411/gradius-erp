@@ -14,9 +14,15 @@ interface DispatchReport {
   title?: string
   police_station?: string
   report_date?: string
+  receipt_no?: string
+  receipt_date?: string
   is_baechi?: boolean
   is_pyeji?: boolean
-  receipt_no?: string
+  company_name?: string
+  company_ceo?: string
+  company_license?: string
+  company_address?: string
+  company_phone?: string
   location?: string
   location_phone?: string
   start_date?: string
@@ -48,15 +54,23 @@ const S = {
   },
   vLabel: {
     border: '1px solid #374151',
-    padding: '4px 2px',
+    padding: '6px 2px',
     background: '#f3f4f6',
     fontWeight: 'bold',
     textAlign: 'center' as const,
     verticalAlign: 'middle' as const,
-    fontSize: '11px',
+    fontSize: '10px',
     writingMode: 'vertical-rl' as const,
-    letterSpacing: '2px',
+    whiteSpace: 'nowrap' as const,
   },
+  input: {
+    width: '100%',
+    outline: 'none',
+    background: 'transparent',
+    border: 'none',
+    fontSize: '11px',
+    fontFamily: 'inherit',
+  } as React.CSSProperties,
 }
 
 // 회사 고정 정보
@@ -120,10 +134,18 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
   const [saveMsg, setSaveMsg] = useState('')
   const [currentReportId, setCurrentReportId] = useState<string | null>(null)
 
+  // 회사 정보 (편집 가능)
+  const [companyName,    setCompanyName]    = useState(COMPANY.name)
+  const [companyCeo,     setCompanyCeo]     = useState(COMPANY.ceo)
+  const [companyLicense, setCompanyLicense] = useState(COMPANY.license)
+  const [companyAddress, setCompanyAddress] = useState(COMPANY.address)
+  const [companyPhone,   setCompanyPhone]   = useState(COMPANY.phone)
+
   // 신고서 헤더 (모두 수동 편집 가능) - 배치/배치폐지 독립 체크
   const [isBaechi, setIsBaechi]   = useState(true)
   const [isPyeji,  setIsPyeji]    = useState(true)
-  const [receiptNo, setReceiptNo]         = useState('')
+  const [receiptNo,   setReceiptNo]   = useState('')
+  const [receiptDate, setReceiptDate] = useState('')
   const [location, setLocation]           = useState('')
   const [locationPhone, setLocationPhone] = useState('')
   const [startDate, setStartDate]         = useState('')
@@ -169,8 +191,14 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
       police_station: policeStation,
       report_date: reportDate,
       receipt_no: receiptNo,
+      receipt_date: receiptDate,
       is_baechi: isBaechi,
       is_pyeji: isPyeji,
+      company_name: companyName,
+      company_ceo: companyCeo,
+      company_license: companyLicense,
+      company_address: companyAddress,
+      company_phone: companyPhone,
       location,
       location_phone: locationPhone,
       start_date: startDate,
@@ -208,8 +236,14 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
     setPoliceStation(r.police_station || '혜화')
     setReportDate(r.report_date || new Date().toISOString().slice(0, 10))
     setReceiptNo(r.receipt_no || '')
+    setReceiptDate(r.receipt_date || '')
     setIsBaechi(r.is_baechi ?? true)
     setIsPyeji(r.is_pyeji ?? true)
+    setCompanyName(r.company_name || COMPANY.name)
+    setCompanyCeo(r.company_ceo || COMPANY.ceo)
+    setCompanyLicense(r.company_license || COMPANY.license)
+    setCompanyAddress(r.company_address || COMPANY.address)
+    setCompanyPhone(r.company_phone || COMPANY.phone)
     setLocation(r.location || '')
     setLocationPhone(r.location_phone || '')
     setStartDate(r.start_date || '')
@@ -560,9 +594,15 @@ ${clone.innerHTML}
               <tbody>
                 <tr>
                   <td style={S.th}>접수번호</td>
-                  <td style={{ ...S.td, width: '25%' }}>{receiptNo}</td>
+                  <td style={{ ...S.td, width: '25%' }}>
+                    <input value={receiptNo} onChange={e => setReceiptNo(e.target.value)}
+                      style={S.input} placeholder="(기재 불요)" />
+                  </td>
                   <td style={S.th}>접수일자</td>
-                  <td style={{ ...S.td, width: '20%' }}></td>
+                  <td style={{ ...S.td, width: '20%' }}>
+                    <input value={receiptDate} onChange={e => setReceiptDate(e.target.value)}
+                      style={S.input} placeholder="20  .    .    ." />
+                  </td>
                   <td style={S.th}>처리기간</td>
                   <td style={{ ...S.td, width: '10%', textAlign: 'center' }}>즉시</td>
                 </tr>
@@ -573,34 +613,49 @@ ${clone.innerHTML}
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <tbody>
                 <tr>
-                  <td style={{ ...S.vLabel, width: '22px' }} rowSpan={4}>신<br/>고<br/>인</td>
+                  <td style={{ ...S.vLabel, width: '22px' }} rowSpan={4}>신고인</td>
                   <td style={{ ...S.th, width: '80px' }}>법인 명칭</td>
-                  <td style={{ ...S.td, width: '32%' }}>{COMPANY.name}</td>
+                  <td style={{ ...S.td, width: '32%' }}>
+                    <input value={companyName} onChange={e => setCompanyName(e.target.value)}
+                      style={S.input} />
+                  </td>
                   <td style={{ ...S.th, width: '70px' }}>대표자 성명</td>
-                  <td style={S.td}>{COMPANY.ceo}</td>
+                  <td style={S.td}>
+                    <input value={companyCeo} onChange={e => setCompanyCeo(e.target.value)}
+                      style={S.input} />
+                  </td>
                 </tr>
                 <tr>
                   <td style={S.th}></td>
                   <td style={S.td}></td>
                   <td style={S.th}>허가번호</td>
-                  <td style={{ ...S.td, fontSize: '9px' }}>{COMPANY.license}</td>
+                  <td style={{ ...S.td }}>
+                    <input value={companyLicense} onChange={e => setCompanyLicense(e.target.value)}
+                      style={{ ...S.input, fontSize: '9px' }} />
+                  </td>
                 </tr>
                 <tr>
                   <td style={S.th}>소재지</td>
-                  <td style={S.td}>{COMPANY.address}</td>
+                  <td style={S.td}>
+                    <input value={companyAddress} onChange={e => setCompanyAddress(e.target.value)}
+                      style={S.input} />
+                  </td>
                   <td style={S.th}>전화번호</td>
-                  <td style={S.td}>{COMPANY.phone}</td>
+                  <td style={S.td}>
+                    <input value={companyPhone} onChange={e => setCompanyPhone(e.target.value)}
+                      style={S.input} />
+                  </td>
                 </tr>
                 <tr>
-                  <td style={S.th}>배치장소<br/>(구체적으로 기재)</td>
+                  <td style={S.th}>배치장소(구체적으로 기재)</td>
                   <td style={S.td}>
                     <input value={location} onChange={e => setLocation(e.target.value)}
-                      style={{ width: '100%', outline: 'none', background: 'transparent' }} placeholder="배치장소 입력" />
+                      style={S.input} placeholder="배치장소 입력" />
                   </td>
-                  <td style={S.th}>전화번호<br/>(경호원)</td>
+                  <td style={S.th}>전화번호(경호원)</td>
                   <td style={S.td}>
                     <input value={locationPhone} onChange={e => setLocationPhone(e.target.value)}
-                      style={{ width: '100%', outline: 'none', background: 'transparent' }} placeholder="010-0000-0000" />
+                      style={S.input} placeholder="010-0000-0000" />
                   </td>
                 </tr>
               </tbody>
@@ -610,29 +665,27 @@ ${clone.innerHTML}
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <tbody>
                 <tr>
-                  <td style={{ ...S.vLabel, width: '22px' }} rowSpan={2}>
-                    경<br/>비<br/>원<br/>배<br/>치<br/>(폐<br/>지)<br/>내<br/>용
-                  </td>
+                  <td style={{ ...S.vLabel, width: '22px' }} rowSpan={2}>경비원배치(폐지)내용</td>
                   <td style={{ ...S.th, width: '80px' }}>배치일시</td>
                   <td style={{ ...S.td }}>
                     <input value={startDate} onChange={e => setStartDate(e.target.value)}
-                      style={{ outline: 'none', background: 'transparent', width: '110px' }} placeholder="2026. 06. 08." />
+                      style={{ ...S.input, width: '110px' }} placeholder="2026. 06. 08." />
                     <input value={startTime} onChange={e => setStartTime(e.target.value)}
-                      style={{ outline: 'none', background: 'transparent', width: '55px' }} placeholder="14:00" />
+                      style={{ ...S.input, width: '55px' }} placeholder="14:00" />
                   </td>
                   <td style={{ ...S.th, width: '95px' }}>배치폐지(예정)일시</td>
                   <td style={S.td}>
                     <input value={endDate} onChange={e => setEndDate(e.target.value)}
-                      style={{ outline: 'none', background: 'transparent', width: '110px' }} placeholder="2026. 06. 08." />
+                      style={{ ...S.input, width: '110px' }} placeholder="2026. 06. 08." />
                     <input value={endTime} onChange={e => setEndTime(e.target.value)}
-                      style={{ outline: 'none', background: 'transparent', width: '55px' }} placeholder="17:00" />
+                      style={{ ...S.input, width: '55px' }} placeholder="17:00" />
                   </td>
                 </tr>
                 <tr>
-                  <td style={{ ...S.th, fontSize: '10px' }}>경비의 목적 또는 내용<br/>(구체적으로 기재)</td>
+                  <td style={S.th}>경비의 목적 또는 내용(구체적으로 기재)</td>
                   <td style={S.td} colSpan={3}>
                     <input value={purpose} onChange={e => setPurpose(e.target.value)}
-                      style={{ width: '100%', outline: 'none', background: 'transparent' }} placeholder="경비의 목적 또는 내용을 구체적으로 기재" />
+                      style={S.input} placeholder="경비의 목적 또는 내용을 구체적으로 기재" />
                   </td>
                 </tr>
               </tbody>
@@ -643,9 +696,7 @@ ${clone.innerHTML}
               <tbody>
                 {/* 헤더 행 */}
                 <tr style={{ backgroundColor: '#f3f4f6' }}>
-                  <td style={{ ...S.vLabel, width: '22px' }} rowSpan={rows.length + 1}>
-                    경<br/>비<br/>원<br/>명<br/>단
-                  </td>
+                  <td style={{ ...S.vLabel, width: '22px' }} rowSpan={rows.length + 1}>경비원명단</td>
                   <td style={{ ...S.th, width: '28px', textAlign: 'center' }}>연번</td>
                   <td style={{ ...S.th, width: '52px', textAlign: 'center' }}>성명</td>
                   <td style={{ ...S.th, width: '100px', textAlign: 'center' }}>주민등록번호</td>
@@ -703,15 +754,23 @@ ${clone.innerHTML}
             {/* ⑥ 날짜 및 서명 */}
             <div style={{ marginTop: '10px', textAlign: 'right', fontSize: '11px' }}>
               <div style={{ marginBottom: '8px' }}>{reportDateFormatted}</div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '16px' }}>
-                <span>신고인(대표자) &nbsp;&nbsp; 가디어스 대표이사 &nbsp;&nbsp; {COMPANY.ceo} &nbsp;&nbsp;</span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
+                <span>신고인(대표자) &nbsp;&nbsp;</span>
+                <input value={companyName} onChange={e => setCompanyName(e.target.value)}
+                  style={{ ...S.input, width: '120px', textAlign: 'right', display: 'inline-block' }} />
+                <span>대표이사 &nbsp;</span>
+                <input value={companyCeo} onChange={e => setCompanyCeo(e.target.value)}
+                  style={{ ...S.input, width: '60px', textAlign: 'center', display: 'inline-block' }} />
                 <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                   width: '36px', height: '36px', border: '1px solid #9ca3af', borderRadius: '50%',
-                  fontSize: '9px', color: '#9ca3af' }}>(인)</span>
+                  fontSize: '9px', color: '#9ca3af', flexShrink: 0 }}>(인)</span>
               </div>
             </div>
             <div style={{ marginTop: '6px', fontSize: '14px', fontWeight: 'bold' }}>
-              &nbsp;&nbsp;{policeStation} 경찰서장 &nbsp;&nbsp; 귀하
+              &nbsp;&nbsp;
+              <input value={policeStation} onChange={e => setPoliceStation(e.target.value)}
+                style={{ ...S.input, display: 'inline-block', width: '60px', fontSize: '14px', fontWeight: 'bold' }} />
+              경찰서장 &nbsp;&nbsp; 귀하
             </div>
 
             {/* ⑦ 첨부서류 */}
