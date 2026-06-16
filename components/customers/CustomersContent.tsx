@@ -25,6 +25,7 @@ const emptyForm = {
   contact_name: '',
   phone: '',
   memo: '',
+  customer_type: '개인' as '법인' | '개인',
 }
 
 export default function CustomersContent() {
@@ -67,6 +68,7 @@ export default function CustomersContent() {
       contact_name: c.contact_name || '',
       phone: c.phone || '',
       memo: c.memo || '',
+      customer_type: (c.customer_type as '법인' | '개인') || getCustomerType(c.biz_number) as '법인' | '개인',
     })
     setError('')
     setShowModal(true)
@@ -78,7 +80,7 @@ export default function CustomersContent() {
     setSaving(true)
     setError('')
 
-    const customerType = getCustomerType(form.biz_number)
+    const customerType = form.customer_type
 
     const payload = {
       company_name: form.company_name.trim(),
@@ -118,14 +120,14 @@ export default function CustomersContent() {
   const filtered = customers.filter(c => {
     const matchSearch = !searchText || [c.company_name, c.contact_name, c.phone, c.biz_number]
       .some(v => v?.toLowerCase().includes(searchText.toLowerCase()))
-    const matchType = !filterType || getCustomerType(c.biz_number) === filterType
+    const matchType = !filterType || (c.customer_type || getCustomerType(c.biz_number)) === filterType
     return matchSearch && matchType
   })
 
   const stats = {
     total: customers.length,
-    corp: customers.filter(c => getCustomerType(c.biz_number) === '법인').length,
-    personal: customers.filter(c => getCustomerType(c.biz_number) === '개인').length,
+    corp: customers.filter(c => (c.customer_type || getCustomerType(c.biz_number)) === '법인').length,
+    personal: customers.filter(c => (c.customer_type || getCustomerType(c.biz_number)) === '개인').length,
   }
 
   return (
@@ -194,7 +196,7 @@ export default function CustomersContent() {
                     </tr>
                   ) : (
                     filtered.map(c => {
-                      const type = getCustomerType(c.biz_number)
+                      const type = c.customer_type || getCustomerType(c.biz_number)
                       return (
                         <tr key={c.id}>
                           <td>
@@ -259,18 +261,42 @@ export default function CustomersContent() {
               <label className="text-xs font-medium text-gray-600 mb-1 block">업체명 *</label>
               <Input value={form.company_name} onChange={e => setForm(f => ({ ...f, company_name: e.target.value }))} placeholder="업체명" />
             </div>
+            <div className="col-span-2">
+              <label className="text-xs font-medium text-gray-600 mb-1 block">구분</label>
+              <div className="flex gap-2">
+                {(['법인', '개인'] as const).map(t => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, customer_type: t }))}
+                    className={`flex-1 py-1.5 rounded-lg border text-sm font-semibold transition-colors ${
+                      form.customer_type === t
+                        ? t === '법인'
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'bg-purple-600 text-white border-purple-600'
+                        : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
+                    }`}
+                  >
+                    {t === '법인' ? '🏢 법인' : '👤 개인'}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div>
               <label className="text-xs font-medium text-gray-600 mb-1 block">대표자명</label>
               <Input value={form.rep_name} onChange={e => setForm(f => ({ ...f, rep_name: e.target.value }))} />
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-600 mb-1 block">
-                사업자번호
-                <span className="ml-2 text-xs font-normal text-gray-400">
-                  (입력 시 법인, 미입력 시 개인)
-                </span>
-              </label>
-              <Input value={form.biz_number} onChange={e => setForm(f => ({ ...f, biz_number: e.target.value }))} placeholder="000-00-00000" />
+              <label className="text-xs font-medium text-gray-600 mb-1 block">사업자번호</label>
+              <Input
+                value={form.biz_number}
+                onChange={e => setForm(f => ({
+                  ...f,
+                  biz_number: e.target.value,
+                  customer_type: e.target.value.trim() ? '법인' : f.customer_type,
+                }))}
+                placeholder="000-00-00000"
+              />
             </div>
             <div>
               <label className="text-xs font-medium text-gray-600 mb-1 block">업태</label>
