@@ -22,7 +22,6 @@ const ALL_PIPELINE = [
   { status: '견적',    color: '#8B5CF6' },
   { status: '체결',    color: '#6366F1' },
   { status: '배정완료', color: '#06B6D4' },
-  { status: '진행중',  color: '#EAB308' },
   { status: '완료',    color: '#22C55E' },
   { status: '정산완료', color: '#10B981' },
 ]
