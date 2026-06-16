@@ -1329,7 +1329,7 @@ function A4Preview({
   staffSubtotal, extraSubtotal, supplyPrice, vat, finalTotal,
   eventPeriod, today,
 }: {
-  selectedInq?: Inquiry; form: { manager: string; contact_phone: string; site_address: string; attire: string; meal: string; parking: string; notes: string; include_vat: boolean }
+  selectedInq?: Inquiry; form: { company_name: string; manager: string; contact_phone: string; site_address: string; attire: string; meal: string; parking: string; notes: string; include_vat: boolean }
   staffItems: ItemRowSimple[]; extraItems: ItemRowSimple[]; supportItems: ItemRowSimple[]
   staffSubtotal: number; extraSubtotal: number; supplyPrice: number; vat: number; finalTotal: number
   eventPeriod: string; today: string
