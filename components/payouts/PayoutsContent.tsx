@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import * as XLSX from 'xlsx'
 import { db } from '@/lib/supabase/api'
-import type { Inquiry, Assignment, Payout } from '@/lib/supabase/types'
+import type { Inquiry, Assignment, Payout, Settlement } from '@/lib/supabase/types'
 import { formatKRW, formatDate } from '@/lib/utils'
 import PayoutForm from './PayoutForm'
 import { Button } from '@/components/ui/button'
@@ -147,6 +147,24 @@ export default function PayoutsContent() {
   const payoutTotalBase      = currentPayouts.reduce((s, p) => s + (p.subtotal || 0), 0)
   const payoutTotalDeduction = currentPayouts.reduce((s, p) => s + (p.tax_deduction || 0), 0)
 
+  // ── 정산완료 자동 전환: 인건비 전액 지급 + 입금완료 시 문의 상태 자동 변경 ──
+  async function checkAndAutoSettle(inquiryId: string) {
+    const inq = inquiries.find(i => i.id === inquiryId)
+    if (inq?.status === '정산완료') return
+    const setts = await db.list<Settlement>('settlements', { filters: { inquiry_id: inquiryId } })
+    if (!setts.length) return
+    const allDeposited = setts.every(s => s.deposit_status === '입금완료')
+    if (!allDeposited) return
+    await db.update('inquiries', inquiryId, { status: '정산완료' })
+    toast.success('입금 및 인건비 지급 완료 — 자동으로 정산완료 처리되었습니다.', { duration: 5000 })
+  }
+
+  async function handleSinglePaid(payoutId: string) {
+    await db.update('payouts', payoutId, { status: '완료' })
+    if (selectedId) await checkAndAutoSettle(selectedId)
+    load()
+  }
+
   async function handleBulkConfirm() {
     if (!selectedGroup) return
 
@@ -204,6 +222,7 @@ export default function PayoutsContent() {
     if (!toPay.length) { toast.info('입금 처리할 검토완료 건이 없습니다.'); return }
     await Promise.all(toPay.map(p => db.update('payouts', p.id, { status: '완료' })))
     toast.success(`${toPay.length}건 입금 완료 처리`)
+    if (selectedId) await checkAndAutoSettle(selectedId)
     load()
   }
 
@@ -518,7 +537,7 @@ export default function PayoutsContent() {
                               </button>
                             )}
                             {(payout.status === '검토완료' || payout.status === '확인완료') && (
-                              <button onClick={() => db.update('payouts', payout.id, { status: '완료' }).then(load)}
+                              <button onClick={() => handleSinglePaid(payout.id)}
                                 className="text-[10px] bg-green-600 text-white rounded-lg px-2.5 py-1 hover:bg-green-700 whitespace-nowrap font-semibold transition-colors">
                                 입금완료 →
                               </button>

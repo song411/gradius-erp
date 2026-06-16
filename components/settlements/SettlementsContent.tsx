@@ -15,7 +15,7 @@ import {
   Plus, Search, Edit2, CheckCircle, AlertCircle,
   BadgePercent, StickyNote, Banknote, ChevronDown, Sparkles, Trash2,
 } from 'lucide-react'
-import type { Settlement, DepositStatus, ProjectProgress, Inquiry } from '@/lib/supabase/types'
+import type { Settlement, DepositStatus, ProjectProgress, Inquiry, Payout } from '@/lib/supabase/types'
 import { toast } from 'sonner'
 
 const PROGRESS_OPTIONS: ProjectProgress[] = ['계약체결', '행사준비', '행사종료', '정산완료']
@@ -241,6 +241,7 @@ export default function SettlementsContent() {
       if (editTarget) {
         await db.update('settlements', editTarget.id, payload)
         toast.success('정산 정보가 수정되었습니다.')
+        if (form.deposit_status === '입금완료') await checkAndAutoSettle(form.inquiry_id)
       } else {
         await db.insert('settlements', payload)
         await db.update('inquiries', form.inquiry_id, { status: '정산완료' })
@@ -252,6 +253,17 @@ export default function SettlementsContent() {
     setSaving(false)
     setShowModal(false)
     load()
+  }
+
+  // ── 정산완료 자동 전환: 입금완료 + 인건비 전액 지급 시 문의 상태 자동 변경 ──
+  async function checkAndAutoSettle(inquiryId: string) {
+    const inq = inquiries.find(i => i.id === inquiryId)
+    if (inq?.status === '정산완료') return
+    const pays = await db.list<Payout>('payouts', { filters: { inquiry_id: inquiryId } })
+    const allPaid = pays.length === 0 || pays.every(p => p.status === '완료' || p.status === '지급완료')
+    if (!allPaid) return
+    await db.update('inquiries', inquiryId, { status: '정산완료' })
+    toast.success('입금 및 인건비 지급 완료 — 자동으로 정산완료 처리되었습니다.', { duration: 5000 })
   }
 
   // ── 정산 삭제 ──
@@ -294,6 +306,7 @@ export default function SettlementsContent() {
         deposit_status: status,
       })
       toast.success(`${type === '50%' ? '50% 부분입금' : '전액 입금'} 확인 완료 (${formatKRW(amount)})`)
+      if (type === '전액') await checkAndAutoSettle(s.inquiry_id)
       load()
     } catch (e) { toast.error('처리 실패: ' + (e as Error).message) }
   }
