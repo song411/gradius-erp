@@ -306,7 +306,7 @@ export default function SettlementsContent() {
         deposit_status: status,
       })
       toast.success(`${type === '50%' ? '50% 부분입금' : '전액 입금'} 확인 완료 (${formatKRW(amount)})`)
-      if (type === '전액') await checkAndAutoSettle(s.inquiry_id)
+      if (type === '전액' && s.inquiry_id) await checkAndAutoSettle(s.inquiry_id)
       load()
     } catch (e) { toast.error('처리 실패: ' + (e as Error).message) }
   }
