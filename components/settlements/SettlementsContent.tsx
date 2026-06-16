@@ -106,19 +106,47 @@ export default function SettlementsContent() {
   } | null>(null)
   const load = useCallback(async () => {
     setLoading(true)
-    const [setts, inqs] = await Promise.all([
-      db.list<Settlement & { inquiries?: Inquiry }>('settlements', {
-        select: '*, inquiries(event_name, company_name, status)',
-        order: 'created_at', asc: false,
-      }),
-      db.list<Inquiry>('inquiries', {
-        inFilter: { status: ['체결', '배정완료', '진행중', '완료', '정산완료'] },
-        order: 'created_at', asc: false,
-      }),
-    ])
-    setSettlements(setts)
-    setInquiries(inqs)
-    setLoading(false)
+    try {
+      const [setts, inqs] = await Promise.all([
+        db.list<Settlement & { inquiries?: Inquiry }>('settlements', {
+          select: '*, inquiries(event_name, company_name, status)',
+          order: 'created_at', asc: false,
+        }),
+        db.list<Inquiry>('inquiries', {
+          inFilter: { status: ['체결', '배정완료', '진행중', '완료', '정산완료'] },
+          order: 'created_at', asc: false,
+        }),
+      ])
+      setSettlements(setts)
+      setInquiries(inqs)
+
+      // 완료 → 정산완료 자동 전환 체크 (페이지 로드 시)
+      const candidates = setts.filter(s => {
+        const inq = inqs.find(i => i.id === s.inquiry_id)
+        return s.deposit_status === '입금완료' && inq?.status === '완료'
+      })
+      let anyChanged = false
+      for (const s of candidates) {
+        if (!s.inquiry_id) continue
+        const pays = await db.list<Payout>('payouts', { filters: { inquiry_id: s.inquiry_id } })
+        const allPaid = pays.length === 0 || pays.every(p => p.status === '완료' || p.status === '지급완료')
+        if (allPaid) {
+          await db.update('inquiries', s.inquiry_id, { status: '정산완료' })
+          const inq = inqs.find(i => i.id === s.inquiry_id)
+          toast.success(`${inq?.company_name || ''} — 자동으로 정산완료 처리되었습니다.`, { duration: 5000 })
+          anyChanged = true
+        }
+      }
+      if (anyChanged) {
+        const updatedInqs = await db.list<Inquiry>('inquiries', {
+          inFilter: { status: ['체결', '배정완료', '진행중', '완료', '정산완료'] },
+          order: 'created_at', asc: false,
+        })
+        setInquiries(updatedInqs)
+      }
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => { load() }, [load])
