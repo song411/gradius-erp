@@ -22,7 +22,7 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 
 const STATUS_OPTIONS: InquiryStatus[] = [
-  '접수', '견적', '체결', '배정완료', '진행중', '완료', '정산완료', '미체결', '보류', '취소'
+  '접수', '견적', '체결', '배정완료', '완료', '정산완료', '미체결', '보류', '취소'
 ]
 const SERVICE_TYPES = [
   '행사도우미', '나레이터', '전시도우미', '안내도우미', '판촉도우미',

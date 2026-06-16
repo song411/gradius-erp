@@ -133,7 +133,7 @@ export const STATUS_COLORS: Record<string, string> = {
 
 // 문의 상태 흐름
 export const INQUIRY_STATUS_FLOW = [
-  '접수', '견적', '체결', '배정완료', '진행중', '완료', '정산완료'
+  '접수', '견적', '체결', '배정완료', '완료', '정산완료'
 ] as const
 
 // 문의 상태 진행률

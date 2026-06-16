@@ -30,7 +30,7 @@ function extractPayDetail(notes: string | null | undefined): string {
 }
 
 // ── 상태 단계 표시 ─────────────────────────────────────────────
-const FLOW_STEPS = ['접수', '견적', '체결', '배정완료', '진행중', '완료', '정산완료'] as const
+const FLOW_STEPS = ['접수', '견적', '체결', '배정완료', '완료', '정산완료'] as const
 
 export default function InquiryDetail({ id }: { id: string }) {
   const [inquiry, setInquiry] = useState<Inquiry | null>(null)
@@ -336,7 +336,7 @@ export default function InquiryDetail({ id }: { id: string }) {
             onChange={e => updateStatus(e.target.value as InquiryStatus)}
             className="w-36 shrink-0"
           >
-            {(['접수','견적','체결','배정완료','진행중','완료','정산완료','미체결','보류','취소'] as InquiryStatus[]).map(s => (
+            {(['접수','견적','체결','배정완료','완료','정산완료','미체결','보류','취소'] as InquiryStatus[]).map(s => (
               <option key={s} value={s}>{s}</option>
             ))}
           </Select>

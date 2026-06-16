@@ -36,6 +36,27 @@ function isHQ(a: Assignment) {
   return a.is_payable === false || (a.staff_name ? HQ_NAMES.has(a.staff_name) : false)
 }
 
+// 배정완료 → 완료 자동 전환
+// 조건: ① 배정 1명 이상 ② 행사종료 후 5일 경과 ③ 유급 전인원 지급검토완료 이상 (본사 전원이면 ③ 자동충족)
+async function tryAutoComplete(inq: Inquiry, assignList: Assignment[], payoutList: Payout[]): Promise<boolean> {
+  if (inq.status !== '배정완료' || !inq.event_end) return false
+  const fiveDaysAfter = new Date(inq.event_end)
+  fiveDaysAfter.setDate(fiveDaysAfter.getDate() + 5)
+  if (new Date() < fiveDaysAfter) return false
+  const inqAssigns = assignList.filter(a => a.inquiry_id === inq.id)
+  if (!inqAssigns.length) return false
+  const payableLeaders = inqAssigns.filter(a => !isHQ(a) && a.role_type !== '팀원')
+  if (payableLeaders.length > 0) {
+    const ids = new Set(payableLeaders.map(a => a.id))
+    const pays = payoutList.filter(p => p.inquiry_id === inq.id && ids.has(p.assignment_id || ''))
+    if (pays.length < payableLeaders.length) return false // 미등록 인원 있음
+    if (!pays.every(p => ['검토완료', '확인완료', '완료', '지급완료'].includes(p.status))) return false
+  }
+  await db.update('inquiries', inq.id, { status: '완료' })
+  toast.success(`${inq.company_name} — 조건 충족으로 자동 완료 처리되었습니다.`, { duration: 5000 })
+  return true
+}
+
 const STATUS_STYLE: Record<string, string> = {
   '대기':     'bg-amber-100 text-amber-700 border border-amber-200',
   '확인완료': 'bg-blue-100 text-blue-700 border border-blue-200',
@@ -112,9 +133,17 @@ export default function PayoutsContent() {
         db.list<Payout>('payouts', { order: 'created_at', asc: false }),
       ])
       const PAYOUT_STATUSES = ['체결', '배정완료', '진행중', '완료', '정산완료']
-      setInquiries(inqList.filter(inq => PAYOUT_STATUSES.includes(inq.status)))
+      const filtered = inqList.filter(inq => PAYOUT_STATUSES.includes(inq.status))
+      setInquiries(filtered)
       setAssignments(assignList)
       setPayouts(payoutList)
+      // 배정완료 → 완료 자동 전환 체크 (페이지 로드 시)
+      const candidates = filtered.filter(inq => inq.status === '배정완료' && inq.event_end)
+      const results = await Promise.all(candidates.map(inq => tryAutoComplete(inq, assignList, payoutList)))
+      if (results.some(Boolean)) {
+        const updated = await db.list<Inquiry>('inquiries', { order: 'event_start', asc: false })
+        setInquiries(updated.filter(inq => PAYOUT_STATUSES.includes(inq.status)))
+      }
     } finally { setLoading(false) }
   }, [])
 
