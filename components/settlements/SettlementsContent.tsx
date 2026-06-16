@@ -121,28 +121,34 @@ export default function SettlementsContent() {
       setInquiries(inqs)
 
       // 완료 → 정산완료 자동 전환 체크 (페이지 로드 시)
+      // 입금완료 + 문의상태 완료인 후보만 추림
       const candidates = setts.filter(s => {
         const inq = inqs.find(i => i.id === s.inquiry_id)
         return s.deposit_status === '입금완료' && inq?.status === '완료'
       })
-      let anyChanged = false
-      for (const s of candidates) {
-        if (!s.inquiry_id) continue
-        const pays = await db.list<Payout>('payouts', { filters: { inquiry_id: s.inquiry_id } })
-        const allPaid = pays.length === 0 || pays.every(p => p.status === '완료' || p.status === '지급완료')
-        if (allPaid) {
-          await db.update('inquiries', s.inquiry_id, { status: '정산완료' })
-          const inq = inqs.find(i => i.id === s.inquiry_id)
-          toast.success(`${inq?.company_name || ''} — 자동으로 정산완료 처리되었습니다.`, { duration: 5000 })
-          anyChanged = true
+      if (candidates.length > 0) {
+        // 후보 전체 payout을 쿼리 1번으로 일괄 조회
+        const candidateIds = candidates.map(s => s.inquiry_id).filter(Boolean) as string[]
+        const allPays = await db.list<Payout>('payouts', { inFilter: { inquiry_id: candidateIds } })
+        let anyChanged = false
+        for (const s of candidates) {
+          if (!s.inquiry_id) continue
+          const pays = allPays.filter(p => p.inquiry_id === s.inquiry_id)
+          const allPaid = pays.length === 0 || pays.every(p => p.status === '완료' || p.status === '지급완료')
+          if (allPaid) {
+            await db.update('inquiries', s.inquiry_id, { status: '정산완료' })
+            const inq = inqs.find(i => i.id === s.inquiry_id)
+            toast.success(`${inq?.company_name || ''} — 자동으로 정산완료 처리되었습니다.`, { duration: 5000 })
+            anyChanged = true
+          }
         }
-      }
-      if (anyChanged) {
-        const updatedInqs = await db.list<Inquiry>('inquiries', {
-          inFilter: { status: ['체결', '배정완료', '진행중', '완료', '정산완료'] },
-          order: 'created_at', asc: false,
-        })
-        setInquiries(updatedInqs)
+        if (anyChanged) {
+          const updatedInqs = await db.list<Inquiry>('inquiries', {
+            inFilter: { status: ['체결', '배정완료', '진행중', '완료', '정산완료'] },
+            order: 'created_at', asc: false,
+          })
+          setInquiries(updatedInqs)
+        }
       }
     } finally {
       setLoading(false)
