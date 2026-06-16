@@ -104,7 +104,7 @@ export default function EstimateBuilder({
   const reportRef   = useRef<HTMLDivElement>(null)
 
   const [form, setForm] = useState({
-    inquiry_id: '', site_name: '', manager: '', contact_phone: '',
+    inquiry_id: '', company_name: '', site_name: '', manager: '', contact_phone: '',
     site_address: '', attire: '', meal: '', parking: '',
     notes: '', extra_cost: 0, include_vat: true,
     event_days: 1,
@@ -139,6 +139,7 @@ export default function EstimateBuilder({
       const hasDate = !!inq?.event_start
       setForm({
         inquiry_id: editTarget.inquiry_id || '',
+        company_name: editTarget.company_name || inq?.company_name || '',
         site_name: editTarget.site_name || '', manager: editTarget.manager || '',
         contact_phone: inq?.phone || '', site_address: editTarget.site_address || '',
         attire: editTarget.attire || '', meal: editTarget.meal || '',
@@ -169,6 +170,7 @@ export default function EstimateBuilder({
       const days = calcDays(preInq?.event_start, preInq?.event_end)
       setForm({
         inquiry_id: preselectedInquiryId || '',
+        company_name: preInq?.company_name || '',
         site_name: preInq?.location || '', manager: preInq?.contact_name || '',
         contact_phone: preInq?.phone || '', site_address: preInq?.location || '',
         attire: preInq?.attire || '', meal: preInq?.meal || '',
@@ -196,6 +198,7 @@ export default function EstimateBuilder({
     const newDaysMode = hasDate ? 'auto' : 'manual'
     setForm(f => ({
       ...f, inquiry_id: inqId,
+      company_name: f.company_name || inq?.company_name || '',
       site_name: f.site_name || inq?.location || '',
       manager: f.manager || inq?.contact_name || '',
       contact_phone: f.contact_phone || inq?.phone || '',
@@ -325,7 +328,7 @@ export default function EstimateBuilder({
       ...(!editTarget ? { estimate_code: generateEstimateCode() } : {}),
       version_label: form.version_label || 'A안',
       inquiry_id: form.inquiry_id,
-      company_name: selectedInq?.company_name || '',
+      company_name: form.company_name || selectedInq?.company_name || '',
       event_name: selectedInq?.event_name || '',
       site_name: form.site_name || null,
       manager: form.manager || null,
@@ -736,6 +739,10 @@ export default function EstimateBuilder({
             <section>
               <SectionTitle step={4} label="공급받는자 정보" />
               <div className="space-y-2.5">
+                <div>
+                  <label className="label-xs">상호 (업체명)</label>
+                  <Input value={form.company_name} onChange={e => setForm(f => ({ ...f, company_name: e.target.value }))} placeholder="업체명" />
+                </div>
                 <div>
                   <label className="label-xs">현장 주소</label>
                   <Input value={form.site_address} onChange={e => setForm(f => ({ ...f, site_address: e.target.value }))} placeholder="행사 장소" />
@@ -1343,7 +1350,7 @@ function A4Preview({
               <table style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid #1e3a5f' }}>
                 <tbody>
                   <TblHeader label="공급받는자" />
-                  <TblRow2 l1="상호" v1={selectedInq?.company_name || '(업체명)'} l2="담당" v2={form.manager || ''} />
+                  <TblRow2 l1="상호" v1={form.company_name || selectedInq?.company_name || '(업체명)'} l2="담당" v2={form.manager || ''} />
                   <TblRow2 l1="연락처" v1={form.contact_phone || ''} l2="" v2="" />
                   <TblRow2 l1="주소" v1={form.site_address || ''} l2="" v2="" />
                   <TblRow2 l1="행사일시" v1={eventPeriod} l2="" v2="" />
