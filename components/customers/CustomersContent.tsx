@@ -212,11 +212,19 @@ export default function CustomersContent() {
                             </div>
                           </td>
                           <td>
-                            <span className={`text-xs px-2 py-0.5 rounded-full ${
-                              type === '법인' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
-                            }`}>
+                            <button
+                              onClick={async () => {
+                                const next = type === '법인' ? '개인' : '법인'
+                                await db.update('customers', c.id, { customer_type: next })
+                                load()
+                              }}
+                              title="클릭하여 전환"
+                              className={`text-xs px-2 py-0.5 rounded-full cursor-pointer hover:opacity-70 transition-opacity ${
+                                type === '법인' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
+                              }`}
+                            >
                               {type}
-                            </span>
+                            </button>
                           </td>
                           <td className="text-gray-600">{c.rep_name || '-'}</td>
                           <td className="text-gray-600">{c.contact_name || '-'}</td>
