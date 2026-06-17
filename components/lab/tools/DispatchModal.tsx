@@ -104,11 +104,10 @@ const S = {
     fontSize: '11px',
     verticalAlign: 'middle' as const,
   },
-  // 좁은 셀 — <br/>로 줄바꿈하여 세로 표현 (공식 서식과 동일)
   vLabel: {
     border: '1px solid #000',
     padding: '4px 2px',
-    background: '#f5f5f5',
+    background: '#ffffff',
     fontWeight: 'bold',
     textAlign: 'center' as const,
     verticalAlign: 'middle' as const,
@@ -833,14 +832,23 @@ ${clone.innerHTML}
               ■ 경비업법 시행규칙 [별지 제15호서식] &lt;개정 2023. 7. 17.&gt;
             </div>
 
-            {/* 제목 — 공식 서식 동일 */}
-            <div style={{ textAlign: 'center', margin: '6px 0 8px' }}>
-              <div style={{ fontSize: '22px', fontWeight: 'bold', lineHeight: '1.7' }}>
-                경비원 &nbsp;[{isBaechi ? 'v' : '\u00a0'}] 배치<br />
-                <span style={{ paddingLeft: '4.5em' }}>[{isPyeji ? 'v' : '\u00a0'}] 배치폐지</span>
-                &nbsp;&nbsp;<span style={{ letterSpacing: '0.2em' }}>신고서</span>
-              </div>
-            </div>
+            {/* 제목 — 공식 서식: 경비원(좌,rs2) | 배치/배치폐지(중) | 신고서(우,rs2) */}
+            <table style={{ width: '100%', borderCollapse: 'collapse', margin: '6px 0 8px' }}>
+              <tbody>
+                <tr>
+                  <td style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '22px', verticalAlign: 'middle', width: '38%', padding: '2px 8px' }} rowSpan={2}>경비원</td>
+                  <td style={{ fontWeight: 'bold', fontSize: '18px', textAlign: 'center', verticalAlign: 'middle', padding: '2px 4px' }}>
+                    [{isBaechi ? 'v' : ' '}] 배치
+                  </td>
+                  <td style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '22px', letterSpacing: '0.2em', verticalAlign: 'middle', width: '30%', padding: '2px 8px' }} rowSpan={2}>신고서</td>
+                </tr>
+                <tr>
+                  <td style={{ fontWeight: 'bold', fontSize: '18px', textAlign: 'center', verticalAlign: 'middle', padding: '2px 4px' }}>
+                    [{isPyeji ? 'v' : ' '}] 배치폐지
+                  </td>
+                </tr>
+              </tbody>
+            </table>
 
             {/* ① 접수 행 */}
             <table style={{ width: '100%', borderCollapse: 'collapse', borderTop: '2px solid #000' }}>
@@ -870,59 +878,60 @@ ${clone.innerHTML}
               </tbody>
             </table>
 
-            {/* ② 신고인 — 공식 서식과 동일: 3행 7열 구조 */}
-            {/*
-                Col0=신고인(rs=3) | Col1=label | Col2=value | Col3=label | Col4=value | Col5=label | Col6=value
-                Row2: Col1=소재지 | Col2~4=value(cs=3) | Col5=전화번호 | Col6=value
-                Row3: Col1=배치장소 | Col2~4=value(cs=3) | Col5=전화번호 | Col6=value
-            */}
+            {/* ② 신고인 — 공식 서식: 레이블/값 각각 별도 행 (6행) */}
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <colgroup>
                 <col style={{ width: '38px' }} />
-                <col style={{ width: '13%' }} />
-                <col style={{ width: '20%' }} />
-                <col style={{ width: '11%' }} />
-                <col style={{ width: '18%' }} />
-                <col style={{ width: '11%' }} />
+                <col style={{ width: '43%' }} />
+                <col style={{ width: '33%' }} />
                 <col />
               </colgroup>
               <tbody>
-                {/* 행1: 법인명칭 | 대표자성명 | 허가번호 */}
+                {/* 행1: 레이블 */}
                 <tr>
-                  <td style={S.vLabel} rowSpan={3}>신<br/>고<br/>인</td>
+                  <td style={S.vLabel} rowSpan={6}>신<br/>고<br/>인</td>
                   <td style={S.th}>법인 명칭</td>
+                  <td style={S.th}>대표자 성명</td>
+                  <td style={S.th}>허가번호</td>
+                </tr>
+                {/* 행2: 값 */}
+                <tr>
                   <td style={S.td}>
                     <input value={companyName} onChange={e => setCompanyName(e.target.value)} style={S.input} />
                   </td>
-                  <td style={S.th}>대표자 성명</td>
                   <td style={S.td}>
                     <input value={companyCeo} onChange={e => setCompanyCeo(e.target.value)} style={S.input} />
                   </td>
-                  <td style={S.th}>허가번호</td>
                   <td style={S.td}>
                     <input value={companyLicense} onChange={e => setCompanyLicense(e.target.value)}
                       style={{ ...S.input, fontSize: '9.5px' }} />
                   </td>
                 </tr>
-                {/* 행2: 소재지 | 전화번호 */}
+                {/* 행3: 레이블 */}
                 <tr>
-                  <td style={S.th}>소재지</td>
-                  <td style={S.td} colSpan={3}>
+                  <td style={S.th} colSpan={2}>소재지</td>
+                  <td style={S.th}>전화번호</td>
+                </tr>
+                {/* 행4: 값 */}
+                <tr>
+                  <td style={S.td} colSpan={2}>
                     <input value={companyAddress} onChange={e => setCompanyAddress(e.target.value)} style={S.input} />
                   </td>
-                  <td style={S.th}>전화번호</td>
                   <td style={S.td}>
                     <input value={companyPhone} onChange={e => setCompanyPhone(e.target.value)} style={S.input} />
                   </td>
                 </tr>
-                {/* 행3: 배치장소 | 전화번호 */}
+                {/* 행5: 레이블 */}
                 <tr>
-                  <td style={S.th}>배치장소(구체적으로 기재)</td>
-                  <td style={S.td} colSpan={3}>
+                  <td style={S.th} colSpan={2}>배치장소(구체적으로 기재)</td>
+                  <td style={S.th}>전화번호(경호원)</td>
+                </tr>
+                {/* 행6: 값 */}
+                <tr>
+                  <td style={S.td} colSpan={2}>
                     <input value={location} onChange={e => setLocation(e.target.value)}
                       style={S.input} placeholder="배치장소 입력" />
                   </td>
-                  <td style={S.th}>전화번호</td>
                   <td style={S.td}>
                     <input value={locationPhone} onChange={e => setLocationPhone(e.target.value)}
                       style={S.input} placeholder="010-0000-0000" />
@@ -931,19 +940,22 @@ ${clone.innerHTML}
               </tbody>
             </table>
 
-            {/* ③ 경비원 배치(폐지) 내용 */}
+            {/* ③ 경비원 배치(폐지) 내용 — 공식 서식: 레이블/값 별도 행 (4행) */}
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <colgroup>
                 <col style={{ width: '38px' }} />
-                <col style={{ width: '14%' }} />
-                <col />
-                <col style={{ width: '18%' }} />
+                <col style={{ width: '55%' }} />
                 <col />
               </colgroup>
               <tbody>
+                {/* 행1: 레이블 */}
                 <tr>
-                  <td style={S.vLabel} rowSpan={2}>경비원<br/>배치(폐지)<br/>내용</td>
+                  <td style={S.vLabel} rowSpan={4}>경비원<br/>배치(폐지)<br/>내용</td>
                   <td style={S.th}>배치일시</td>
+                  <td style={S.th}>배치폐지(예정)일시</td>
+                </tr>
+                {/* 행2: 값 */}
+                <tr>
                   <td style={S.td}>
                     <input value={startDate} onChange={e => setStartDate(e.target.value)}
                       style={{ ...S.input, display: 'inline', width: 'auto', minWidth: '100px' }} placeholder="2026. 06. 08." />
@@ -951,7 +963,6 @@ ${clone.innerHTML}
                     <input value={startTime} onChange={e => setStartTime(e.target.value)}
                       style={{ ...S.input, display: 'inline', width: '50px' }} placeholder="14:00" />
                   </td>
-                  <td style={S.th}>배치폐지(예정)일시</td>
                   <td style={S.td}>
                     <input value={endDate} onChange={e => setEndDate(e.target.value)}
                       style={{ ...S.input, display: 'inline', width: 'auto', minWidth: '100px' }} placeholder="2026. 06. 08." />
@@ -960,9 +971,13 @@ ${clone.innerHTML}
                       style={{ ...S.input, display: 'inline', width: '50px' }} placeholder="17:00" />
                   </td>
                 </tr>
+                {/* 행3: 레이블 */}
                 <tr>
-                  <td style={S.th}>경비의 목적 또는 내용(구체적으로 기재)</td>
-                  <td style={S.td} colSpan={3}>
+                  <td style={S.th} colSpan={2}>경비의 목적 또는 내용(구체적으로 기재)</td>
+                </tr>
+                {/* 행4: 값 */}
+                <tr>
+                  <td style={S.td} colSpan={2}>
                     <input value={purpose} onChange={e => setPurpose(e.target.value)}
                       style={S.input} placeholder="경비의 목적 또는 내용을 구체적으로 기재" />
                   </td>
@@ -984,14 +999,18 @@ ${clone.innerHTML}
               <tbody>
                 {/* 헤더 행 */}
                 <tr style={{ backgroundColor: '#f5f5f5' }}>
-                  <td style={S.vLabel} rowSpan={rows.length + 1}>경비원<br/>명단</td>
-                  <td style={{ ...S.th, width: '28px', textAlign: 'center' }}>연번</td>
-                  <td style={{ ...S.th, width: '52px', textAlign: 'center' }}>성명</td>
-                  <td style={{ ...S.th, width: '100px', textAlign: 'center' }}>주민등록번호</td>
-                  <td style={{ ...S.th, width: '70px', textAlign: 'center' }}>배치 경비업무</td>
-                  <td style={{ ...S.th, textAlign: 'center' }}>경비원 신임교육<br/>이수증 교부번호</td>
+                  <td style={S.vLabel} rowSpan={rows.length + 2}>경비원<br/>명단</td>
+                  <td style={{ ...S.th, width: '28px', textAlign: 'center' }} rowSpan={2}>연번</td>
+                  <td style={{ ...S.th, width: '52px', textAlign: 'center' }} rowSpan={2}>성명</td>
+                  <td style={{ ...S.th, width: '100px', textAlign: 'center' }} rowSpan={2}>주민등록번호</td>
+                  <td style={{ ...S.th, width: '70px', textAlign: 'center' }} rowSpan={2}>배치 경비업무</td>
+                  <td style={{ ...S.th, textAlign: 'center' }}>경비원 신임교육</td>
                   {/* 화면에서만 보이는 삭제 컬럼 헤더 */}
-                  <td className="dispatch-no-print" style={{ border: '1px solid #374151', width: '22px' }}></td>
+                  <td className="dispatch-no-print" style={{ border: '1px solid #374151', width: '22px' }} rowSpan={2}></td>
+                </tr>
+                {/* 헤더 행 2 */}
+                <tr style={{ backgroundColor: '#f5f5f5' }}>
+                  <td style={{ ...S.th, textAlign: 'center' }}>이수증 교부번호</td>
                 </tr>
                 {/* 데이터 행 */}
                 {rows.map((row, idx) => (
@@ -1070,11 +1089,14 @@ ${clone.innerHTML}
             <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '10px', borderTop: '2px solid #000' }}>
               <tbody>
                 <tr>
-                  <td style={{ ...S.th, width: '55px', verticalAlign: 'middle' }}>첨부서류</td>
-                  <td style={{ ...S.td }}>
-                    병력(兵歷)신고 및 개인정보 이용 동의서(특수경비원의 배치신고에만 해당합니다)
+                  <td style={{ ...S.th, width: '55px', verticalAlign: 'middle' }} rowSpan={2}>첨부서류</td>
+                  <td style={{ ...S.td }} rowSpan={2}>
+                    병력(病歷)신고 및 개인정보 이용 동의서(특수경비원의 배치신고에만 해당합니다)
                   </td>
-                  <td style={{ ...S.th, width: '40px', textAlign: 'center' }}>수수<br/>없음</td>
+                  <td style={{ ...S.th, width: '40px', textAlign: 'center' }}>수수료</td>
+                </tr>
+                <tr>
+                  <td style={{ ...S.td, textAlign: 'center' }}>없음</td>
                 </tr>
               </tbody>
             </table>
