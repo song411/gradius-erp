@@ -278,6 +278,8 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
   // 이메일 발송 관련 상태
   const [showEmailPicker, setShowEmailPicker] = useState(false)
   const [emailSearch, setEmailSearch] = useState('')
+  const [directEmail, setDirectEmail] = useState('')
+  const [directName, setDirectName] = useState('')
 
   // 회사 정보 (편집 가능)
   const [companyName,    setCompanyName]    = useState(COMPANY.name)
@@ -467,7 +469,10 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
 
     setLocation((inq as any).location || '')
     setStartDate(inq.event_start ? toDisplayDate(inq.event_start) : '')
-    setStartTime((inq as any).event_time || '')
+    const rawTime: string = (inq as any).event_time || ''
+    const timeParts = rawTime.split('~').map((t: string) => t.trim())
+    setStartTime(timeParts[0] || '')
+    setEndTime(timeParts[1] || '')
     setEndDate(inq.event_end ? toDisplayDate(inq.event_end) : '')
     setPurpose((inq as any).memo || '')
   }
@@ -662,6 +667,13 @@ ${clone.innerHTML}
       setShowEmailPicker(false)
     }
   }
+  async function handleSendEmailDirect() {
+    if (!directEmail.trim()) return
+    await handleSendEmail({ region: '직접입력', name: directName.trim() || directEmail.trim(), phone: '', email: directEmail.trim() })
+    setDirectEmail('')
+    setDirectName('')
+  }
+
   // 이메일 검색 필터
   const filteredStations = POLICE_DATA.filter(s =>
     !emailSearch.trim() ||
@@ -827,11 +839,36 @@ ${clone.innerHTML}
               <div className="absolute top-9 right-0 bg-white rounded-xl shadow-2xl border border-gray-200 w-80" style={{ zIndex: 10000 }}
                 onClick={e => e.stopPropagation()}>
                 <div className="px-3 pt-2.5 pb-1.5 border-b border-gray-100">
-                  <p className="text-[10px] text-gray-400 mb-1.5">경찰서 선택 시 이메일 앱이 열립니다</p>
+                  <p className="text-[10px] text-gray-500 font-semibold mb-1.5">직접 입력</p>
+                  <input
+                    value={directName}
+                    onChange={e => setDirectName(e.target.value)}
+                    placeholder="이름 또는 기관명 (선택)"
+                    className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-violet-400 mb-1.5"
+                  />
+                  <div className="flex gap-1.5">
+                    <input
+                      value={directEmail}
+                      onChange={e => setDirectEmail(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && handleSendEmailDirect()}
+                      placeholder="이메일 주소"
+                      type="email"
+                      className="flex-1 text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-violet-400"
+                    />
+                    <button
+                      onClick={handleSendEmailDirect}
+                      disabled={emailSending || !directEmail.trim()}
+                      className="text-xs bg-violet-600 hover:bg-violet-700 text-white rounded-lg px-2.5 py-1.5 disabled:opacity-40 shrink-0"
+                    >
+                      발송
+                    </button>
+                  </div>
+                </div>
+                <div className="px-3 pt-2 pb-1.5 border-b border-gray-100">
+                  <p className="text-[10px] text-gray-400 mb-1.5">경찰서 목록</p>
                   <div className="relative">
                     <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
                     <input
-                      autoFocus
                       value={emailSearch}
                       onChange={e => setEmailSearch(e.target.value)}
                       placeholder="경찰서 또는 지역 검색..."
