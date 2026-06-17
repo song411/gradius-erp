@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { db } from '@/lib/supabase/api'
 import type { Inquiry, GuardProfile } from '@/lib/supabase/types'
-import { X, Printer, UserPlus, Trash2, ChevronDown, Save, FolderOpen, Mail, Search } from 'lucide-react'
+import { X, Printer, UserPlus, Trash2, ChevronDown, Save, FolderOpen, Mail, Search, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { formatDate } from '@/lib/utils'
@@ -296,6 +296,12 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
   // 서류 첨부 포함 여부
   const [showDocs, setShowDocs] = useState(true)
 
+  // 도장 이미지 (localStorage 유지)
+  const [sealUrl, setSealUrl] = useState('')
+
+  // 경비목적 textarea 자동 높이
+  const purposeRef = useRef<HTMLTextAreaElement>(null)
+
   const load = useCallback(async () => {
     const [inqs, gs, reports] = await Promise.all([
       db.list<Inquiry>('inquiries', {
@@ -311,6 +317,33 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  // 도장 localStorage 로드
+  useEffect(() => {
+    const saved = localStorage.getItem('dispatch_seal_url')
+    if (saved) setSealUrl(saved)
+  }, [])
+
+  // 경비목적 textarea 높이 동기화 (불러오기 포함)
+  useEffect(() => {
+    const el = purposeRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = el.scrollHeight + 'px'
+  }, [purpose])
+
+  // 도장 업로드
+  function handleSealUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const url = reader.result as string
+      setSealUrl(url)
+      localStorage.setItem('dispatch_seal_url', url)
+    }
+    reader.readAsDataURL(file)
+  }
 
   // 저장
   async function handleSave() {
@@ -777,7 +810,14 @@ ${clone.innerHTML}
             )}
           </div>
 
-          <button onClick={onClose} className="text-gray-400 hover:text-white ml-auto">
+          {/* 도장 등록 */}
+          <label className="dispatch-no-print flex items-center gap-1.5 text-xs text-gray-300 cursor-pointer hover:text-white ml-auto">
+            <Upload className="h-3.5 w-3.5" />
+            {sealUrl ? '도장 변경' : '도장 등록'}
+            <input type="file" accept="image/*" onChange={handleSealUpload} className="hidden" />
+          </label>
+
+          <button onClick={onClose} className="text-gray-400 hover:text-white">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -882,8 +922,8 @@ ${clone.innerHTML}
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <colgroup>
                 <col style={{ width: '38px' }} />
-                <col style={{ width: '43%' }} />
-                <col style={{ width: '33%' }} />
+                <col style={{ width: '35%' }} />
+                <col style={{ width: '25%' }} />
                 <col />
               </colgroup>
               <tbody>
@@ -978,8 +1018,14 @@ ${clone.innerHTML}
                 {/* 행4: 값 */}
                 <tr>
                   <td style={S.td} colSpan={2}>
-                    <input value={purpose} onChange={e => setPurpose(e.target.value)}
-                      style={S.input} placeholder="경비의 목적 또는 내용을 구체적으로 기재" />
+                    <textarea
+                      ref={purposeRef}
+                      value={purpose}
+                      onChange={e => setPurpose(e.target.value)}
+                      rows={1}
+                      placeholder="경비의 목적 또는 내용을 구체적으로 기재"
+                      style={{ ...S.input, resize: 'none', overflow: 'hidden', minHeight: '22px', lineHeight: '1.6' }}
+                    />
                   </td>
                 </tr>
               </tbody>
@@ -1058,23 +1104,27 @@ ${clone.innerHTML}
               &nbsp;&nbsp;「경비업법」 제18조제2항, 같은 법 시행규칙 제24조에 따라 위와 같이 경비원의 (배치·배치폐지)를 신고합니다.
             </div>
 
-            {/* ⑥ 날짜 및 서명 — 공식 서식: 날짜는 우측, 신고인은 좌측, 서명란은 우측 */}
-            <div style={{ marginTop: '16px', marginBottom: '4px' }}>
-              {/* 날짜: 우측 정렬 */}
-              <div style={{ textAlign: 'right', fontSize: '11px', marginBottom: '8px' }}>
-                {reportDateFormatted}
-              </div>
-              {/* 신고인(대표자) 좌측 / (서명 또는 인) 우측 */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px' }}>
-                <div>
-                  신고인(대표자) &nbsp;&nbsp;
-                  <input value={companyName} onChange={e => setCompanyName(e.target.value)}
-                    style={{ ...S.input, display: 'inline', width: '110px' }} />
-                  &nbsp;대표이사&nbsp;
-                  <input value={companyCeo} onChange={e => setCompanyCeo(e.target.value)}
-                    style={{ ...S.input, display: 'inline', width: '55px' }} />
-                </div>
-                <div style={{ fontSize: '10px', color: '#555' }}>(서명 또는 인)</div>
+            {/* ⑥ 날짜 및 서명 — 우측 정렬, 도장 오버레이 */}
+            <div style={{ marginTop: '16px', marginBottom: '4px', textAlign: 'right', fontSize: '11px' }}>
+              {/* 날짜 */}
+              <div style={{ marginBottom: '8px' }}>{reportDateFormatted}</div>
+              {/* 신고인 + 서명 + 도장 */}
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', position: 'relative' }}>
+                <span>신고인(대표자)</span>
+                &nbsp;
+                <input value={companyName} onChange={e => setCompanyName(e.target.value)}
+                  style={{ ...S.input, display: 'inline', width: '90px' }} />
+                &nbsp;대표이사&nbsp;
+                <input value={companyCeo} onChange={e => setCompanyCeo(e.target.value)}
+                  style={{ ...S.input, display: 'inline', width: '55px' }} />
+                <span style={{ fontSize: '10px', color: '#555', marginLeft: '6px', whiteSpace: 'nowrap' }}>(서명 또는 인)</span>
+                {sealUrl && (
+                  <img
+                    src={sealUrl}
+                    alt="도장"
+                    style={{ position: 'absolute', right: '-4px', top: '50%', transform: 'translateY(-50%)', width: '52px', height: '52px', objectFit: 'contain', opacity: 0.88, pointerEvents: 'none' }}
+                  />
+                )}
               </div>
             </div>
 
