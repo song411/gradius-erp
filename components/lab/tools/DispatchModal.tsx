@@ -350,10 +350,16 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
     else setEmailLogs([])
   }, [currentReportId])
 
-  // 도장 localStorage 로드
+  // 도장 로드 — localStorage 우선, 없으면 Supabase storage 고정 경로 확인
   useEffect(() => {
     const saved = localStorage.getItem('dispatch_seal_url')
-    if (saved) setSealUrl(saved)
+    if (saved) { setSealUrl(saved); return }
+    const base = process.env.NEXT_PUBLIC_SUPABASE_URL
+    if (!base) return
+    const url = `${base}/storage/v1/object/public/guard-documents/seals/dispatch_seal`
+    fetch(url, { method: 'HEAD' }).then(r => {
+      if (r.ok) { setSealUrl(url); localStorage.setItem('dispatch_seal_url', url) }
+    }).catch(() => {})
   }, [])
 
   // 경비목적 textarea 높이 동기화 (불러오기 포함)
@@ -364,17 +370,19 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
     el.style.height = el.scrollHeight + 'px'
   }, [purpose])
 
-  // 도장 업로드
-  function handleSealUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  // 도장 업로드 — Supabase storage 고정 경로에 저장 (모든 PC 공유)
+  async function handleSealUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => {
-      const url = reader.result as string
-      setSealUrl(url)
-      localStorage.setItem('dispatch_seal_url', url)
-    }
-    reader.readAsDataURL(file)
+    const fd = new FormData()
+    fd.append('file', file)
+    fd.append('path', 'seals/dispatch_seal')
+    fd.append('bucket', 'guard-documents')
+    const res = await fetch('/api/storage', { method: 'POST', body: fd })
+    if (!res.ok) { alert('도장 업로드에 실패했습니다.'); return }
+    const { url } = await res.json()
+    setSealUrl(url)
+    localStorage.setItem('dispatch_seal_url', url)
   }
 
   // 저장
