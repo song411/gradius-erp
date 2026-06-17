@@ -914,7 +914,7 @@ ${clone.innerHTML}
                     <div className="px-3 py-4 text-xs text-gray-400 text-center">검색 결과 없음</div>
                   )}
                   {filteredStations.map((s, i) => (
-                    <button key={i} onClick={() => handleSendEmail(s)} disabled={emailSending}
+                    <button key={i} onClick={() => { if (window.confirm(`${s.region} ${s.name}(${s.email})으로 발송할까요?`)) handleSendEmail(s) }} disabled={emailSending}
                       className="w-full text-left px-3 py-2 hover:bg-violet-50 border-b border-gray-50 last:border-0 flex items-start gap-2 disabled:opacity-50">
                       <div className="shrink-0 mt-0.5">
                         <span className="inline-block text-[9px] bg-violet-100 text-violet-700 rounded px-1 py-0.5 font-semibold">{s.region}</span>
