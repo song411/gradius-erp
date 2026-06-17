@@ -280,6 +280,7 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
   const [emailSearch, setEmailSearch] = useState('')
   const [directEmail, setDirectEmail] = useState('')
   const [directName, setDirectName] = useState('')
+  const [attachedFile, setAttachedFile] = useState<File | null>(null)
 
   // 회사 정보 (편집 가능)
   const [companyName,    setCompanyName]    = useState(COMPANY.name)
@@ -644,21 +645,20 @@ ${clone.innerHTML}
     ].join('\n')
 
     try {
-      const res = await fetch('/api/email/dispatch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to: station.email,
-          subject,
-          body,
-          reportId: currentReportId,
-          stationName: station.name,
-          stationRegion: station.region,
-        }),
-      })
+      const formData = new FormData()
+      formData.append('to', station.email)
+      formData.append('subject', subject)
+      formData.append('body', body)
+      if (currentReportId) formData.append('reportId', currentReportId)
+      formData.append('stationName', station.name)
+      formData.append('stationRegion', station.region)
+      if (attachedFile) formData.append('attachment', attachedFile)
+
+      const res = await fetch('/api/email/dispatch', { method: 'POST', body: formData })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || '발송 실패')
       alert(`✅ ${station.name}(으)로 발송 완료했습니다.`)
+      setAttachedFile(null)
       if (currentReportId) loadEmailLogs(currentReportId)
     } catch (err: any) {
       alert(`❌ 발송 실패: ${err.message}`)
@@ -838,6 +838,21 @@ ${clone.innerHTML}
             {showEmailPicker && (
               <div className="absolute top-9 right-0 bg-white rounded-xl shadow-2xl border border-gray-200 w-80" style={{ zIndex: 10000 }}
                 onClick={e => e.stopPropagation()}>
+                {/* PDF 첨부 */}
+                <div className="px-3 pt-2.5 pb-2 border-b border-gray-100">
+                  <p className="text-[10px] text-gray-500 font-semibold mb-1.5">PDF 첨부 (선택)</p>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <div className={`flex-1 text-xs px-2.5 py-1.5 rounded-lg border truncate ${attachedFile ? 'border-violet-400 text-violet-700 bg-violet-50' : 'border-gray-200 text-gray-400'}`}>
+                      {attachedFile ? attachedFile.name : '파일 선택...'}
+                    </div>
+                    {attachedFile
+                      ? <button onClick={() => setAttachedFile(null)} className="text-[10px] text-gray-400 hover:text-red-400 shrink-0">제거</button>
+                      : <span className="text-[10px] text-violet-600 shrink-0">찾아보기</span>
+                    }
+                    <input type="file" accept=".pdf,application/pdf" className="hidden"
+                      onChange={e => setAttachedFile(e.target.files?.[0] ?? null)} />
+                  </label>
+                </div>
                 <div className="px-3 pt-2.5 pb-1.5 border-b border-gray-100">
                   <p className="text-[10px] text-gray-500 font-semibold mb-1.5">직접 입력</p>
                   <input
