@@ -281,6 +281,7 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
   const [directEmail, setDirectEmail] = useState('')
   const [directName, setDirectName] = useState('')
   const [attachedFile, setAttachedFile] = useState<File | null>(null)
+  const [emailSubject, setEmailSubject] = useState('')
 
   // 회사 정보 (편집 가능)
   const [companyName,    setCompanyName]    = useState(COMPANY.name)
@@ -417,8 +418,8 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
       // 목록 갱신
       const reports = await db.list<DispatchReport>('dispatch_reports', { order: 'created_at', asc: false })
       setSavedReports(reports)
-    } catch {
-      setSaveMsg('❌ 저장 실패')
+    } catch (e: any) {
+      setSaveMsg(`❌ 저장 실패: ${e?.message || '알 수 없는 오류'}`)
     } finally {
       setSaving(false)
       setTimeout(() => setSaveMsg(''), 2500)
@@ -619,7 +620,8 @@ ${clone.innerHTML}
     if (emailSending) return
     setEmailSending(true)
     const guardNames = rows.filter(r => r.name.trim()).map(r => r.name).join(', ') || '(경호원 미입력)'
-    const subject = `[배치신고] ${companyName} / ${location || '장소 미입력'} / ${startDate || reportDate}`
+    const autoSubject = `[배치신고] ${companyName} / ${location || '장소 미입력'} / ${startDate || reportDate}`
+    const subject = emailSubject.trim() || autoSubject
     const body = [
       `${station.region} ${station.name} 경비업 담당자님께`,
       '',
@@ -659,6 +661,7 @@ ${clone.innerHTML}
       if (!res.ok) throw new Error(data.error || '발송 실패')
       alert(`✅ ${station.name}(으)로 발송 완료했습니다.`)
       setAttachedFile(null)
+      setEmailSubject('')
       if (currentReportId) loadEmailLogs(currentReportId)
     } catch (err: any) {
       alert(`❌ 발송 실패: ${err.message}`)
@@ -838,6 +841,21 @@ ${clone.innerHTML}
             {showEmailPicker && (
               <div className="absolute top-9 right-0 bg-white rounded-xl shadow-2xl border border-gray-200 w-80" style={{ zIndex: 10000 }}
                 onClick={e => e.stopPropagation()}>
+                {/* 이메일 제목 */}
+                <div className="px-3 pt-2.5 pb-2 border-b border-gray-100">
+                  <p className="text-[10px] text-gray-500 font-semibold mb-1.5">이메일 제목</p>
+                  <input
+                    value={emailSubject}
+                    onChange={e => setEmailSubject(e.target.value)}
+                    placeholder={`[배치신고] ${companyName} / ${location || '장소 미입력'} / ${startDate || reportDate}`}
+                    className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-violet-400"
+                  />
+                  {emailSubject && (
+                    <button onClick={() => setEmailSubject('')} className="text-[9px] text-gray-400 hover:text-violet-500 mt-1">
+                      자동생성으로 초기화
+                    </button>
+                  )}
+                </div>
                 {/* PDF 첨부 */}
                 <div className="px-3 pt-2.5 pb-2 border-b border-gray-100">
                   <p className="text-[10px] text-gray-500 font-semibold mb-1.5">PDF 첨부 (선택)</p>
