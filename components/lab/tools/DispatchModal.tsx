@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { db } from '@/lib/supabase/api'
 import type { Inquiry, GuardProfile } from '@/lib/supabase/types'
-import { X, Printer, UserPlus, Trash2, ChevronDown, Save, FolderOpen, Mail, Search, Upload } from 'lucide-react'
+import { X, Printer, UserPlus, Trash2, ChevronDown, Save, FolderOpen, Mail, Search, Upload, CheckCircle2, AlertCircle, Clock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { formatDate } from '@/lib/utils'
@@ -58,6 +58,19 @@ const POLICE_DATA: PoliceStation[] = [
   { region:'충북청', name:'청주흥덕경찰서', phone:'043-270-3346', email:'cb2bbse@police.go.kr' },
   { region:'충남청', name:'천안서북경찰서', phone:'041-536-1277', email:'cn7bbse@police.go.kr' },
 ]
+
+// 발송 이력 타입
+interface EmailLog {
+  id: string
+  report_id?: string
+  station_name?: string
+  station_region?: string
+  recipient_email?: string
+  subject?: string
+  status: 'sent' | 'failed'
+  error_msg?: string
+  created_at?: string
+}
 
 // 저장된 신고서 타입
 interface DispatchReport {
@@ -296,6 +309,10 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
   // 서류 첨부 포함 여부
   const [showDocs, setShowDocs] = useState(true)
 
+  // 이메일 발송 상태 및 이력
+  const [emailSending, setEmailSending] = useState(false)
+  const [emailLogs, setEmailLogs] = useState<EmailLog[]>([])
+
   // 도장 이미지 (localStorage 유지)
   const [sealUrl, setSealUrl] = useState('')
 
@@ -317,6 +334,17 @@ export default function DispatchModal({ onClose }: { onClose: () => void }) {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  // 이메일 이력 로드
+  async function loadEmailLogs(rId: string) {
+    const res = await fetch(`/api/email/dispatch?reportId=${rId}`)
+    if (res.ok) setEmailLogs(await res.json())
+  }
+
+  useEffect(() => {
+    if (currentReportId) loadEmailLogs(currentReportId)
+    else setEmailLogs([])
+  }, [currentReportId])
 
   // 도장 localStorage 로드
   useEffect(() => {
@@ -580,11 +608,13 @@ ${clone.innerHTML}
     }
   }
 
-  // 이메일 발송 — mailto: 링크로 이메일 클라이언트 실행
-  function handleSendEmail(station: PoliceStation) {
+  // 이메일 발송 — 네이버 SMTP API
+  async function handleSendEmail(station: PoliceStation) {
+    if (emailSending) return
+    setEmailSending(true)
     const guardNames = rows.filter(r => r.name.trim()).map(r => r.name).join(', ') || '(경호원 미입력)'
-    const subject = encodeURIComponent(`[배치신고] ${companyName} / ${location || '장소 미입력'} / ${startDate || reportDate}`)
-    const body = encodeURIComponent([
+    const subject = `[배치신고] ${companyName} / ${location || '장소 미입력'} / ${startDate || reportDate}`
+    const body = [
       `${station.region} ${station.name} 경비업 담당자님께`,
       '',
       `안녕하세요. ${companyName}입니다.`,
@@ -600,17 +630,38 @@ ${clone.innerHTML}
       '■ 배치 인원',
       guardNames,
       '',
-      `※ 배치신고서 및 관련 서류는 첨부파일을 확인해 주시기 바랍니다.`,
-      `   (인쇄/PDF 버튼으로 생성 후 직접 첨부해 주세요)`,
+      '※ 배치신고서 및 관련 서류는 첨부파일을 확인해 주시기 바랍니다.',
+      '   (인쇄/PDF 버튼으로 생성 후 직접 첨부해 주세요)',
       '',
       `${companyName}`,
       `담당자 연락처: ${companyPhone}`,
       `주소: ${companyAddress}`,
-    ].join('\n'))
-    window.location.href = `mailto:${station.email}?subject=${subject}&body=${body}`
-    setShowEmailPicker(false)
-  }
+    ].join('\n')
 
+    try {
+      const res = await fetch('/api/email/dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: station.email,
+          subject,
+          body,
+          reportId: currentReportId,
+          stationName: station.name,
+          stationRegion: station.region,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || '발송 실패')
+      alert(`✅ ${station.name}(으)로 발송 완료했습니다.`)
+      if (currentReportId) loadEmailLogs(currentReportId)
+    } catch (err: any) {
+      alert(`❌ 발송 실패: ${err.message}`)
+    } finally {
+      setEmailSending(false)
+      setShowEmailPicker(false)
+    }
+  }
   // 이메일 검색 필터
   const filteredStations = POLICE_DATA.filter(s =>
     !emailSearch.trim() ||
@@ -769,8 +820,8 @@ ${clone.innerHTML}
           {/* 이메일 발송 버튼 */}
           <div className="relative email-picker-btn">
             <Button size="sm" onClick={e => { e.stopPropagation(); setShowEmailPicker(v => !v) }}
-              className="bg-violet-600 hover:bg-violet-700 text-xs h-8 gap-1">
-              <Mail className="h-3.5 w-3.5" />이메일 발송
+              className={`bg-violet-600 hover:bg-violet-700 text-xs h-8 gap-1 ${emailSending ? 'opacity-60' : ''}`}>
+              <Mail className="h-3.5 w-3.5" />{emailSending ? '발송 중...' : '이메일 발송'}
             </Button>
             {showEmailPicker && (
               <div className="absolute top-9 right-0 bg-white rounded-xl shadow-2xl border border-gray-200 w-80" style={{ zIndex: 10000 }}
@@ -793,8 +844,8 @@ ${clone.innerHTML}
                     <div className="px-3 py-4 text-xs text-gray-400 text-center">검색 결과 없음</div>
                   )}
                   {filteredStations.map((s, i) => (
-                    <button key={i} onClick={() => handleSendEmail(s)}
-                      className="w-full text-left px-3 py-2 hover:bg-violet-50 border-b border-gray-50 last:border-0 flex items-start gap-2">
+                    <button key={i} onClick={() => handleSendEmail(s)} disabled={emailSending}
+                      className="w-full text-left px-3 py-2 hover:bg-violet-50 border-b border-gray-50 last:border-0 flex items-start gap-2 disabled:opacity-50">
                       <div className="shrink-0 mt-0.5">
                         <span className="inline-block text-[9px] bg-violet-100 text-violet-700 rounded px-1 py-0.5 font-semibold">{s.region}</span>
                       </div>
@@ -806,6 +857,29 @@ ${clone.innerHTML}
                     </button>
                   ))}
                 </div>
+                {/* 발송 이력 */}
+                {emailLogs.length > 0 && (
+                  <div className="border-t border-gray-100">
+                    <div className="px-3 py-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">발송 이력</div>
+                    <div className="max-h-40 overflow-y-auto">
+                      {emailLogs.map(log => (
+                        <div key={log.id} className="px-3 py-2 flex items-start gap-2 border-b border-gray-50 last:border-0">
+                          {log.status === 'sent'
+                            ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0 mt-0.5" />
+                            : <AlertCircle className="h-3.5 w-3.5 text-red-400 shrink-0 mt-0.5" />}
+                          <div className="flex-1 min-w-0">
+                            <div className="text-[10px] font-medium text-gray-700">{log.station_region} {log.station_name}</div>
+                            <div className="text-[10px] text-gray-400 truncate">{log.recipient_email}</div>
+                            {log.error_msg && <div className="text-[9px] text-red-400 mt-0.5">{log.error_msg}</div>}
+                          </div>
+                          <div className="text-[9px] text-gray-300 shrink-0 mt-0.5">
+                            {log.created_at ? new Date(log.created_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
