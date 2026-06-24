@@ -25,6 +25,17 @@ function parseSegments(memo?: string | null): PaySegment[] | null {
 function segmentTotal(segs: PaySegment[]) {
   return segs.reduce((s, seg) => s + (seg.rate || 0) * (seg.days || 1), 0)
 }
+// payout.notes에서 구간 + 메모 텍스트 분리
+function parseNotesContent(notes?: string | null): { segments: PaySegment[] | null; memo: string } {
+  if (!notes) return { segments: null, memo: '' }
+  try {
+    const p = JSON.parse(notes)
+    if (p && typeof p === 'object' && Array.isArray(p.segments)) {
+      return { segments: p.segments.length > 0 ? p.segments : null, memo: p.memo || '' }
+    }
+  } catch {}
+  return { segments: null, memo: notes }
+}
 
 // 공제율 옵션
 const TAX_RATE_OPTIONS = [
@@ -51,6 +62,10 @@ export default function PayoutForm({ open, onClose, assignment, payout, onSaved 
   const [transportPay, setTransportPay] = useState('0')
   const [bonus, setBonus]             = useState('0')
   const [nonTaxablePay, setNonTaxablePay] = useState('0')  // 비과세 실비 (3.3% 미적용)
+
+  // 구간별 단가
+  const [segments, setSegments] = useState<PaySegment[]>([{ rate: 0, days: 1 }])
+  const [useSegments, setUseSegments] = useState(false)
 
   // 일수 연동 자동계산 여부
   const [dayLinked, setDayLinked] = useState(true)
@@ -93,13 +108,24 @@ export default function PayoutForm({ open, onClose, assignment, payout, onSaved 
       setBankName(payout.bank_name || '')
       setAccountNumber(payout.account_number || '')
       setIdNumber(payout.id_number || '')
-      setNotes(payout.notes || '')
+      // notes에서 구간 + 메모 분리
+      const { segments: savedSegs, memo: savedMemo } = parseNotesContent(payout.notes)
+      setNotes(savedMemo)
+      if (savedSegs) {
+        setSegments(savedSegs)
+        setUseSegments(true)
+      } else {
+        const assignSegs = parseSegments(assignment.memo)
+        if (assignSegs) { setSegments(assignSegs); setUseSegments(true) }
+        else { setSegments([{ rate: 0, days: 1 }]); setUseSegments(false) }
+      }
       setDispatchPeriod(payout.dispatch_period || '')
       setDispatchDays(String(payout.dispatch_days || assignment.work_days || 1))
     } else {
       // 신규 등록 - 배정 데이터로 자동 채우기
-      // 구간별 단가가 있으면 구간 합계를 기준금액으로 사용
       const segs = parseSegments(assignment.memo)
+      if (segs) { setSegments(segs); setUseSegments(true) }
+      else { setSegments([{ rate: 0, days: 1 }]); setUseSegments(false) }
       const autoBase = segs ? segmentTotal(segs) : (assignment.pay_rate || 0) * (assignment.work_days || 1)
       setBasePay(String(autoBase))
       setOvertimePay('0')
@@ -133,6 +159,18 @@ export default function PayoutForm({ open, onClose, assignment, payout, onSaved 
     }
   }, [open, assignment, payout])
 
+  // 구간 편집 헬퍼
+  function addSeg() { setSegments(prev => [...prev, { rate: 0, days: 1 }]) }
+  function removeSeg(i: number) { setSegments(prev => prev.filter((_, idx) => idx !== i)) }
+  function updateSeg(i: number, field: keyof PaySegment, v: number) {
+    setSegments(prev => prev.map((s, idx) => idx === i ? { ...s, [field]: v } : s))
+  }
+
+  // 구간 변경 시 basePay 자동 업데이트
+  useEffect(() => {
+    if (useSegments) setBasePay(String(segmentTotal(segments)))
+  }, [useSegments, segments])
+
   // 계산 (비과세 항목은 세금 계산에서 제외)
   const taxableSubtotal = [basePay, overtimePay, mealPay, transportPay, bonus]
     .reduce((s, v) => s + (Number(v) || 0), 0)
@@ -163,7 +201,9 @@ export default function PayoutForm({ open, onClose, assignment, payout, onSaved 
       bank_name: bankName || null,
       account_number: accountNumber || null,
       id_number: idNumber || null,
-      notes: notes || null,
+      notes: useSegments && segments.some(s => s.rate > 0)
+        ? JSON.stringify({ segments, memo: notes || '' })
+        : (notes || null),
     }
     try {
       if (payout) {
@@ -292,22 +332,83 @@ export default function PayoutForm({ open, onClose, assignment, payout, onSaved 
         <div>
           <p className="text-xs font-semibold text-gray-600 mb-2">과세 지급 항목 <span className="text-gray-400 font-normal">(3.3% 원천세 적용)</span></p>
           <div className="space-y-2">
+            {/* 기본급 - 구간별 단가 지원 */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-semibold text-gray-700">기본급</label>
+                <button
+                  type="button"
+                  onClick={() => setUseSegments(!useSegments)}
+                  className="text-[10px] text-indigo-600 hover:underline"
+                >
+                  {useSegments ? '단일 금액 입력' : '구간별 단가 설정'}
+                </button>
+              </div>
+              {useSegments ? (
+                <div className="bg-indigo-50 rounded-lg p-2 border border-indigo-200 space-y-1.5">
+                  {segments.map((seg, i) => (
+                    <div key={i} className="flex items-center gap-1.5">
+                      <span className="text-[10px] text-gray-500 w-8 shrink-0">{i + 1}구간</span>
+                      <Input
+                        type="number"
+                        value={seg.rate || ''}
+                        onChange={e => updateSeg(i, 'rate', Number(e.target.value))}
+                        placeholder="단가"
+                        className="w-24 h-7 text-xs px-1"
+                      />
+                      <span className="text-[10px] text-gray-400">원 ×</span>
+                      <Input
+                        type="number"
+                        value={seg.days || ''}
+                        onChange={e => updateSeg(i, 'days', Math.max(1, Number(e.target.value)))}
+                        placeholder="일수"
+                        className="w-12 h-7 text-xs px-1"
+                        min={1}
+                      />
+                      <span className="text-[10px] text-gray-400">일 =</span>
+                      <span className="text-[10px] font-semibold text-indigo-700 w-16 shrink-0">
+                        {formatKRW(seg.rate * seg.days)}
+                      </span>
+                      {segments.length > 1 && (
+                        <button type="button" onClick={() => removeSeg(i)} className="text-red-400 hover:text-red-600 text-[10px]">✕</button>
+                      )}
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-between border-t border-indigo-200 pt-1">
+                    <button type="button" onClick={addSeg} className="text-[10px] text-indigo-600 hover:underline">+ 구간 추가</button>
+                    <span className="text-[10px] text-gray-500">
+                      합계: {segments.reduce((s, seg) => s + (seg.days || 1), 0)}일 / <strong className="text-indigo-700">{formatKRW(segmentTotal(segments))}</strong>
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <Input
+                    type="number"
+                    value={basePay}
+                    onChange={e => { setBasePay(e.target.value); setDayLinked(false) }}
+                    className="h-8 text-sm flex-1 border-blue-200 bg-blue-50/30"
+                  />
+                  <span className="text-xs text-gray-400 w-24 text-right shrink-0">
+                    {formatKRW(Number(basePay) || 0)}
+                  </span>
+                </div>
+              )}
+            </div>
+            {/* 나머지 과세 항목 */}
             {[
-              { label: '기본급', value: basePay, setter: (v: string) => { setBasePay(v); setDayLinked(false) }, highlight: true },
               { label: '야근수당', value: overtimePay, setter: setOvertimePay },
               { label: '식비', value: mealPay, setter: setMealPay },
               { label: '교통비', value: transportPay, setter: setTransportPay },
               { label: '기타수당', value: bonus, setter: setBonus },
-            ].map(({ label, value, setter, highlight }) => (
+            ].map(({ label, value, setter }) => (
               <div key={label} className="flex items-center gap-3">
-                <label className={`text-xs w-20 shrink-0 ${highlight ? 'font-semibold text-gray-700' : 'text-gray-500'}`}>
-                  {label}
-                </label>
+                <label className="text-xs w-20 shrink-0 text-gray-500">{label}</label>
                 <Input
                   type="number"
                   value={value}
                   onChange={e => setter(e.target.value)}
-                  className={`h-8 text-sm flex-1 ${highlight ? 'border-blue-200 bg-blue-50/30' : ''}`}
+                  className="h-8 text-sm flex-1"
                 />
                 <span className="text-xs text-gray-400 w-24 text-right shrink-0">
                   {formatKRW(Number(value) || 0)}

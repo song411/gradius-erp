@@ -29,6 +29,24 @@ function parseSegments(memo?: string | null): PaySegment[] | null {
 function segmentTotal(segs: PaySegment[]) {
   return segs.reduce((s, seg) => s + (seg.rate || 0) * (seg.days || 1), 0)
 }
+// payout.notes에서 구간 추출
+function parseNotesSegments(notes?: string | null): PaySegment[] | null {
+  if (!notes) return null
+  try {
+    const p = JSON.parse(notes)
+    if (p && typeof p === 'object' && Array.isArray(p.segments) && p.segments.length > 0) return p.segments
+  } catch {}
+  return null
+}
+// payout.notes에서 메모 텍스트만 추출
+function parseNotesMemo(notes?: string | null): string {
+  if (!notes) return ''
+  try {
+    const p = JSON.parse(notes)
+    if (p && typeof p === 'object' && Array.isArray(p.segments)) return p.memo || ''
+  } catch {}
+  return notes
+}
 
 // 본사 인원 이름 기반 감지 (이름 OR is_payable=false)
 const HQ_NAMES = new Set(['최규성', '송무재', '여지은', '김영찬'])
@@ -528,7 +546,22 @@ export default function PayoutsContent() {
                           )}
                           <div className="flex flex-wrap gap-3 mt-1.5 text-xs text-gray-500">
                             <span>📅 {payout.dispatch_period || '-'} ({payout.dispatch_days}일)</span>
-                            <span>기본 {formatKRW(payout.base_pay)}</span>
+                            {(() => {
+                              const segs = parseNotesSegments(payout.notes) || (assign ? parseSegments(assign.memo) : null)
+                              if (segs && segs.length > 0) {
+                                return (
+                                  <span className="flex items-center gap-1 flex-wrap">
+                                    {segs.map((seg, i) => (
+                                      <span key={i} className="bg-indigo-50 text-indigo-700 px-1 py-0.5 rounded text-[10px] font-medium">
+                                        {formatKRW(seg.rate)}×{seg.days}일
+                                      </span>
+                                    ))}
+                                    = 기본 <strong className="text-gray-700">{formatKRW(payout.base_pay)}</strong>
+                                  </span>
+                                )
+                              }
+                              return <span>기본 {formatKRW(payout.base_pay)}</span>
+                            })()}
                             {payout.overtime_pay > 0  && <span>야근 +{formatKRW(payout.overtime_pay)}</span>}
                             {payout.meal_pay > 0      && <span>식비 +{formatKRW(payout.meal_pay)}</span>}
                             {payout.transport_pay > 0 && <span>교통 +{formatKRW(payout.transport_pay)}</span>}
@@ -540,9 +573,12 @@ export default function PayoutsContent() {
                               <Building2 className="h-3 w-3" />{payout.bank_name} {payout.account_number}
                             </div>
                           )}
-                          {payout.notes && (
-                            <p className="mt-1 text-[10px] text-gray-400 bg-gray-50 rounded-lg px-2 py-1">{payout.notes}</p>
-                          )}
+                          {(() => {
+                            const memoText = parseNotesMemo(payout.notes)
+                            return memoText ? (
+                              <p className="mt-1 text-[10px] text-gray-400 bg-gray-50 rounded-lg px-2 py-1">{memoText}</p>
+                            ) : null
+                          })()}
                         </div>
                         <div className="text-right shrink-0">
                           <p className="font-extrabold text-blue-700 text-base">{formatKRW(payout.final_pay)}</p>
