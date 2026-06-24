@@ -108,7 +108,8 @@ export default function DashboardContent() {
   // ── 실제 지급액 계산 (payouts.final_pay 우선, fallback: settlement.payout_amount)
   // 이관 데이터는 payouts 레코드가 없어 settlement.payout_amount도 0일 수 있음
   const payoutByInquiry = payouts.reduce<Map<string, number>>((m, p) => {
-    if (p.inquiry_id) m.set(p.inquiry_id, (m.get(p.inquiry_id) || 0) + (p.final_pay || 0))
+    if (p.inquiry_id && (p.status === '지급완료' || p.status === '완료'))
+      m.set(p.inquiry_id, (m.get(p.inquiry_id) || 0) + (p.final_pay || 0))
     return m
   }, new Map())
 

@@ -104,7 +104,7 @@ export default function OverviewTab({ data }: { data: CeoData }) {
       {/* 연간 KPI */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <KPIBox label="연매출" value={formatKRW(yearRevenue)} icon="💰" color="blue" />
-        <KPIBox label="영업이익" value={formatKRW(yearProfit)} icon="📈" color="green" />
+        <KPIBox label="매출총이익" value={formatKRW(yearProfit)} icon="📈" color="green" />
         <KPIBox label="수익률" value={`${yearProfitRate}%`} icon="🎯" color="purple" />
         <KPIBox label="수금액" value={formatKRW(yearReceived)} icon="✅" color="cyan" />
         <KPIBox label="미수금" value={formatKRW(yearUnpaid)} icon="⚠️" color="red" />
