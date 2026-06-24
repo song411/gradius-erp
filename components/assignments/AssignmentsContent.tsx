@@ -404,6 +404,18 @@ export default function AssignmentsContent() {
     loadInquiries()
   }
 
+  // 배정중 전체 일괄 확정
+  async function handleBulkConfirm() {
+    if (!selectedInq) return
+    const targets = slots.flatMap(g => g.assignments).filter(a => a.status === '배정중')
+    if (targets.length === 0) return
+    await Promise.all(targets.map(a => db.update('assignments', a.id, { status: '확정' })))
+    await db.update('inquiries', selectedInq.id, { status: '배정완료' })
+    toast.success(`${targets.length}명 배정확정 완료`)
+    loadDetail(selectedInq)
+    loadInquiries()
+  }
+
   // 단가 수정
   async function handlePayRateUpdate(asgn: Assignment, payRate: number) {
     await db.update('assignments', asgn.id, { pay_rate: payRate })
@@ -691,6 +703,15 @@ export default function AssignmentsContent() {
                       ✅ 배정 완료
                     </span>
                   )}
+                  {(() => {
+                    const pendingCount = slots.flatMap(g => g.assignments).filter(a => a.status === '배정중').length
+                    return pendingCount > 0 ? (
+                      <Button size="sm" variant="outline" onClick={handleBulkConfirm} className="h-7 text-xs border-green-400 text-green-700 hover:bg-green-50">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        전체 배정확정 ({pendingCount}명)
+                      </Button>
+                    ) : null
+                  })()}
                   <Button size="sm" onClick={() => openModal('', 0, 1)} className="h-7 text-xs">
                     <UserPlus className="h-3.5 w-3.5" />
                     인력 추가
