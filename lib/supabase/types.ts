@@ -147,6 +147,9 @@ export interface Estimate {
   // 복수 견적 지원 (A안/B안 등)
   version_label?: string
   is_final?: boolean
+  // 이전 견적 스냅샷 (수정 시 자동 저장)
+  prev_total_price?: number | null
+  prev_items_summary?: string | null
   created_at: string
   updated_at: string
 }

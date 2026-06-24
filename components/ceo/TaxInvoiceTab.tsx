@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ChevronDown, ChevronRight, CheckCircle2, AlertCircle, Receipt, MapPin, Building2, Search } from 'lucide-react'
 import type { CeoData } from './CeoContent'
-import type { Settlement, Inquiry, Customer, EstimateItem } from '@/lib/supabase/types'
+import type { Settlement, Inquiry, Customer, EstimateItem, Estimate } from '@/lib/supabase/types'
 import { toast } from 'sonner'
 
 // 체결 이후 단계만 세금계산서 관리 대상
@@ -19,6 +19,7 @@ interface SettRow extends Settlement {
   inquiry?: Inquiry
   customer?: Customer
   items?: EstimateItem[]
+  finalEstimate?: Estimate
 }
 
 type ViewTab = 'unissued' | 'issued' | 'all'
@@ -43,7 +44,7 @@ function ElapsedBadge({ days, label }: { days: number | null; label?: string }) 
 }
 
 export default function TaxInvoiceTab({ data }: { data: CeoData }) {
-  const { settlements, inquiries, customers, estimateItems, reload } = data
+  const { settlements, inquiries, customers, estimateItems, estimates, reload } = data
   const [viewTab, setViewTab]         = useState<ViewTab>('unissued')
   const [sortKey, setSortKey]         = useState<SortKey>('기본순')
   const [processing, setProcessing]   = useState<string | null>(null)
@@ -56,10 +57,11 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
   // 체결 이후 정산 건만 대상
   const rows: SettRow[] = settlements
     .map(s => {
-      const inquiry  = inquiries.find(q => q.id === s.inquiry_id)
-      const customer = inquiry?.customer_id ? customerMap.get(inquiry.customer_id) : undefined
-      const items    = estimateItems.filter(it => it.inquiry_id === s.inquiry_id)
-      return { ...s, inquiry, customer, items }
+      const inquiry       = inquiries.find(q => q.id === s.inquiry_id)
+      const customer      = inquiry?.customer_id ? customerMap.get(inquiry.customer_id) : undefined
+      const items         = estimateItems.filter(it => it.inquiry_id === s.inquiry_id)
+      const finalEstimate = estimates.find(e => e.inquiry_id === s.inquiry_id && e.is_final)
+      return { ...s, inquiry, customer, items, finalEstimate }
     })
     .filter(s => TAX_STATUSES.includes(s.inquiry?.status || ''))
     .sort((a, b) => (a.inquiry?.event_start || '').localeCompare(b.inquiry?.event_start || ''))
@@ -459,6 +461,31 @@ function TaxRow({
               <AmountItem label="💰 청구금액(합계)" value={row.invoice_amount || row.supply_price + row.vat} highlight />
               <AmountItem label="🔴 잔액"           value={balance} danger={balance > 0} />
             </div>
+            {/* 견적 변경 이력 */}
+            {row.finalEstimate?.prev_total_price != null && (
+              <div className="mt-3 pt-3 border-t border-dashed border-gray-200 space-y-1">
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">견적 변경 이력</p>
+                <div className="flex items-center gap-2 text-xs flex-wrap">
+                  <span className="text-gray-400 line-through">{formatKRW(row.finalEstimate.prev_total_price)}</span>
+                  <span className="text-gray-400">→</span>
+                  <span className="font-bold text-blue-700">{formatKRW(row.invoice_amount || row.supply_price + row.vat)}</span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                    (row.invoice_amount || row.supply_price + row.vat) > row.finalEstimate.prev_total_price
+                      ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'
+                  }`}>
+                    {(row.invoice_amount || row.supply_price + row.vat) > row.finalEstimate.prev_total_price ? '▲' : '▼'}
+                    {formatKRW(Math.abs((row.invoice_amount || row.supply_price + row.vat) - row.finalEstimate.prev_total_price))}
+                  </span>
+                </div>
+                {row.finalEstimate.prev_items_summary && (
+                  <p className="text-[10px] text-gray-400">
+                    이전 품목: <span className="line-through">{row.finalEstimate.prev_items_summary}</span>
+                    {' → '}
+                    <span className="text-gray-600 font-medium">{itemSummary || '(현재 품목)'}</span>
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
           {/* 메모 */}

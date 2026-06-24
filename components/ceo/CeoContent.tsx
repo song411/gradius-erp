@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { db } from '@/lib/supabase/api'
-import type { Inquiry, Settlement, Payout, Assignment, Customer, EstimateItem } from '@/lib/supabase/types'
+import type { Inquiry, Settlement, Payout, Assignment, Customer, EstimateItem, Estimate } from '@/lib/supabase/types'
 import { BarChart3, Receipt, Banknote, Building2, TrendingUp } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 
@@ -21,6 +21,7 @@ export interface CeoData {
   assignments:   Assignment[]
   customers:     Customer[]
   estimateItems: EstimateItem[]   // 견적서 품목 (inquiry_id 기준)
+  estimates:     Estimate[]       // 견적서 (prev_total_price 등 변경 이력용)
   reload:        () => void
 }
 
@@ -41,15 +42,16 @@ export default function CeoContent() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [inquiries, settlements, payouts, assignments, customers, estimateItems] = await Promise.all([
+    const [inquiries, settlements, payouts, assignments, customers, estimateItems, estimates] = await Promise.all([
       db.list<Inquiry>('inquiries'),
       db.list<Settlement>('settlements'),
       db.list<Payout>('payouts', { order: 'created_at', asc: false }),
       db.list<Assignment>('assignments', { order: 'assigned_at', asc: false }),
       db.list<Customer>('customers'),
       db.list<EstimateItem>('estimate_items'),
+      db.list<Estimate>('estimates'),
     ])
-    setData({ inquiries, settlements, payouts, assignments, customers, estimateItems })
+    setData({ inquiries, settlements, payouts, assignments, customers, estimateItems, estimates })
     setLoading(false)
   }, [])
 

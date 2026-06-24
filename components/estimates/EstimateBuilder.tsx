@@ -352,7 +352,22 @@ export default function EstimateBuilder({
       let estId: string
 
       if (editTarget) {
-        await db.update('estimates', editTarget.id, payload)
+        // 수정 전 이전 금액·품목 스냅샷 저장
+        const oldItems = await db.list<EstimateItem>('estimate_items', {
+          filters: { estimate_id: editTarget.id },
+        })
+        const prevRoleMap = new Map<string, number>()
+        oldItems
+          .filter(it => it.role_name && !SUPPORT_TYPES.includes(it.item_type as any))
+          .forEach(it => prevRoleMap.set(it.role_name!, (prevRoleMap.get(it.role_name!) || 0) + (it.quantity || 1)))
+        const prevItemsSummary = Array.from(prevRoleMap.entries())
+          .map(([name, qty]) => `${name} ${qty}명`).join(', ') || null
+
+        await db.update('estimates', editTarget.id, {
+          ...payload,
+          prev_total_price:   editTarget.total_price,
+          prev_items_summary: prevItemsSummary,
+        })
         estId = editTarget.id
         await db.deleteWhere('estimate_items', { estimate_id: editTarget.id })
       } else {
