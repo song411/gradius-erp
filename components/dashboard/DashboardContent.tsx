@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { db } from '@/lib/supabase/api'
 import { formatKRW, formatNumber, STATUS_COLORS } from '@/lib/utils'
+import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   TrendingUp, Users, FileText, AlertCircle, CheckCircle,
@@ -54,6 +55,7 @@ export default function DashboardContent() {
   const [staffCount,  setStaffCount]  = useState(0)
   const [customerCount, setCustomerCount] = useState(0)
   const [loading,     setLoading]     = useState(true)
+  const [bulkProcessing, setBulkProcessing] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -89,6 +91,7 @@ export default function DashboardContent() {
   const todayStr    = now.toISOString().split('T')[0]
   const thisMonth   = toYM(todayStr)
   const in7Days     = new Date(now); in7Days.setDate(in7Days.getDate() + 7)
+  const in14Days    = new Date(now); in14Days.setDate(in14Days.getDate() + 14)
 
   // inquiry_id → 마지막 settlement (단일 조회용)
   const settlementMap  = new Map(settlements.map(s => [s.inquiry_id, s]))
@@ -194,6 +197,33 @@ export default function DashboardContent() {
     ['체결', '배정완료'].includes(i.status) && (assignCountMap.get(i.id) || 0) === 0
   )
 
+  // 체결 임박 미확정 (견적 상태 + 14일 이내 + 아직 시작 전)
+  const pendingCheol = inquiries
+    .filter(i => {
+      if (i.status !== '견적' || !i.event_start) return false
+      const s = new Date(i.event_start); s.setHours(0,0,0,0)
+      return s > now && s <= in14Days
+    })
+    .sort((a, b) => (a.event_start || '').localeCompare(b.event_start || ''))
+
+  // 행사일이 지났으나 접수/견적 상태로 남은 건 → 미체결 처리 대상
+  const overdueMiCheol = inquiries.filter(i =>
+    ['접수', '견적'].includes(i.status) && !!i.event_start && i.event_start.substring(0, 10) < todayStr
+  )
+
+  async function handleBulkMiCheol() {
+    if (!overdueMiCheol.length) return
+    setBulkProcessing(true)
+    try {
+      await Promise.all(overdueMiCheol.map(i => db.update('inquiries', i.id, { status: '미체결' })))
+      const inqs = await db.list<Inquiry>('inquiries', { order: 'event_start', asc: false })
+      setInquiries(inqs)
+      toast.success(`${overdueMiCheol.length}건 미체결 처리 완료`)
+    } finally {
+      setBulkProcessing(false)
+    }
+  }
+
   // 연도 기준 1~12월 고정 차트 (rev2026와 범위 일치)
   const monthlyChart = Array.from({ length: 12 }, (_, i) => {
     const month = String(i + 1).padStart(2, '0')
@@ -249,6 +279,10 @@ export default function DashboardContent() {
           happeningToday={happeningToday}
           prepThisWeek={prepThisWeek}
           unassigned={unassigned}
+          pendingCheol={pendingCheol}
+          overdueMiCheol={overdueMiCheol}
+          bulkProcessing={bulkProcessing}
+          onBulkMiCheol={handleBulkMiCheol}
           activeInquiries={activeInquiries}
           monthlyRevenue={monthlyRevenue}
           monthlyInvoice={monthlyInvoice}
@@ -298,6 +332,7 @@ export default function DashboardContent() {
 // ═══════════════════════════════════════════
 function OverviewTab({
   inquiries, settlements, happeningToday, prepThisWeek, unassigned,
+  pendingCheol, overdueMiCheol, bulkProcessing, onBulkMiCheol,
   activeInquiries, monthlyRevenue, monthlyInvoice, monthlyProfit, monthlyPayout,
   monthlySettCount, monthlyNewInquiries,
   unpaidAmount, unpaidTop5, staffCount, customerCount,
@@ -306,6 +341,8 @@ function OverviewTab({
 }: {
   inquiries: Inquiry[]; settlements: Settlement[]
   happeningToday: Inquiry[]; prepThisWeek: Inquiry[]; unassigned: Inquiry[]
+  pendingCheol: Inquiry[]; overdueMiCheol: Inquiry[]
+  bulkProcessing: boolean; onBulkMiCheol: () => void
   activeInquiries: Inquiry[]; monthlyRevenue: number; monthlyInvoice: number
   monthlyProfit: number; monthlyPayout: number; monthlySettCount: number; monthlyNewInquiries: number
   unpaidAmount: number; unpaidTop5: Settlement[]; staffCount: number; customerCount: number
@@ -327,7 +364,7 @@ function OverviewTab({
   return (
     <div className="space-y-4">
       {/* 알림 배너 */}
-      {(happeningToday.length > 0 || unassigned.length > 0 || prepThisWeek.length > 0) && (
+      {(happeningToday.length > 0 || unassigned.length > 0 || prepThisWeek.length > 0 || pendingCheol.length > 0 || overdueMiCheol.length > 0) && (
         <div className="space-y-2">
           {happeningToday.length > 0 && (
             <AlertBanner color="yellow" icon={<Zap className="h-4 w-4 text-yellow-600" />}
@@ -365,6 +402,49 @@ function OverviewTab({
                 </Link>
               ))}
               {unassigned.length > 8 && <span className="text-xs text-red-400">+{unassigned.length-8}건</span>}
+            </AlertBanner>
+          )}
+          {pendingCheol.length > 0 && (
+            <AlertBanner color="orange" icon={<AlertCircle className="h-4 w-4 text-orange-600" />}
+              title={`체결 임박 미확정 ${pendingCheol.length}건 — 2주 이내 행사인데 아직 체결 전입니다`}>
+              {pendingCheol.map(inq => {
+                const dd = dDay(inq.event_start!)
+                return (
+                  <div key={inq.id} className="flex items-center gap-2 bg-orange-100 rounded-lg px-2.5 py-1.5">
+                    <Link href={`/inquiries/${inq.id}`} className="text-xs font-semibold text-orange-900 hover:underline">
+                      D-{dd} {inq.event_name || inq.company_name}
+                    </Link>
+                    {inq.contact_name && (
+                      <span className="text-[10px] text-orange-600">· {inq.contact_name}</span>
+                    )}
+                    {inq.phone && (
+                      <a href={`tel:${inq.phone}`} className="text-[10px] font-bold text-orange-700 hover:underline">
+                        📞 {inq.phone}
+                      </a>
+                    )}
+                  </div>
+                )
+              })}
+            </AlertBanner>
+          )}
+          {overdueMiCheol.length > 0 && (
+            <AlertBanner color="red" icon={<AlertCircle className="h-4 w-4 text-red-500" />}
+              title={`행사일이 지난 미처리 건 ${overdueMiCheol.length}건 — 미체결 처리가 필요합니다`}>
+              {overdueMiCheol.slice(0, 5).map(inq => (
+                <Link key={inq.id} href={`/inquiries/${inq.id}`}
+                  className="text-xs bg-red-100 text-red-700 rounded-full px-2.5 py-0.5 hover:bg-red-200">
+                  {inq.event_name || inq.company_name}
+                  {inq.event_start && <span className="ml-1 opacity-60">{inq.event_start.substring(5,10)}</span>}
+                </Link>
+              ))}
+              {overdueMiCheol.length > 5 && <span className="text-xs text-red-400">+{overdueMiCheol.length - 5}건 더</span>}
+              <button
+                onClick={onBulkMiCheol}
+                disabled={bulkProcessing}
+                className="text-xs bg-red-600 text-white rounded-lg px-3 py-1 hover:bg-red-700 disabled:opacity-50 font-semibold ml-auto"
+              >
+                {bulkProcessing ? '처리 중...' : `${overdueMiCheol.length}건 일괄 미체결 처리`}
+              </button>
             </AlertBanner>
           )}
         </div>
@@ -951,12 +1031,13 @@ function ClientsTab({ inquiries, settlements, payoutByInquiry }: {
 
 // ── 공통 서브 컴포넌트 ──
 function AlertBanner({ color, icon, title, children }: {
-  color: 'yellow'|'blue'|'red'; icon: React.ReactNode; title: string; children: React.ReactNode
+  color: 'yellow'|'blue'|'red'|'orange'; icon: React.ReactNode; title: string; children: React.ReactNode
 }) {
   const cls = {
     yellow: 'bg-yellow-50 border-yellow-300',
     blue:   'bg-blue-50 border-blue-200',
     red:    'bg-red-50 border-red-200',
+    orange: 'bg-orange-50 border-orange-300',
   }
   return (
     <div className={`border rounded-xl px-4 py-3 flex items-start gap-3 ${cls[color]}`}>
