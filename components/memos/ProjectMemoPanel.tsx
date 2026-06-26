@@ -66,7 +66,7 @@ export default function ProjectMemoPanel({ inquiryId, compact = false }: Props) 
     try {
       await db.insert('project_memos', {
         inquiry_id: inquiryId,
-        type: activeTab,
+        type: compact ? '인원추천' : activeTab,
         content: content.trim(),
         author: author.trim() || '미지정',
       })
@@ -89,32 +89,78 @@ export default function ProjectMemoPanel({ inquiryId, compact = false }: Props) 
     load()
   }
 
-  // ── compact 모드: 배정 뷰 우측 패널에 인원추천 메모만 표시 ──
+  // ── compact 모드: 배정 뷰 우측 패널에 인원추천 메모 + 추가 폼 ──
   if (compact) {
     const recMemos = memos.filter(m => m.type === '인원추천')
-    if (!loading && recMemos.length === 0) return null
     return (
       <div className="bg-indigo-50 border border-indigo-100 rounded-lg mx-4 mt-3 mb-1">
-        <button
-          onClick={() => setExpanded(v => !v)}
-          className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-indigo-700 hover:bg-indigo-100/60 rounded-lg transition-colors"
-        >
-          <Users className="h-3.5 w-3.5 shrink-0" />
-          <span>인원추천 메모 {recMemos.length > 0 && `(${recMemos.length}건)`}</span>
-          <span className="ml-auto">{expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}</span>
-        </button>
+        {/* 헤더 */}
+        <div className="flex items-center gap-2 px-3 py-2">
+          <button
+            onClick={() => setExpanded(v => !v)}
+            className="flex items-center gap-2 text-xs font-medium text-indigo-700 hover:text-indigo-900 transition-colors flex-1"
+          >
+            <Users className="h-3.5 w-3.5 shrink-0" />
+            <span>인원추천 메모 {recMemos.length > 0 && `(${recMemos.length}건)`}</span>
+            {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          </button>
+          <button
+            onClick={() => { setShowForm(v => !v); setExpanded(true) }}
+            className="flex items-center gap-1 text-[11px] font-medium text-indigo-600 hover:text-indigo-800 bg-white border border-indigo-200 rounded px-2 py-0.5 transition-colors"
+          >
+            <Plus className="h-3 w-3" />
+            추천메모 추가
+          </button>
+        </div>
+
         {expanded && (
           <div className="px-3 pb-3 space-y-2">
+            {/* 추가 폼 */}
+            {showForm && (
+              <div className="bg-white rounded-lg p-2.5 border border-indigo-200 space-y-1.5">
+                <Input
+                  placeholder="작성자 이름 (예: 송무재)"
+                  value={author}
+                  onChange={e => setAuthor(e.target.value)}
+                  className="text-xs h-7"
+                />
+                <Textarea
+                  placeholder={'예:\n이순철 (주차 경험, 교원대 참여자)\n김태옥 (나이 많음, 어린이날 행사 참여)'}
+                  value={content}
+                  onChange={e => setContent(e.target.value)}
+                  rows={4}
+                  className="text-xs resize-none"
+                />
+                <div className="flex gap-1.5 justify-end">
+                  <Button size="sm" variant="outline" className="h-6 text-[11px] px-2" onClick={() => { setShowForm(false); setContent(''); setAuthor('') }}>
+                    취소
+                  </Button>
+                  <Button size="sm" className="h-6 text-[11px] px-2" onClick={handleAdd} disabled={saving}>
+                    {saving ? '저장 중...' : '저장'}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* 메모 목록 */}
             {loading ? (
               <div className="flex justify-center py-2">
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-400" />
               </div>
+            ) : recMemos.length === 0 && !showForm ? (
+              <p className="text-[11px] text-indigo-400 text-center py-1">등록된 추천 메모가 없습니다</p>
             ) : (
               recMemos.map(m => (
-                <div key={m.id} className="bg-white rounded-lg p-2.5">
+                <div key={m.id} className="bg-white rounded-lg p-2.5 group">
                   <div className="flex items-center gap-1.5 mb-1">
                     <span className="text-[11px] font-semibold text-indigo-600">추천인: {m.author}</span>
                     <span className="text-[10px] text-gray-300 ml-auto">{m.created_at?.slice(0, 10)}</span>
+                    <button
+                      onClick={() => handleDelete(m.id)}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-300 hover:text-red-400 ml-1"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
                   </div>
                   <p className="text-xs text-gray-700 whitespace-pre-line leading-relaxed">{m.content}</p>
                 </div>
