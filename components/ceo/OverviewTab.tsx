@@ -31,24 +31,37 @@ export default function OverviewTab({ data }: { data: CeoData }) {
     }, new Map()).values()
   )
 
-  // inquiry.event_start 기준 월별 데이터 (행사 시작월에만 집계, 이중 잡힘 방지)
+  // inquiry 빠른 조회 맵 — 대시보드와 동일한 날짜 기준 로직 적용
+  const inqMap = new Map(inquiries.map(q => [q.id, q]))
+
+  // 실제 지급액: payouts 우선, 없으면 settlement.payout_amount fallback — 대시보드와 동일 기준
+  const payoutByInquiry = payouts.reduce<Map<string, number>>((m, p) => {
+    if (p.inquiry_id && (p.status === '지급완료' || p.status === '완료'))
+      m.set(p.inquiry_id, (m.get(p.inquiry_id) || 0) + (p.final_pay || 0))
+    return m
+  }, new Map())
+  function getActualPayout(inquiryId: string | undefined, settPayout: number): number {
+    if (!inquiryId) return settPayout
+    const fromPayouts = payoutByInquiry.get(inquiryId)
+    return (fromPayouts !== undefined && fromPayouts > 0) ? fromPayouts : settPayout
+  }
+
+  // 월별 데이터: event_start 기준, 없으면 settlement.created_at 대체 — 대시보드와 동일 기준
   const monthlyData = Array.from({ length: 12 }, (_, i) => {
     const month = String(i + 1).padStart(2, '0')
     const key   = `${selectedYear}-${month}`
 
-    const monthInqs   = inquiries.filter(q => q.event_start?.startsWith(key))
-    const monthInqIds = new Set(monthInqs.map(q => q.id))
-
-    // deduped settlement 사용
-    const monthSets = dedupedSettlements.filter(s => s.inquiry_id && monthInqIds.has(s.inquiry_id))
-    const revenue   = monthSets.reduce((s, r) => s + (r.supply_price || 0), 0)
-
-    const monthPays = payouts.filter(p =>
-      p.inquiry_id && monthInqIds.has(p.inquiry_id) &&
-      (p.status === '지급완료' || p.status === '완료')
-    )
-    const payout = monthPays.reduce((s, p) => s + (p.final_pay || 0), 0)
-    const profit = revenue - payout
+    const monthSets = dedupedSettlements.filter(s => {
+      if (!s.inquiry_id) return false
+      const inq = inqMap.get(s.inquiry_id)
+      const dateRef = inq?.event_start || s.created_at
+      return dateRef?.startsWith(key) ?? false
+    })
+    const monthInqIds = new Set(monthSets.map(s => s.inquiry_id).filter(Boolean) as string[])
+    const monthInqs   = inquiries.filter(q => monthInqIds.has(q.id))
+    const revenue     = monthSets.reduce((s, r) => s + (r.supply_price || 0), 0)
+    const payout      = monthSets.reduce((s, r) => s + getActualPayout(r.inquiry_id, r.payout_amount), 0)
+    const profit      = revenue - payout
 
     const inqCount  = monthInqs.length
     const completed = monthInqs.filter(q => ['완료', '정산완료'].includes(q.status)).length
@@ -62,13 +75,17 @@ export default function OverviewTab({ data }: { data: CeoData }) {
     }
   })
 
-  // 연간 집계 (동일한 deduped 기준)
-  const yearInqs   = inquiries.filter(q => q.event_start?.startsWith(String(selectedYear)))
-  const yearInqIds = new Set(yearInqs.map(q => q.id))
-  const yearSets   = dedupedSettlements.filter(s => s.inquiry_id && yearInqIds.has(s.inquiry_id))
+  // 연간 집계: event_start 기준, 없으면 settlement.created_at 대체 — 대시보드와 동일 기준
+  const yearSets = dedupedSettlements.filter(s => {
+    if (!s.inquiry_id) return false
+    const inq = inqMap.get(s.inquiry_id)
+    const dateRef = inq?.event_start || s.created_at
+    return dateRef?.startsWith(String(selectedYear)) ?? false
+  })
+  const yearInqIds = new Set(yearSets.map(s => s.inquiry_id).filter(Boolean) as string[])
+  const yearInqs   = inquiries.filter(q => yearInqIds.has(q.id))
   const yearRevenue  = yearSets.reduce((s, r) => s + (r.supply_price || 0), 0)
-  const yearPayouts  = payouts.filter(p => p.inquiry_id && yearInqIds.has(p.inquiry_id) && (p.status === '지급완료' || p.status === '완료'))
-  const yearPayout   = yearPayouts.reduce((s, p) => s + (p.final_pay || 0), 0)
+  const yearPayout   = yearSets.reduce((s, r) => s + getActualPayout(r.inquiry_id, r.payout_amount), 0)
   const yearProfit   = yearRevenue - yearPayout
   const yearReceived = yearSets.reduce((s, r) => s + (r.received_amount || 0), 0)
   const yearUnpaid   = yearSets.reduce((s, r) => s + (r.balance || 0), 0)

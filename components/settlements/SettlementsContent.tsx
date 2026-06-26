@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, Fragment } from 'react'
 import { db } from '@/lib/supabase/api'
 import { formatKRW, calcWithholdingTax, STATUS_COLORS } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
@@ -13,10 +13,20 @@ import {
 } from '@/components/ui/dialog'
 import {
   Plus, Search, Edit2, CheckCircle, AlertCircle,
-  BadgePercent, StickyNote, Banknote, ChevronDown, Sparkles, Trash2,
+  BadgePercent, StickyNote, Banknote, ChevronDown, ChevronRight, Sparkles, Trash2,
 } from 'lucide-react'
 import type { Settlement, DepositStatus, ProjectProgress, Inquiry, Payout } from '@/lib/supabase/types'
 import { toast } from 'sonner'
+
+interface PaySegment { rate: number; days: number }
+function parseNotesSegments(notes?: string | null): PaySegment[] | null {
+  if (!notes) return null
+  try {
+    const p = JSON.parse(notes)
+    if (p && typeof p === 'object' && Array.isArray(p.segments) && p.segments.length > 0) return p.segments
+  } catch {}
+  return null
+}
 
 const PROGRESS_OPTIONS: ProjectProgress[] = ['계약체결', '행사준비', '행사종료', '정산완료']
 const DEPOSIT_OPTIONS: DepositStatus[] = ['미입금', '부분입금', '입금완료']
@@ -68,6 +78,11 @@ export default function SettlementsContent() {
   // 인라인 금액 수정 (연장/변경 대응)
   const [amtEditId, setAmtEditId]       = useState<string | null>(null)
   const [amtSupply, setAmtSupply]       = useState('')
+
+  // 지급 상세 확장
+  const [expandedId, setExpandedId]       = useState<string | null>(null)
+  const [detailPayouts, setDetailPayouts] = useState<Record<string, Payout[]>>({})
+  const [detailLoading, setDetailLoading] = useState<string | null>(null)
 
   const [form, setForm] = useState({
     inquiry_id: '',
@@ -364,6 +379,24 @@ export default function SettlementsContent() {
     } catch (e) { toast.error('저장 실패: ' + (e as Error).message) }
   }
 
+  // ── 지급 상세 토글 ──
+  async function toggleDetail(s: Settlement) {
+    if (expandedId === s.id) { setExpandedId(null); return }
+    if (s.inquiry_id && !detailPayouts[s.id]) {
+      setDetailLoading(s.id)
+      try {
+        const pays = await db.list<Payout>('payouts', {
+          filters: { inquiry_id: s.inquiry_id },
+          order: 'created_at',
+        })
+        setDetailPayouts(prev => ({ ...prev, [s.id]: pays }))
+      } finally {
+        setDetailLoading(null)
+      }
+    }
+    setExpandedId(s.id)
+  }
+
   const filtered = settlements.filter(s => {
     const matchSearch = !searchText ||
       [s.company_name, s.site_name, s.inquiries?.event_name]
@@ -465,9 +498,26 @@ export default function SettlementsContent() {
                       const previewTotal = (Number(amtSupply) || 0) + previewVat
 
                       return (
-                        <tr key={s.id} className="align-top">
+                        <Fragment key={s.id}>
+                        <tr className="align-top">
                           {/* 업체명 */}
-                          <td className="font-medium">{s.company_name || s.inquiries?.company_name || '-'}</td>
+                          <td className="font-medium">
+                            <div className="flex items-center gap-1">
+                              {s.inquiry_id && (
+                                <button
+                                  onClick={() => toggleDetail(s)}
+                                  className="shrink-0 text-gray-400 hover:text-blue-500 transition-colors"
+                                  title="지급 상세 내역 보기"
+                                >
+                                  {expandedId === s.id
+                                    ? <ChevronDown className="h-3.5 w-3.5" />
+                                    : <ChevronRight className="h-3.5 w-3.5" />
+                                  }
+                                </button>
+                              )}
+                              {s.company_name || s.inquiries?.company_name || '-'}
+                            </div>
+                          </td>
                           {/* 현장명 */}
                           <td className="text-sm">{s.site_name || '-'}</td>
 
@@ -640,6 +690,90 @@ export default function SettlementsContent() {
                             </div>
                           </td>
                         </tr>
+                        {expandedId === s.id && (
+                          <tr>
+                            <td colSpan={11} className="p-0 border-b border-blue-100">
+                              <div className="bg-blue-50 px-5 py-4">
+                                {detailLoading === s.id ? (
+                                  <div className="flex items-center gap-2 py-2 text-sm text-gray-500">
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500" />
+                                    로딩 중...
+                                  </div>
+                                ) : (() => {
+                                  const HQ_NAMES = new Set(['최규성', '송무재', '여지은', '김영찬'])
+                                  const pays = detailPayouts[s.id] || []
+                                  const payable = pays.filter(p => !(p.staff_name && HQ_NAMES.has(p.staff_name)))
+                                  const calcTotal = payable.reduce((sum, p) => sum + p.final_pay, 0)
+                                  const matches = s.payout_amount > 0 && Math.abs(calcTotal - s.payout_amount) < 1000
+
+                                  if (pays.length === 0) {
+                                    return <p className="text-sm text-gray-400 py-1">등록된 지급 내역이 없습니다.</p>
+                                  }
+                                  return (
+                                    <div>
+                                      <div className="flex items-center gap-2 mb-3">
+                                        <span className="text-xs font-bold text-blue-700">인력비 지급 상세</span>
+                                        <span className="text-[10px] bg-blue-100 text-blue-600 rounded-full px-2 py-0.5">{payable.length}명</span>
+                                        {s.payout_amount > 0 && (
+                                          matches
+                                            ? <span className="text-[10px] bg-green-100 text-green-700 rounded-full px-2 py-0.5 font-semibold">✓ 정산금액 일치</span>
+                                            : <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-semibold">⚠ 금액 불일치</span>
+                                        )}
+                                      </div>
+                                      <div className="space-y-1.5">
+                                        {payable.map(p => {
+                                          const segs = parseNotesSegments(p.notes)
+                                          return (
+                                            <div key={p.id} className="flex items-center gap-3 bg-white rounded-lg px-3 py-2 border border-blue-100">
+                                              <span className="font-semibold text-sm text-gray-800 w-14 shrink-0 truncate">{p.staff_name}</span>
+                                              <div className="flex-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] text-gray-500">
+                                                {segs && segs.length > 0 ? (
+                                                  <>
+                                                    {segs.map((seg, i) => (
+                                                      <span key={i} className="bg-indigo-50 text-indigo-700 rounded px-1">{formatKRW(seg.rate)}×{seg.days}일</span>
+                                                    ))}
+                                                    <span>= 기본 {formatKRW(p.base_pay)}</span>
+                                                  </>
+                                                ) : (
+                                                  p.base_pay > 0 && <span>기본 {formatKRW(p.base_pay)}</span>
+                                                )}
+                                                {p.overtime_pay > 0  && <span>야근 +{formatKRW(p.overtime_pay)}</span>}
+                                                {p.meal_pay > 0      && <span>식비 +{formatKRW(p.meal_pay)}</span>}
+                                                {p.transport_pay > 0 && <span>교통 +{formatKRW(p.transport_pay)}</span>}
+                                                {p.bonus > 0         && <span>기타 +{formatKRW(p.bonus)}</span>}
+                                                {p.tax_deduction > 0 && <span className="text-red-400">공제 -{formatKRW(p.tax_deduction)}</span>}
+                                              </div>
+                                              <span className={`text-sm font-bold shrink-0 ${['지급완료','완료'].includes(p.status) ? 'text-green-600' : 'text-blue-700'}`}>
+                                                {formatKRW(p.final_pay)}
+                                              </span>
+                                              <span className={`text-[10px] shrink-0 px-1.5 py-0.5 rounded-full ${['지급완료','완료'].includes(p.status) ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-500'}`}>
+                                                {p.status}
+                                              </span>
+                                            </div>
+                                          )
+                                        })}
+                                      </div>
+                                      <div className="flex items-center justify-between mt-3 pt-2 border-t border-blue-200">
+                                        <span className="text-xs text-gray-500">
+                                          합계 ({payable.length}명)
+                                          {s.payout_amount > 0 && (
+                                            <span className="text-[10px] text-gray-400 ml-1.5">
+                                              · 등록 지급액 {formatKRW(s.payout_amount)}
+                                            </span>
+                                          )}
+                                        </span>
+                                        <span className={`text-sm font-extrabold ${matches ? 'text-green-700' : 'text-blue-700'}`}>
+                                          {formatKRW(calcTotal)}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  )
+                                })()}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                        </Fragment>
                       )
                     })
                   )}

@@ -44,6 +44,25 @@ function StatusBadge({ status, isHQ }: { status: string; isHQ: boolean }) {
   return <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${s[status] || 'bg-gray-100 text-gray-600'}`}>{status}</span>
 }
 
+// 구간별 단가 파싱 유틸
+interface PaySegment { rate: number; days: number }
+function parseNotesSegments(notes?: string | null): PaySegment[] | null {
+  if (!notes) return null
+  try {
+    const p = JSON.parse(notes)
+    if (p && typeof p === 'object' && Array.isArray(p.segments) && p.segments.length > 0) return p.segments
+  } catch {}
+  return null
+}
+function parseSegments(memo?: string | null): PaySegment[] | null {
+  if (!memo) return null
+  try {
+    const p = JSON.parse(memo)
+    if (Array.isArray(p.segments) && p.segments.length > 0) return p.segments
+  } catch {}
+  return null
+}
+
 // 본사 인원 고정 명단 (이름으로 판별 — DB의 is_payable 필드가 true로 잘못 저장됨)
 const HQ_STAFF_NAMES = new Set(['최규성', '송무재', '여지은', '김영찬'])
 
@@ -610,11 +629,38 @@ function GroupRow({ g, asgMap, openGroups, toggleGroup, processing, handleMarkPa
               {g.payouts.map(p => {
                 const hq = isHQByMap(p, asgMap)
                 const asg = p.assignment_id ? asgMap.get(p.assignment_id) : null
+                const segs = !hq ? (parseNotesSegments(p.notes) || (asg ? parseSegments(asg.memo) : null)) : null
                 return (
                   <tr key={p.id} className={`hover:bg-gray-50 ${hq ? 'opacity-60' : ''}`}>
-                    <td className="px-4 py-2.5 font-medium text-gray-800">
-                      {p.staff_name || '-'}
-                      {hq && <span className="ml-1 text-[10px] text-slate-400 font-normal">[본사]</span>}
+                    <td className="px-4 py-2.5">
+                      <div className="font-medium text-gray-800">
+                        {p.staff_name || '-'}
+                        {hq && <span className="ml-1 text-[10px] text-slate-400 font-normal">[본사]</span>}
+                      </div>
+                      {!hq && (
+                        <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-0.5 text-[10px] text-gray-400 leading-tight">
+                          {p.dispatch_period && (
+                            <span>📅 {p.dispatch_period} ({p.dispatch_days}일)</span>
+                          )}
+                          {segs && segs.length > 0 ? (
+                            <>
+                              {segs.map((seg, i) => (
+                                <span key={i} className="bg-indigo-50 text-indigo-600 rounded px-0.5">{formatKRW(seg.rate)}×{seg.days}일</span>
+                              ))}
+                              <span>= {formatKRW(p.base_pay)}</span>
+                            </>
+                          ) : p.base_pay > 0 ? (
+                            <span>기본 {formatKRW(p.base_pay)}</span>
+                          ) : (
+                            <span className="text-gray-300 italic">상세내역 미입력</span>
+                          )}
+                          {p.overtime_pay > 0  && <span className="text-violet-400">야근 +{formatKRW(p.overtime_pay)}</span>}
+                          {p.meal_pay > 0      && <span className="text-violet-400">식비 +{formatKRW(p.meal_pay)}</span>}
+                          {p.transport_pay > 0 && <span className="text-violet-400">교통 +{formatKRW(p.transport_pay)}</span>}
+                          {p.bonus > 0         && <span className="text-violet-400">기타 +{formatKRW(p.bonus)}</span>}
+                          {p.tax_deduction > 0 && <span className="text-red-400">공제 -{formatKRW(p.tax_deduction)}</span>}
+                        </div>
+                      )}
                     </td>
                     <td className="px-3 py-2.5 text-xs text-gray-500">{asg?.job_type || '-'}</td>
                     <td className="px-3 py-2.5 text-gray-500 text-xs">{hq ? '-' : (p.bank_name || '-')}</td>
