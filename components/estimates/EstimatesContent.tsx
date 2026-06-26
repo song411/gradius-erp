@@ -7,7 +7,7 @@ import { formatKRW, calcProfitRate } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Plus, Search, Edit2, Trash2, Eye, Package, FileText, TrendingUp, Send, Clock, CheckCircle, Star, Copy, RotateCcw } from 'lucide-react'
+import { Plus, Search, Edit2, Trash2, Eye, Package, FileText, TrendingUp, Send, Clock, CheckCircle, Star, Copy, RotateCcw, XCircle, LayoutList } from 'lucide-react'
 import type { Estimate, EstimateItem, Inquiry } from '@/lib/supabase/types'
 import EstimateBuilder from './EstimateBuilder'
 import EstimatePreview from './EstimatePreview'
@@ -15,7 +15,7 @@ import EstimatePreview from './EstimatePreview'
 type EstimateRow = Estimate & { inquiries?: Inquiry; estimate_items?: EstimateItem[] }
 
 // ── 탭 정의 ───────────────────────────────────────────────
-type TabKey = 'pending_inquiry' | 'in_progress' | 'sent'
+type TabKey = 'pending_inquiry' | 'in_progress' | 'sent' | 'contracted' | 'failed' | 'all'
 
 const TABS: { key: TabKey; label: string; icon: React.ReactNode; desc: string }[] = [
   {
@@ -36,7 +36,27 @@ const TABS: { key: TabKey; label: string; icon: React.ReactNode; desc: string }[
     icon: <Send className="h-4 w-4" />,
     desc: '고객에게 발송된 견적',
   },
+  {
+    key: 'contracted',
+    label: '체결 완료',
+    icon: <CheckCircle className="h-4 w-4" />,
+    desc: '최종 확정 완료 (계약 체결)',
+  },
+  {
+    key: 'failed',
+    label: '미체결',
+    icon: <XCircle className="h-4 w-4" />,
+    desc: '미체결 · 보류 · 취소 처리된 견적',
+  },
+  {
+    key: 'all',
+    label: '전체',
+    icon: <LayoutList className="h-4 w-4" />,
+    desc: '모든 견적 목록',
+  },
 ]
+
+const DEAD_STATUSES = ['미체결', '보류', '취소']
 
 export default function EstimatesContent() {
   const [estimates, setEstimates] = useState<EstimateRow[]>([])
@@ -266,12 +286,12 @@ export default function EstimatesContent() {
     try {
       await db.update('estimates', est.id, {
         send_status: nextStatus,
-        send_at: nextStatus === '발송완료' ? new Date().toISOString() : null,
+        sent_at: nextStatus === '발송완료' ? new Date().toISOString() : null,
       })
       toast.success(nextStatus === '발송완료' ? '발송완료로 표시됐습니다.' : '미발송으로 되돌렸습니다.')
       load()
-    } catch {
-      toast.error('상태 변경 실패')
+    } catch (e) {
+      toast.error('상태 변경 실패: ' + (e as Error).message)
     }
   }
 
@@ -309,9 +329,15 @@ export default function EstimatesContent() {
   const filteredEsts = estimates.filter(est => {
     const matchSearch = !searchText || [est.company_name, est.event_name, est.inquiries?.event_name]
       .some(v => v?.toLowerCase().includes(searchText.toLowerCase()))
+    const inqStatus = est.inquiries?.status || ''
+    const isDead = DEAD_STATUSES.includes(inqStatus)
     const isSent = est.send_status === '발송완료'
-    if (activeTab === 'in_progress') return matchSearch && !isSent
-    if (activeTab === 'sent') return matchSearch && isSent
+
+    if (activeTab === 'in_progress')  return matchSearch && !isSent && !est.is_final && !isDead
+    if (activeTab === 'sent')         return matchSearch && isSent  && !est.is_final && !isDead
+    if (activeTab === 'contracted')   return matchSearch && !!est.is_final
+    if (activeTab === 'failed')       return matchSearch && isDead  && !est.is_final
+    if (activeTab === 'all')          return matchSearch
     return false
   })
 
@@ -321,9 +347,11 @@ export default function EstimatesContent() {
   )
 
   // ── 집계 ─────────────────────────────────────────────────
-  const sentCount = estimates.filter(e => e.send_status === '발송완료').length
-  const inProgressCount = estimates.filter(e => e.send_status !== '발송완료').length
-  const totalSupply = estimates.reduce((s, e) => s + (e.supply_price || 0), 0)
+  const inProgressCount  = estimates.filter(e => e.send_status !== '발송완료' && !e.is_final && !DEAD_STATUSES.includes(e.inquiries?.status || '')).length
+  const sentCount        = estimates.filter(e => e.send_status === '발송완료'  && !e.is_final && !DEAD_STATUSES.includes(e.inquiries?.status || '')).length
+  const contractedCount  = estimates.filter(e => !!e.is_final).length
+  const failedCount      = estimates.filter(e => DEAD_STATUSES.includes(e.inquiries?.status || '') && !e.is_final).length
+  const totalSupply      = estimates.reduce((s, e) => s + (e.supply_price || 0), 0)
 
   return (
     <>
@@ -372,8 +400,11 @@ export default function EstimatesContent() {
               activeTab === tab.key ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'
             }`}>
               {tab.key === 'pending_inquiry' ? filteredPending.length
-                : tab.key === 'in_progress' ? inProgressCount
-                : sentCount}
+                : tab.key === 'in_progress'  ? inProgressCount
+                : tab.key === 'sent'         ? sentCount
+                : tab.key === 'contracted'   ? contractedCount
+                : tab.key === 'failed'       ? failedCount
+                : estimates.length}
             </span>
           </button>
         ))}
@@ -436,8 +467,8 @@ export default function EstimatesContent() {
                 </div>
               )}
 
-              {/* ── 탭 2·3: 진행 중 / 발송 완료 견적 목록 (문의별 그룹) ── */}
-              {(activeTab === 'in_progress' || activeTab === 'sent') && (
+              {/* ── 탭 2~6: 진행 중 / 발송 완료 / 체결완료 / 미체결 / 전체 ── */}
+              {(activeTab === 'in_progress' || activeTab === 'sent' || activeTab === 'contracted' || activeTab === 'failed' || activeTab === 'all') && (
                 <EstimateGroupTable
                   estimates={filteredEsts}
                   allEstimates={estimates}
