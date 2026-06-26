@@ -49,13 +49,18 @@ export default function ProjectMemoPanel({ inquiryId, compact = false }: Props) 
 
   const load = useCallback(async () => {
     setLoading(true)
-    const data = await db.list<ProjectMemo>('project_memos', {
-      filters: { inquiry_id: inquiryId },
-      order: 'created_at',
-      asc: false,
-    })
-    setMemos(data)
-    setLoading(false)
+    try {
+      const data = await db.list<ProjectMemo>('project_memos', {
+        filters: { inquiry_id: inquiryId },
+        order: 'created_at',
+        asc: false,
+      })
+      setMemos(data)
+    } catch {
+      // 테이블 미생성 등 에러 시 빈 목록 유지
+    } finally {
+      setLoading(false)
+    }
   }, [inquiryId])
 
   useEffect(() => { load() }, [load])
