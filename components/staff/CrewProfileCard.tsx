@@ -1,10 +1,12 @@
 'use client'
 
-import { useState } from 'react'
-import type { Staff } from '@/lib/supabase/types'
-import { X, Edit2, Star, Phone, MapPin, Languages, Car, CreditCard, FileText, Eye, EyeOff, IdCard } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import type { Staff, Assignment, Payout } from '@/lib/supabase/types'
+import { X, Edit2, Star, Phone, MapPin, Languages, Car, CreditCard, FileText, Eye, EyeOff, IdCard, History, CalendarDays, Briefcase, TrendingUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { motion, AnimatePresence } from 'framer-motion'
+import { db } from '@/lib/supabase/api'
+import { formatKRW } from '@/lib/utils'
 
 // 추천등급별 헤더 테마
 const THEME: Record<string, { bg: string; badge: string; text: string; ring: string }> = {
@@ -90,7 +92,32 @@ interface Props {
 
 export default function CrewProfileCard({ staff, onClose, onEdit }: Props) {
   const theme = THEME[staff.recommend] || THEME['일반']
-  const [showId, setShowId] = useState(false) // 주민등록번호 표시 토글
+  const [showId, setShowId] = useState(false)
+  const [activeTab, setActiveTab] = useState<'profile' | 'history'>('profile')
+  const [assignments, setAssignments] = useState<Assignment[]>([])
+  const [payouts, setPayouts] = useState<Payout[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+
+  const loadHistory = useCallback(async () => {
+    setHistoryLoading(true)
+    const [asgns, pays] = await Promise.all([
+      db.list<Assignment>('assignments', {
+        filters: { staff_id: staff.id },
+        order: 'assigned_at', asc: false,
+      }),
+      db.list<Payout>('payouts', {
+        filters: { staff_name: staff.name },
+        order: 'created_at', asc: false,
+      }),
+    ])
+    setAssignments(asgns)
+    setPayouts(pays)
+    setHistoryLoading(false)
+  }, [staff.id, staff.name])
+
+  useEffect(() => {
+    if (activeTab === 'history') loadHistory()
+  }, [activeTab, loadHistory])
 
   const englishLabel: Record<string, string> = {
     '하': '영어 기초 (하)',
@@ -155,8 +182,115 @@ export default function CrewProfileCard({ staff, onClose, onEdit }: Props) {
           </div>
         </div>
 
+        {/* 탭 */}
+        <div className="flex border-b border-gray-100 px-6 bg-white">
+          {([
+            { key: 'profile', label: '프로필' },
+            { key: 'history', label: '참여 이력', icon: <History className="h-3.5 w-3.5" /> },
+          ] as const).map(t => (
+            <button
+              key={t.key}
+              onClick={() => setActiveTab(t.key)}
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
+                activeTab === t.key
+                  ? `border-current ${theme.text}`
+                  : 'border-transparent text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              {'icon' in t && t.icon}{t.label}
+            </button>
+          ))}
+        </div>
+
         {/* 본문 */}
         <div className="px-6 pb-6 -mt-4">
+
+          {/* ── 참여 이력 탭 ── */}
+          {activeTab === 'history' && (
+            <div className="mt-4">
+              {historyLoading ? (
+                <div className="flex justify-center py-12">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500" />
+                </div>
+              ) : (
+                <>
+                  {/* 요약 카드 */}
+                  {(() => {
+                    const active = assignments.filter(a => a.status !== '취소')
+                    const totalDays = active.reduce((s, a) => s + (a.work_days || 0), 0)
+                    const totalPaid = payouts.filter(p => p.status === '지급완료' || p.status === '완료').reduce((s, p) => s + (p.final_pay || 0), 0)
+                    return (
+                      <div className="grid grid-cols-3 gap-3 mb-4">
+                        {[
+                          { icon: <Briefcase className="h-4 w-4" />, label: '총 참여 행사', value: `${active.length}회`, color: 'text-blue-600 bg-blue-50' },
+                          { icon: <CalendarDays className="h-4 w-4" />, label: '총 참여 일수', value: `${totalDays}일`, color: 'text-indigo-600 bg-indigo-50' },
+                          { icon: <TrendingUp className="h-4 w-4" />, label: '지급완료 합계', value: formatKRW(totalPaid), color: 'text-emerald-600 bg-emerald-50' },
+                        ].map((card, i) => (
+                          <div key={i} className={`rounded-xl p-3 flex items-center gap-2.5 ${card.color}`}>
+                            {card.icon}
+                            <div>
+                              <p className="text-[10px] opacity-70">{card.label}</p>
+                              <p className="text-sm font-bold">{card.value}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })()}
+
+                  {/* 참여 행사 목록 */}
+                  {assignments.length === 0 ? (
+                    <div className="text-center py-10 text-gray-400 text-sm">
+                      <History className="h-8 w-8 mx-auto mb-2 opacity-20" />
+                      <p>참여 이력이 없습니다</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+                      {assignments.map(a => {
+                        const payout = payouts.find(p => p.assignment_id === a.id)
+                        return (
+                          <div key={a.id} className="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-2 hover:bg-gray-100 transition-colors">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium text-gray-800 truncate">{a.event_name || '-'}</p>
+                              <div className="flex items-center gap-2 mt-0.5 text-[10px] text-gray-400">
+                                <span className="bg-blue-50 text-blue-600 px-1.5 rounded">{a.job_type || '-'}</span>
+                                {a.start_date && <span>{a.start_date.slice(0, 10)}</span>}
+                                {a.work_days && <span>{a.work_days}일</span>}
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              {payout ? (
+                                <p className="text-xs font-semibold text-emerald-600">{formatKRW(payout.final_pay)}</p>
+                              ) : (
+                                <p className="text-xs text-gray-300">미지급</p>
+                              )}
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                                a.status === '확정' ? 'bg-green-100 text-green-600' :
+                                a.status === '배정중' ? 'bg-yellow-100 text-yellow-600' :
+                                a.status === '취소' ? 'bg-gray-100 text-gray-400' :
+                                'bg-blue-100 text-blue-600'
+                              }`}>{a.status}</span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* 이력 탭 하단 액션 */}
+              <div className="flex justify-end gap-2 mt-4 pt-4 border-t">
+                <Button variant="outline" onClick={onClose}>닫기</Button>
+                <Button onClick={() => { onClose(); onEdit(staff) }} className="gap-1">
+                  <Edit2 className="h-3.5 w-3.5" />수정하기
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* ── 프로필 탭 ── */}
+          {activeTab === 'profile' && (<>
           <div className="grid grid-cols-3 gap-4">
 
             {/* 왼쪽: 점수 */}
@@ -268,13 +402,15 @@ export default function CrewProfileCard({ staff, onClose, onEdit }: Props) {
             </div>
           </div>
 
-          {/* 하단 액션 */}
+          {/* 프로필 탭 하단 액션 */}
           <div className="flex justify-end gap-2 mt-4 pt-4 border-t">
             <Button variant="outline" onClick={onClose}>닫기</Button>
             <Button onClick={() => { onClose(); onEdit(staff) }} className="gap-1">
               <Edit2 className="h-3.5 w-3.5" />수정하기
             </Button>
           </div>
+          </>
+          )}
         </div>
       </motion.div>
     </motion.div>
