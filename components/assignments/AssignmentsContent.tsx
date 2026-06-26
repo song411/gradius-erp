@@ -15,6 +15,7 @@ import {
 import StaffSearchModal from './StaffSearchModal'
 import TeamAssignModal, { type TeamAssignData } from './TeamAssignModal'
 import StaffRecommendModal from './StaffRecommendModal'
+import ProjectMemoPanel from '@/components/memos/ProjectMemoPanel'
 import { toast } from 'sonner'
 
 // 본사 인원 ID 목록 (certifications에 '본사직원' 포함)
@@ -727,6 +728,9 @@ export default function AssignmentsContent() {
                 </div>
               </div>
             </div>
+
+            {/* 인원추천 메모 배너 */}
+            <ProjectMemoPanel inquiryId={selectedInq.id} compact />
 
             {/* 슬롯 목록 */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3">

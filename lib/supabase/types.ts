@@ -354,6 +354,17 @@ export interface Payout {
   updated_at: string
 }
 
+export type ProjectMemoType = '인원추천' | '운영메모' | '피드백'
+
+export interface ProjectMemo {
+  id: string
+  inquiry_id: string
+  type: ProjectMemoType
+  content: string
+  author?: string
+  created_at: string
+}
+
 // 조인 타입
 export interface InquiryWithCustomer extends Inquiry {
   customers?: Customer

@@ -17,10 +17,11 @@ import {
 } from '@/components/ui/dialog'
 import {
   ArrowLeft, FileText, Users, CreditCard, CheckCircle,
-  Plus, Trash2, ChevronRight, AlertCircle, Zap, ArrowRight
+  Plus, Trash2, ChevronRight, AlertCircle, Zap, ArrowRight, MessageSquare
 } from 'lucide-react'
 import Link from 'next/link'
 import type { Inquiry, Estimate, EstimateItem, Assignment, Settlement, InquiryStatus } from '@/lib/supabase/types'
+import ProjectMemoPanel from '@/components/memos/ProjectMemoPanel'
 
 // ── 페이 텍스트 추출 (notes에서 [페이: xxx] 파싱) ───────────────
 function extractPayDetail(notes: string | null | undefined): string {
@@ -613,6 +614,19 @@ export default function InquiryDetail({ id }: { id: string }) {
               </div>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* ── 프로젝트 메모 ── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <MessageSquare className="h-4 w-4 text-indigo-500" />
+            프로젝트 메모
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0 pb-2">
+          <ProjectMemoPanel inquiryId={id} />
         </CardContent>
       </Card>
 
