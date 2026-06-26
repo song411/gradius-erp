@@ -26,6 +26,12 @@ const ALL_PIPELINE = [
   { status: '완료',    color: '#22C55E' },
   { status: '정산완료', color: '#10B981' },
 ]
+// 이탈/비활성 단계 (파이프라인 외)
+const DEAD_STATUSES = [
+  { status: '미체결', color: '#F97316' },
+  { status: '보류',   color: '#9CA3AF' },
+  { status: '취소',   color: '#6B7280' },
+]
 const CHART_COLORS = ['#3B82F6', '#8B5CF6', '#22C55E', '#EAB308', '#EF4444', '#06B6D4', '#F97316', '#EC4899']
 
 const TABS = [
@@ -540,6 +546,32 @@ function OverviewTab({
                 </div>
               )
             })}
+
+            {/* ── 구분선 ── */}
+            <div className="flex items-center self-stretch mx-2 shrink-0">
+              <div className="w-px h-12 bg-gray-200 rounded-full" />
+            </div>
+
+            {/* ── 이탈/비활성 (미체결·보류·취소) ── */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {DEAD_STATUSES.map((stage, idx) => {
+                const cnt = inquiries.filter(i => i.status === stage.status).length
+                return (
+                  <div key={stage.status} className="flex items-center gap-1.5 shrink-0">
+                    <Link href={`/inquiries?status=${stage.status}`}>
+                      <div className="rounded-xl px-3 py-3 text-center min-w-[68px] text-white cursor-pointer transition-all hover:-translate-y-1 hover:shadow-md opacity-75 hover:opacity-100"
+                        style={{ backgroundColor: stage.color }}>
+                        <div className="text-2xl font-bold">{cnt}</div>
+                        <div className="text-[11px] font-medium opacity-90 mt-0.5">{stage.status}</div>
+                      </div>
+                    </Link>
+                    {idx < DEAD_STATUSES.length - 1 && (
+                      <span className="text-gray-300 text-sm font-light shrink-0">·</span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
           </div>
         </CardContent>
       </Card>
