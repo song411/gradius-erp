@@ -12,6 +12,8 @@ import GuideModal from './tools/GuideModal'
 import KitModal from './tools/KitModal'
 import IncomeModal from './tools/IncomeModal'
 import DispatchModal from './tools/DispatchModal'
+import NaverNewsModal from './tools/NaverNewsModal'
+import YoutubeModal from './tools/YoutubeModal'
 
 // ───────── 도구 정의 ─────────
 type ToolStatus = 'ready' | 'beta' | 'soon'
@@ -140,6 +142,25 @@ const TOOLS: Tool[] = [
     status: 'ready',
     gradient: 'from-slate-600 to-gray-800',
   },
+  // 수집 & 리서치
+  {
+    id: 'naver-news',
+    emoji: '📰',
+    name: '네이버 뉴스 수집',
+    desc: '키워드로 최신 뉴스를 검색하고 결과를 이메일로 받아보세요',
+    category: '수집 & 리서치',
+    status: 'ready',
+    gradient: 'from-green-500 to-emerald-600',
+  },
+  {
+    id: 'youtube',
+    emoji: '▶️',
+    name: '유튜브 영상 수집',
+    desc: '키워드로 영상을 검색하고 조회수·좋아요·구독자 수를 한눈에 확인하세요',
+    category: '수집 & 리서치',
+    status: 'ready',
+    gradient: 'from-red-500 to-rose-600',
+  },
   // AI & 데이터
   {
     id: 'ai',
@@ -161,7 +182,7 @@ const TOOLS: Tool[] = [
   },
 ]
 
-const CATEGORIES = ['전체', '가이드 & 도구', '경비업무', '팀 & 크루', '계산 도구', '재미 & 동기부여', 'AI & 데이터']
+const CATEGORIES = ['전체', '가이드 & 도구', '경비업무', '팀 & 크루', '계산 도구', '재미 & 동기부여', '수집 & 리서치', 'AI & 데이터']
 const STATUS_META: Record<ToolStatus, { label: string; cls: string }> = {
   ready: { label: '사용 가능',    cls: 'bg-green-100 text-green-700 border-green-200' },
   beta:  { label: 'BETA',        cls: 'bg-amber-100 text-amber-700 border-amber-200' },
@@ -176,8 +197,8 @@ function ToolModal({ toolId, onClose }: { toolId: string; onClose: () => void })
   if (toolId === 'income-ledger')  return <IncomeModal    onClose={onClose} />
   if (toolId === 'dispatch' || toolId === 'deploy-report') return <DispatchModal onClose={onClose} />
 
-  // kit은 넓은 모달이 필요하므로 별도 max-w 적용
-  const isWide = toolId === 'kit'
+  const isExtraWide = toolId === 'youtube' || toolId === 'naver-news'
+  const maxW = isExtraWide ? 'max-w-3xl' : 'max-w-2xl'
 
   return (
     <AnimatePresence>
@@ -185,17 +206,19 @@ function ToolModal({ toolId, onClose }: { toolId: string; onClose: () => void })
         <motion.div className="absolute inset-0 bg-black/50 backdrop-blur-sm"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           onClick={onClose} />
-        <motion.div className={`relative z-10 w-full ${isWide ? 'max-w-2xl' : 'max-w-2xl'} bg-white rounded-2xl shadow-2xl overflow-hidden`}
+        <motion.div className={`relative z-10 w-full ${maxW} bg-white rounded-2xl shadow-2xl overflow-hidden`}
           initial={{ opacity: 0, scale: 0.94, y: 16 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.96, y: 8 }}
           transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}>
-          {toolId === 'contacts'  && <ContactsModal onClose={onClose} />}
-          {toolId === 'mbti'      && <MbtiModal     onClose={onClose} />}
-          {toolId === 'taxcalc'   && <TaxCalcModal  onClose={onClose} />}
-          {toolId === 'tarot'     && <TarotModal    onClose={onClose} />}
-          {toolId === 'quote'     && <QuoteModal    onClose={onClose} />}
-          {toolId === 'kit'       && <KitModal      onClose={onClose} />}
+          {toolId === 'contacts'   && <ContactsModal  onClose={onClose} />}
+          {toolId === 'mbti'       && <MbtiModal      onClose={onClose} />}
+          {toolId === 'taxcalc'    && <TaxCalcModal   onClose={onClose} />}
+          {toolId === 'tarot'      && <TarotModal     onClose={onClose} />}
+          {toolId === 'quote'      && <QuoteModal     onClose={onClose} />}
+          {toolId === 'kit'        && <KitModal       onClose={onClose} />}
+          {toolId === 'naver-news' && <NaverNewsModal onClose={onClose} />}
+          {toolId === 'youtube'    && <YoutubeModal   onClose={onClose} />}
         </motion.div>
       </div>
     </AnimatePresence>
