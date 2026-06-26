@@ -17,6 +17,7 @@ import StaffSearchModal from './StaffSearchModal'
 import TeamAssignModal, { type TeamAssignData } from './TeamAssignModal'
 import StaffRecommendModal from './StaffRecommendModal'
 import ProjectMemoPanel from '@/components/memos/ProjectMemoPanel'
+import CrewProfileCard from '@/components/staff/CrewProfileCard'
 import { toast } from 'sonner'
 import { DndContext, DragEndEvent, useDraggable, useDroppable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
@@ -284,6 +285,9 @@ export default function AssignmentsContent() {
 
   // 구간 편집 중인 배정 ID
   const [editingSegmentsId, setEditingSegmentsId] = useState<string | null>(null)
+
+  // 크루 프로필 모달
+  const [profileStaff, setProfileStaff] = useState<Staff | null>(null)
 
   // 스태프 드래그 패널
   const [showStaffPanel, setShowStaffPanel] = useState(false)
@@ -921,10 +925,17 @@ export default function AssignmentsContent() {
                         ) : (
                           group.assignments.map(asgn => (
                             <div key={asgn.id} className={`flex items-center gap-3 px-4 py-2.5 ${asgn.status === '취소' ? 'opacity-40' : ''}`}>
-                              {/* 아바타 */}
-                              <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center shrink-0">
+                              {/* 아바타 - 클릭 시 프로필 */}
+                              <button
+                                onClick={() => {
+                                  const found = allStaff.find(s => s.id === asgn.staff_id) || allStaff.find(s => s.name === asgn.staff_name)
+                                  if (found) setProfileStaff(found)
+                                }}
+                                className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center shrink-0 hover:ring-2 hover:ring-blue-400 hover:scale-110 transition-all"
+                                title={`${asgn.staff_name} 프로필 보기`}
+                              >
                                 {asgn.staff_name?.[0] || '?'}
-                              </div>
+                              </button>
 
                               {/* 이름 + 구분 */}
                               <div className="flex-1 min-w-0">
@@ -1137,6 +1148,15 @@ export default function AssignmentsContent() {
             handleAssign(staff, staff.name, '외부', 0, '', 1)
           }}
         />
+      )}
+      {/* 크루 프로필 모달 */}
+      {profileStaff && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setProfileStaff(null)} />
+          <div className="relative z-10 w-full max-w-sm">
+            <CrewProfileCard staff={profileStaff} onClose={() => setProfileStaff(null)} onEdit={() => {}} />
+          </div>
+        </div>
       )}
     </div>
     </DndContext>
