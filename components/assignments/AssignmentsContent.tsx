@@ -10,13 +10,16 @@ import { Select } from '@/components/ui/select'
 import { Card } from '@/components/ui/card'
 import {
   Search, UserPlus, CheckCircle2, Clock, XCircle, ChevronRight,
-  Users, CalendarDays, MapPin, Briefcase, Trash2, AlertCircle, UserX, Edit2, Sparkles
+  Users, CalendarDays, MapPin, Briefcase, Trash2, AlertCircle, UserX, Edit2, Sparkles,
+  PanelLeftClose, PanelLeftOpen, GripVertical
 } from 'lucide-react'
 import StaffSearchModal from './StaffSearchModal'
 import TeamAssignModal, { type TeamAssignData } from './TeamAssignModal'
 import StaffRecommendModal from './StaffRecommendModal'
 import ProjectMemoPanel from '@/components/memos/ProjectMemoPanel'
 import { toast } from 'sonner'
+import { DndContext, DragEndEvent, useDraggable, useDroppable } from '@dnd-kit/core'
+import { CSS } from '@dnd-kit/utilities'
 
 // 본사 인원 ID 목록 (certifications에 '본사직원' 포함)
 const COMPANY_STAFF_NAMES = ['최규성', '송무재', '여지은', '김영찬']
@@ -207,6 +210,50 @@ interface SlotGroup {
   assignments: Assignment[]
 }
 
+// ── 드래그 가능한 스태프 카드 ──────────────────────────
+function DraggableStaffCard({ staff }: { staff: Staff }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `staff-${staff.id}`,
+    data: { staff },
+  })
+  const style = { transform: CSS.Translate.toString(transform), opacity: isDragging ? 0.5 : 1 }
+  const RECOMMEND_COLOR: Record<string, string> = {
+    '우선투입': 'border-emerald-300 bg-emerald-50',
+    '일반':    'border-blue-200 bg-white',
+    '보류':    'border-orange-200 bg-orange-50',
+  }
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-center gap-2 px-2 py-1.5 rounded-lg border cursor-grab active:cursor-grabbing select-none ${RECOMMEND_COLOR[staff.recommend] || 'border-gray-200 bg-white'}`}
+      {...listeners}
+      {...attributes}
+    >
+      <GripVertical className="h-3.5 w-3.5 text-gray-300 shrink-0" />
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-medium text-gray-800 truncate">{staff.name}</p>
+        <p className="text-[10px] text-gray-400 truncate">
+          {Array.isArray(staff.available_jobs) ? staff.available_jobs.slice(0, 2).join('·') : ''}
+        </p>
+      </div>
+    </div>
+  )
+}
+
+// ── 드롭 가능한 슬롯 영역 ─────────────────────────────
+function DroppableSlot({ jobType, children }: { jobType: string; children: React.ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({ id: `slot-${jobType}` })
+  return (
+    <div
+      ref={setNodeRef}
+      className={`rounded-xl border-2 transition-colors ${isOver ? 'border-blue-400 bg-blue-50/40' : 'border-transparent'}`}
+    >
+      {children}
+    </div>
+  )
+}
+
 export default function AssignmentsContent() {
   const [inquiries, setInquiries]     = useState<Inquiry[]>([])
   const [selectedInq, setSelectedInq] = useState<Inquiry | null>(null)
@@ -238,6 +285,11 @@ export default function AssignmentsContent() {
   // 구간 편집 중인 배정 ID
   const [editingSegmentsId, setEditingSegmentsId] = useState<string | null>(null)
 
+  // 스태프 드래그 패널
+  const [showStaffPanel, setShowStaffPanel] = useState(false)
+  const [allStaff, setAllStaff] = useState<Staff[]>([])
+  const [staffPanelSearch, setStaffPanelSearch] = useState('')
+
   // 본사 인원 로드
   const loadCompanyStaff = useCallback(async () => {
     const all = await db.list<Staff>('staff', { order: 'name', asc: true })
@@ -245,6 +297,7 @@ export default function AssignmentsContent() {
       Array.isArray(s.certifications) && s.certifications.includes('본사직원')
     )
     setCompanyStaff(company)
+    setAllStaff(all)
   }, [])
 
   // 문의 목록 로드
@@ -308,9 +361,10 @@ export default function AssignmentsContent() {
     // 견적 품목 기반 그룹 (인력 품목만 - item_type 인력 또는 단가>0)
     const groupMap: Record<string, SlotGroup> = {}
 
-    // 견적 품목에서 그룹 생성
+    const NON_STAFF_TYPES = ['교통비', '숙박비', '식비', '연장수당', '기타', '지원품목', '부대비용']
+    // 견적 품목에서 그룹 생성 (인력 품목만)
     estimateItems
-      .filter(item => item.item_type !== '부대비용' && item.unit_price > 0)
+      .filter(item => !NON_STAFF_TYPES.includes(item.item_type || '') && item.unit_price > 0)
       .forEach(item => {
         const key = item.role_name || '기타'
         if (!groupMap[key]) {
@@ -456,6 +510,17 @@ export default function AssignmentsContent() {
     loadInquiries()
   }
 
+  // 드래그앤드롭 배정
+  async function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (!over || !selectedInq) return
+    const staff = active.data.current?.staff as Staff | undefined
+    if (!staff) return
+    const slotJobType = String(over.id).replace('slot-', '')
+    const group = slots.find(g => g.jobType === slotJobType)
+    await handleAssign(staff, staff.name, '외부', group?.payRate || 0, slotJobType, group?.days || 1)
+  }
+
   // 본사 인원 즉시 배정
   async function handleCompanyQuickAssign(staff: Staff, jobType: string) {
     if (!selectedInq) return
@@ -589,7 +654,13 @@ export default function AssignmentsContent() {
   const totalRequired = slots.reduce((s, g) => s + g.required, 0)
   const totalAssigned = slots.reduce((s, g) => s + g.assignments.filter(a => a.status !== '취소').length, 0)
 
+  const filteredStaff = allStaff.filter(s =>
+    !staffPanelSearch || s.name.includes(staffPanelSearch) ||
+    (Array.isArray(s.available_jobs) && s.available_jobs.some(j => j.includes(staffPanelSearch)))
+  )
+
   return (
+    <DndContext onDragEnd={handleDragEnd}>
     <div className="flex h-full">
       {/* ── 좌 패널: 문의 목록 ── */}
       <div className="w-80 shrink-0 flex flex-col border-r border-gray-200 bg-white">
@@ -663,6 +734,34 @@ export default function AssignmentsContent() {
         </div>
       </div>
 
+      {/* ── 스태프 드래그 패널 ── */}
+      {showStaffPanel && (
+        <div className="w-52 shrink-0 flex flex-col border-r border-gray-200 bg-white">
+          <div className="p-2.5 border-b border-gray-100 flex items-center gap-1.5">
+            <div className="relative flex-1">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
+              <Input
+                placeholder="이름·직무 검색"
+                value={staffPanelSearch}
+                onChange={e => setStaffPanelSearch(e.target.value)}
+                className="pl-6 h-7 text-xs"
+              />
+            </div>
+            <button onClick={() => setShowStaffPanel(false)} className="text-gray-400 hover:text-gray-600 shrink-0">
+              <PanelLeftClose className="h-4 w-4" />
+            </button>
+          </div>
+          <p className="text-[10px] text-gray-400 px-2.5 py-1.5 bg-indigo-50 border-b border-indigo-100">
+            슬롯으로 드래그해서 배정
+          </p>
+          <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
+            {filteredStaff.map(s => (
+              <DraggableStaffCard key={s.id} staff={s} />
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ── 우 패널: 배정 현황 ── */}
       <div className="flex-1 flex flex-col overflow-hidden bg-gray-50">
         {!selectedInq ? (
@@ -725,6 +824,16 @@ export default function AssignmentsContent() {
                     <Sparkles className="h-3.5 w-3.5" />
                     추천 인력
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setShowStaffPanel(v => !v)}
+                    className={`h-7 text-xs ${showStaffPanel ? 'border-violet-400 text-violet-600 bg-violet-50' : 'border-gray-300 text-gray-600'}`}
+                    title="스태프 드래그 패널"
+                  >
+                    {showStaffPanel ? <PanelLeftClose className="h-3.5 w-3.5" /> : <PanelLeftOpen className="h-3.5 w-3.5" />}
+                    드래그 배정
+                  </Button>
                 </div>
               </div>
             </div>
@@ -753,7 +862,8 @@ export default function AssignmentsContent() {
                   const isFull = group.required > 0 && activeCount >= group.required
                   const isOver = group.required > 0 && activeCount > group.required
                   return (
-                    <Card key={group.jobType} className="overflow-hidden">
+                    <DroppableSlot key={group.jobType} jobType={group.jobType}>
+                    <Card className="overflow-hidden">
                       {/* 그룹 헤더 */}
                       <div className={`flex items-center gap-3 px-4 py-2.5 border-b border-gray-100 ${isFull ? 'bg-green-50' : 'bg-gray-50'}`}>
                         <Briefcase className="h-4 w-4 text-gray-500 shrink-0" />
@@ -961,6 +1071,7 @@ export default function AssignmentsContent() {
                         )}
                       </div>
                     </Card>
+                    </DroppableSlot>
                   )
                 })
               )}
@@ -1028,5 +1139,6 @@ export default function AssignmentsContent() {
         />
       )}
     </div>
+    </DndContext>
   )
 }
