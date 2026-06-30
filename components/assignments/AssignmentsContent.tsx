@@ -420,7 +420,7 @@ export default function AssignmentsContent() {
     if (selectedInq) loadDetail(selectedInq)
   }, [selectedInq, loadDetail])
 
-  // 배정 추가
+  // 배정 추가 (일반 배정뷰용)
   async function handleAssign(
     staff: Staff | null,
     staffName: string,
@@ -432,6 +432,12 @@ export default function AssignmentsContent() {
     if (!selectedInq) return
     const scheduleDate = scheduleAssignDateRef.current
     scheduleAssignDateRef.current = null
+
+    // 스케줄뷰에서 호출된 경우 → 자동합산 로직으로 분기
+    if (scheduleDate) {
+      await handleScheduleDateAssign(scheduleDate, staff, staffName, staffType, payRate, jobType)
+      return
+    }
 
     const payload: Record<string, unknown> = {
       inquiry_id: selectedInq.id,
@@ -452,16 +458,122 @@ export default function AssignmentsContent() {
       start_date: selectedInq.event_start || null,
       end_date: selectedInq.event_end || null,
     }
-    if (scheduleDate) payload.work_dates = [scheduleDate]
-
     try {
       await db.insert('assignments', payload)
-      toast.success(scheduleDate ? `${staffName} → ${scheduleDate} 배정 완료` : `${staffName} 배정 완료`)
+      toast.success(`${staffName} 배정 완료`)
       loadDetail(selectedInq)
       loadInquiries()
     } catch (e) {
       toast.error('배정 실패: ' + (e as Error).message)
     }
+  }
+
+  // 스케줄뷰 자동합산 배정
+  async function handleScheduleDateAssign(
+    date: string,
+    staff: Staff | null,
+    staffName: string,
+    staffType: string,
+    payRate: number,
+    jobType: string,
+  ) {
+    if (!selectedInq) return
+
+    // 같은 사람 + 같은 직무로 이미 배정된 건 찾기
+    const existing = allAssignments.find(a =>
+      a.status !== '취소' &&
+      a.job_type === jobType &&
+      (staff?.id ? a.staff_id === staff.id : a.staff_name === staffName)
+    )
+
+    if (existing) {
+      // 충돌 체크: 구간 설정 또는 팀 배정이면 새 레코드로
+      const hasSegments = parseSegments(existing.memo)
+      const isTeamRole  = !!existing.role_type
+      if (hasSegments || isTeamRole) {
+        await createScheduleAssignment(date, staff, staffName, staffType, payRate, jobType)
+        return
+      }
+
+      // 중복 날짜 체크
+      const prevDates = Array.isArray(existing.work_dates) ? existing.work_dates : []
+      if (prevDates.includes(date)) {
+        toast.info(`${staffName}은 이미 ${date}에 배정되어 있습니다`)
+        return
+      }
+
+      // 날짜 추가 (합산)
+      const newDates = [...prevDates, date].sort()
+      await db.update('assignments', existing.id, {
+        work_dates: newDates,
+        work_days:  newDates.length,
+      })
+      toast.success(`${staffName} → ${date} 추가 (총 ${newDates.length}일)`)
+      loadDetail(selectedInq)
+      loadInquiries()
+    } else {
+      await createScheduleAssignment(date, staff, staffName, staffType, payRate, jobType)
+    }
+  }
+
+  // 스케줄뷰 신규 레코드 생성
+  async function createScheduleAssignment(
+    date: string,
+    staff: Staff | null,
+    staffName: string,
+    staffType: string,
+    payRate: number,
+    jobType: string,
+  ) {
+    if (!selectedInq) return
+    try {
+      await db.insert('assignments', {
+        inquiry_id:     selectedInq.id,
+        event_name:     selectedInq.event_name,
+        staff_id:       staff?.id || null,
+        staff_name:     staffName,
+        staff_type:     staffType,
+        job_type:       jobType,
+        phone:          staff?.phone || null,
+        bank_name:      staff?.bank_name || null,
+        account_number: staff?.account_number || null,
+        id_number:      staff?.id_number || null,
+        pay_rate:       payRate,
+        work_days:      1,
+        status:         '배정중' as const,
+        is_payable:     staffType !== '본사',
+        is_present:     true,
+        start_date:     selectedInq.event_start || null,
+        end_date:       selectedInq.event_end || null,
+        work_dates:     [date],
+      } as Record<string, unknown>)
+      toast.success(`${staffName} → ${date} 배정 완료`)
+      loadDetail(selectedInq)
+      loadInquiries()
+    } catch (e) {
+      toast.error('배정 실패: ' + (e as Error).message)
+    }
+  }
+
+  // 스케줄뷰: 특정 날짜에서 인력 제거
+  async function handleRemoveFromDate(asgn: Assignment, date: string) {
+    if (!selectedInq) return
+    const prevDates = Array.isArray(asgn.work_dates) ? asgn.work_dates : []
+    const newDates  = prevDates.filter(d => d !== date)
+
+    if (newDates.length === 0) {
+      if (!confirm(`${asgn.staff_name}의 마지막 날짜입니다. 배정을 삭제하시겠습니까?`)) return
+      await db.delete('assignments', asgn.id)
+      toast.success('배정 삭제 완료')
+    } else {
+      await db.update('assignments', asgn.id, {
+        work_dates: newDates,
+        work_days:  newDates.length,
+      })
+      toast.success(`${asgn.staff_name} ${date} 제거 (남은 ${newDates.length}일)`)
+    }
+    loadDetail(selectedInq)
+    loadInquiries()
   }
 
   // 배정 상태 변경
@@ -542,8 +654,7 @@ export default function AssignmentsContent() {
       const date    = overId.slice(firstPipe + 1, secondPipe)
       const jobType = overId.slice(secondPipe + 1)
       const group   = slots.find(g => g.jobType === jobType)
-      scheduleAssignDateRef.current = date
-      await handleAssign(staff, staff.name, '외부', group?.payRate || 0, jobType, group?.days || 1)
+      await handleScheduleDateAssign(date, staff, staff.name, '외부', group?.payRate || 0, jobType)
       return
     }
 
@@ -898,10 +1009,12 @@ export default function AssignmentsContent() {
                 <ScheduleView
                   inquiry={selectedInq}
                   slots={slots}
+                  allAssignments={allAssignments}
                   onOpenAssign={(date, jobType, payRate) => {
                     scheduleAssignDateRef.current = date
                     openModal(jobType, payRate, 1)
                   }}
+                  onRemoveFromDate={handleRemoveFromDate}
                 />
               </div>
             )}
