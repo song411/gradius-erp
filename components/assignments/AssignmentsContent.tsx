@@ -479,8 +479,13 @@ export default function AssignmentsContent() {
   ) {
     if (!selectedInq) return
 
-    // 같은 사람 + 같은 직무로 이미 배정된 건 찾기
-    const existing = allAssignments.find(a =>
+    // DB에서 최신 배정 목록을 직접 조회 (stale state 사용 시 연속 배정 시 중복 레코드 생성 방지)
+    const freshAssignments = await db.list<Assignment>('assignments', {
+      filters: { inquiry_id: selectedInq.id },
+      order: 'assigned_at', asc: true,
+    })
+
+    const existing = freshAssignments.find(a =>
       a.status !== '취소' &&
       a.job_type === jobType &&
       (staff?.id ? a.staff_id === staff.id : a.staff_name === staffName)
