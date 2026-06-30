@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { db } from '@/lib/supabase/api'
 import type { Inquiry, Assignment, EstimateItem, Estimate, Staff } from '@/lib/supabase/types'
 import { formatKRW, formatDate } from '@/lib/utils'
@@ -18,6 +18,7 @@ import TeamAssignModal, { type TeamAssignData } from './TeamAssignModal'
 import StaffRecommendModal from './StaffRecommendModal'
 import ProjectMemoPanel from '@/components/memos/ProjectMemoPanel'
 import CrewProfileCard from '@/components/staff/CrewProfileCard'
+import ScheduleView from './ScheduleView'
 import { toast } from 'sonner'
 import { DndContext, DragEndEvent, useDraggable, useDroppable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
@@ -294,6 +295,12 @@ export default function AssignmentsContent() {
   const [allStaff, setAllStaff] = useState<Staff[]>([])
   const [staffPanelSearch, setStaffPanelSearch] = useState('')
 
+  // 뷰 모드: 배정뷰 / 스케줄뷰
+  const [viewMode, setViewMode] = useState<'assignment' | 'schedule'>('assignment')
+
+  // 스케줄뷰에서 배정 시 특정 날짜를 work_dates에 포함시키기 위한 ref
+  const scheduleAssignDateRef = useRef<string | null>(null)
+
   // 본사 인원 로드
   const loadCompanyStaff = useCallback(async () => {
     const all = await db.list<Staff>('staff', { order: 'name', asc: true })
@@ -423,7 +430,10 @@ export default function AssignmentsContent() {
     days: number,
   ) {
     if (!selectedInq) return
-    const payload = {
+    const scheduleDate = scheduleAssignDateRef.current
+    scheduleAssignDateRef.current = null
+
+    const payload: Record<string, unknown> = {
       inquiry_id: selectedInq.id,
       event_name: selectedInq.event_name,
       staff_id: staff?.id || null,
@@ -442,9 +452,11 @@ export default function AssignmentsContent() {
       start_date: selectedInq.event_start || null,
       end_date: selectedInq.event_end || null,
     }
+    if (scheduleDate) payload.work_dates = [scheduleDate]
+
     try {
       await db.insert('assignments', payload)
-      toast.success(`${staffName} 배정 완료`)
+      toast.success(scheduleDate ? `${staffName} → ${scheduleDate} 배정 완료` : `${staffName} 배정 완료`)
       loadDetail(selectedInq)
       loadInquiries()
     } catch (e) {
@@ -520,7 +532,23 @@ export default function AssignmentsContent() {
     if (!over || !selectedInq) return
     const staff = active.data.current?.staff as Staff | undefined
     if (!staff) return
-    const slotJobType = String(over.id).replace('slot-', '')
+
+    const overId = String(over.id)
+
+    // 스케줄뷰 셀 드롭: "schedule|{date}|{jobType}"
+    if (overId.startsWith('schedule|')) {
+      const firstPipe  = overId.indexOf('|')
+      const secondPipe = overId.indexOf('|', firstPipe + 1)
+      const date    = overId.slice(firstPipe + 1, secondPipe)
+      const jobType = overId.slice(secondPipe + 1)
+      const group   = slots.find(g => g.jobType === jobType)
+      scheduleAssignDateRef.current = date
+      await handleAssign(staff, staff.name, '외부', group?.payRate || 0, jobType, group?.days || 1)
+      return
+    }
+
+    // 기존 배정뷰 슬롯 드롭
+    const slotJobType = overId.replace('slot-', '')
     const group = slots.find(g => g.jobType === slotJobType)
     await handleAssign(staff, staff.name, '외부', group?.payRate || 0, slotJobType, group?.days || 1)
   }
@@ -799,6 +827,25 @@ export default function AssignmentsContent() {
                   </span>
                 )}
                 <div className="ml-auto flex items-center gap-2">
+                  {/* 뷰 탭 */}
+                  <div className="flex border border-gray-200 rounded-lg overflow-hidden text-xs mr-1">
+                    <button
+                      onClick={() => setViewMode('assignment')}
+                      className={`px-2.5 py-1 font-medium transition-colors ${
+                        viewMode === 'assignment'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-white text-gray-500 hover:bg-gray-50'
+                      }`}
+                    >배정뷰</button>
+                    <button
+                      onClick={() => setViewMode('schedule')}
+                      className={`px-2.5 py-1 font-medium transition-colors border-l border-gray-200 ${
+                        viewMode === 'schedule'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-white text-gray-500 hover:bg-gray-50'
+                      }`}
+                    >스케줄뷰</button>
+                  </div>
                   <span className="text-sm text-gray-500">
                     배정 {totalAssigned} / {totalRequired > 0 ? `필요 ${totalRequired}` : '자유 배정'}명
                   </span>
@@ -843,10 +890,24 @@ export default function AssignmentsContent() {
             </div>
 
             {/* 인원추천 메모 배너 */}
-            <ProjectMemoPanel inquiryId={selectedInq.id} compact />
+            {viewMode === 'assignment' && <ProjectMemoPanel inquiryId={selectedInq.id} compact />}
 
-            {/* 슬롯 목록 */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            {/* 스케줄뷰 */}
+            {viewMode === 'schedule' && !loadingDetail && (
+              <div className="flex-1 overflow-hidden p-4">
+                <ScheduleView
+                  inquiry={selectedInq}
+                  slots={slots}
+                  onOpenAssign={(date, jobType, payRate) => {
+                    scheduleAssignDateRef.current = date
+                    openModal(jobType, payRate, 1)
+                  }}
+                />
+              </div>
+            )}
+
+            {/* 배정뷰 슬롯 목록 */}
+            {viewMode === 'assignment' && <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {loadingDetail ? (
                 <div className="flex items-center justify-center h-32">
                   <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
@@ -1086,7 +1147,7 @@ export default function AssignmentsContent() {
                   )
                 })
               )}
-            </div>
+            </div>}
 
             {/* 하단: 지급 합계 */}
             {allAssignments.length > 0 && (
