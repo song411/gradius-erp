@@ -50,7 +50,10 @@ function getDateRange(start: string, end: string): string[] {
   const d = new Date(start + 'T00:00:00')
   const e = new Date(end + 'T00:00:00')
   while (d <= e) {
-    dates.push(d.toISOString().split('T')[0])
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    dates.push(`${y}-${m}-${day}`)
     d.setDate(d.getDate() + 1)
   }
   return dates
