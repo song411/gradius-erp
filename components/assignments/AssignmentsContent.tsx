@@ -301,6 +301,9 @@ export default function AssignmentsContent() {
   // 스케줄뷰에서 배정 시 특정 날짜를 work_dates에 포함시키기 위한 ref
   const scheduleAssignDateRef = useRef<string | null>(null)
 
+  // 동일 인원+직무 조합의 연속 배정 작업을 직렬화하기 위한 큐
+  const scheduleAssignQueue = useRef<Record<string, Promise<void>>>({})
+
   // 본사 인원 로드
   const loadCompanyStaff = useCallback(async () => {
     const all = await db.list<Staff>('staff', { order: 'name', asc: true })
@@ -420,6 +423,9 @@ export default function AssignmentsContent() {
     if (selectedInq) loadDetail(selectedInq)
   }, [selectedInq, loadDetail])
 
+  // 문의 전환 시 큐 초기화
+  useEffect(() => { scheduleAssignQueue.current = {} }, [selectedInq?.id])
+
   // 배정 추가 (일반 배정뷰용)
   async function handleAssign(
     staff: Staff | null,
@@ -468,7 +474,8 @@ export default function AssignmentsContent() {
     }
   }
 
-  // 스케줄뷰 자동합산 배정
+  // 스케줄뷰 자동합산 배정 (큐 직렬화 래퍼)
+  // 동일 인원+직무 조합에 대해 작업을 순차 실행하여 레이스 컨디션 방지
   async function handleScheduleDateAssign(
     date: string,
     staff: Staff | null,
@@ -478,8 +485,26 @@ export default function AssignmentsContent() {
     jobType: string,
   ) {
     if (!selectedInq) return
+    const key = `${staff?.id || staffName}__${jobType}`
+    const prev = scheduleAssignQueue.current[key] ?? Promise.resolve()
+    const thisOp = prev
+      .then(() => _doScheduleDateAssign(date, staff, staffName, staffType, payRate, jobType))
+      .catch(() => {})
+    scheduleAssignQueue.current[key] = thisOp
+    await thisOp
+  }
 
-    // DB에서 최신 배정 목록을 직접 조회 (stale state 사용 시 연속 배정 시 중복 레코드 생성 방지)
+  async function _doScheduleDateAssign(
+    date: string,
+    staff: Staff | null,
+    staffName: string,
+    staffType: string,
+    payRate: number,
+    jobType: string,
+  ) {
+    if (!selectedInq) return
+
+    // DB에서 최신 배정 목록을 직접 조회
     const freshAssignments = await db.list<Assignment>('assignments', {
       filters: { inquiry_id: selectedInq.id },
       order: 'assigned_at', asc: true,
