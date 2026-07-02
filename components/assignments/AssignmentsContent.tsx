@@ -304,6 +304,10 @@ export default function AssignmentsContent() {
   // 동일 인원+직무 조합의 연속 배정 작업을 직렬화하기 위한 큐
   const scheduleAssignQueue = useRef<Record<string, Promise<void>>>({})
 
+  // 스케줄뷰 배정 로컬 맵: INSERT 직후 ID를 저장해 DB 재조회 없이 바로 UPDATE
+  // key: `staffId|staffName__jobType`, value: { id, work_dates }
+  const scheduleAssignMapRef = useRef<Record<string, { id: string; work_dates: string[] }>>({})
+
   // 본사 인원 로드
   const loadCompanyStaff = useCallback(async () => {
     const all = await db.list<Staff>('staff', { order: 'name', asc: true })
@@ -423,8 +427,11 @@ export default function AssignmentsContent() {
     if (selectedInq) loadDetail(selectedInq)
   }, [selectedInq, loadDetail])
 
-  // 문의 전환 시 큐 초기화
-  useEffect(() => { scheduleAssignQueue.current = {} }, [selectedInq?.id])
+  // 문의 전환 시 큐·맵 초기화
+  useEffect(() => {
+    scheduleAssignQueue.current = {}
+    scheduleAssignMapRef.current = {}
+  }, [selectedInq?.id])
 
   // 배정 추가 (일반 배정뷰용)
   async function handleAssign(
@@ -503,8 +510,29 @@ export default function AssignmentsContent() {
     jobType: string,
   ) {
     if (!selectedInq) return
+    const mapKey = `${staff?.id || staffName}__${jobType}`
 
-    // DB에서 최신 배정 목록을 직접 조회
+    // ── 1단계: 로컬 맵 우선 확인 (DB 재조회·캐시 문제 완전 우회) ──────────
+    const cached = scheduleAssignMapRef.current[mapKey]
+    if (cached) {
+      if (cached.work_dates.includes(date)) {
+        toast.info(`${staffName}은 이미 ${date}에 배정되어 있습니다`)
+        return
+      }
+      const newDates = [...cached.work_dates, date].sort()
+      // DB UPDATE 전에 동기적으로 맵 갱신 → 연속 호출도 올바른 상태 참조
+      scheduleAssignMapRef.current[mapKey] = { ...cached, work_dates: newDates }
+      await db.update('assignments', cached.id, {
+        work_dates: newDates,
+        work_days:  newDates.length,
+      })
+      toast.success(`${staffName} → ${date} 추가 (총 ${newDates.length}일)`)
+      loadDetail(selectedInq)
+      loadInquiries()
+      return
+    }
+
+    // ── 2단계: 최초 1회만 DB 조회 (기존 배정 있으면 맵에 등록) ──────────────
     const freshAssignments = await db.list<Assignment>('assignments', {
       filters: { inquiry_id: selectedInq.id },
       order: 'assigned_at', asc: true,
@@ -517,7 +545,7 @@ export default function AssignmentsContent() {
     )
 
     if (existing) {
-      // 충돌 체크: 구간 설정 또는 팀 배정이면 새 레코드로
+      // 충돌 체크: 구간 설정 또는 팀 배정이면 새 레코드로 (맵 미등록)
       const hasSegments = parseSegments(existing.memo)
       const isTeamRole  = !!existing.role_type
       if (hasSegments || isTeamRole) {
@@ -525,15 +553,14 @@ export default function AssignmentsContent() {
         return
       }
 
-      // 중복 날짜 체크
       const prevDates = Array.isArray(existing.work_dates) ? existing.work_dates : []
       if (prevDates.includes(date)) {
         toast.info(`${staffName}은 이미 ${date}에 배정되어 있습니다`)
         return
       }
 
-      // 날짜 추가 (합산)
       const newDates = [...prevDates, date].sort()
+      scheduleAssignMapRef.current[mapKey] = { id: existing.id, work_dates: newDates }
       await db.update('assignments', existing.id, {
         work_dates: newDates,
         work_days:  newDates.length,
@@ -542,11 +569,42 @@ export default function AssignmentsContent() {
       loadDetail(selectedInq)
       loadInquiries()
     } else {
-      await createScheduleAssignment(date, staff, staffName, staffType, payRate, jobType)
+      // ── 3단계: 신규 INSERT 후 즉시 맵에 등록 ─────────────────────────────
+      try {
+        const result = await db.insert<Assignment>('assignments', {
+          inquiry_id:     selectedInq.id,
+          event_name:     selectedInq.event_name,
+          staff_id:       staff?.id || null,
+          staff_name:     staffName,
+          staff_type:     staffType,
+          job_type:       jobType,
+          phone:          staff?.phone || null,
+          bank_name:      staff?.bank_name || null,
+          account_number: staff?.account_number || null,
+          id_number:      staff?.id_number || null,
+          pay_rate:       payRate,
+          work_days:      1,
+          status:         '배정중' as const,
+          is_payable:     staffType !== '본사',
+          is_present:     true,
+          start_date:     selectedInq.event_start || null,
+          end_date:       selectedInq.event_end || null,
+          work_dates:     [date],
+        } as Record<string, unknown>)
+        // INSERT 완료 즉시 맵에 저장 → 이후 같은 인원은 DB 재조회 없이 UPDATE
+        if (result?.[0]?.id) {
+          scheduleAssignMapRef.current[mapKey] = { id: result[0].id, work_dates: [date] }
+        }
+        toast.success(`${staffName} → ${date} 배정 완료`)
+        loadDetail(selectedInq)
+        loadInquiries()
+      } catch (e) {
+        toast.error('배정 실패: ' + (e as Error).message)
+      }
     }
   }
 
-  // 스케줄뷰 신규 레코드 생성
+  // 스케줄뷰 신규 레코드 생성 (구간/팀 배정 전용 — 맵 미사용)
   async function createScheduleAssignment(
     date: string,
     staff: Staff | null,
