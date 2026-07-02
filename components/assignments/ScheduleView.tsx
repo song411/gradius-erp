@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useEffect, useCallback } from 'react'
 import { useDroppable } from '@dnd-kit/core'
-import type { Assignment, Inquiry } from '@/lib/supabase/types'
+import type { Assignment, Inquiry, Staff } from '@/lib/supabase/types'
 import { db } from '@/lib/supabase/api'
 import { toast } from 'sonner'
 import { Plus, Edit2, X } from 'lucide-react'
@@ -37,6 +37,8 @@ interface Props {
   allAssignments: Assignment[]
   onOpenAssign: (date: string, jobType: string, payRate: number) => void
   onRemoveFromDate: (assignment: Assignment, date: string) => void
+  companyStaff?: Staff[]
+  onQuickAssignCompany?: (date: string, jobType: string, payRate: number, staff: Staff) => void
 }
 
 // ─── 날짜 유틸 ────────────────────────────────────────────
@@ -223,6 +225,7 @@ const DEFAULT_CONFIG: ScheduleConfig = {
 
 export default function ScheduleView({
   inquiry, slots, allAssignments, onOpenAssign, onRemoveFromDate,
+  companyStaff = [], onQuickAssignCompany,
 }: Props) {
   const [editMode, setEditMode]   = useState(false)
   const [config, setConfig]       = useState<ScheduleConfig>(DEFAULT_CONFIG)
@@ -230,6 +233,7 @@ export default function ScheduleView({
   const [addingJob, setAddingJob] = useState(false)
   const [newJobType, setNewJobType]         = useState('')
   const [newJobRequired, setNewJobRequired] = useState('1')
+  const [openQuickCell, setOpenQuickCell]   = useState<string | null>(null)
 
   const dates = useMemo(() => {
     if (!inquiry.event_start || !inquiry.event_end) return []
@@ -377,7 +381,7 @@ export default function ScheduleView({
         </div>
 
         {/* 테이블 */}
-        <div className="flex-1 overflow-auto rounded-lg border border-gray-200">
+        <div className="flex-1 overflow-auto rounded-lg border border-gray-200" onClick={() => setOpenQuickCell(null)}>
           <table className="text-xs border-collapse">
             {/* 날짜 헤더 행 */}
             <thead className="sticky top-0 z-10">
@@ -472,13 +476,49 @@ export default function ScheduleView({
                             }`}>
                               {required > 0 ? `${total}/${required}` : `${total}명`}
                             </span>
-                            <button
-                              onClick={() => onOpenAssign(date, jobCfg.jobType, jobCfg.payRate)}
-                              className="text-gray-300 hover:text-blue-500 p-0.5 rounded hover:bg-blue-50 transition-colors"
-                              title="인력 추가"
-                            >
-                              <Plus className="h-3 w-3" />
-                            </button>
+                            <div className="relative flex items-center gap-0.5">
+                              {companyStaff.length > 0 && onQuickAssignCompany && (
+                                <>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setOpenQuickCell(openQuickCell === cellId ? null : cellId)
+                                    }}
+                                    className="text-[9px] font-bold leading-none px-0.5 py-0.5 rounded text-purple-400 hover:text-purple-600 hover:bg-purple-50 transition-colors"
+                                    title="본사인원 빠른 배정"
+                                  >
+                                    B
+                                  </button>
+                                  {openQuickCell === cellId && (
+                                    <div
+                                      className="absolute right-0 top-5 z-50 bg-white border border-purple-200 rounded-lg shadow-lg py-1 min-w-[72px]"
+                                      onClick={e => e.stopPropagation()}
+                                    >
+                                      {companyStaff.map(s => (
+                                        <button
+                                          key={s.id}
+                                          onClick={() => {
+                                            onQuickAssignCompany(date, jobCfg.jobType, jobCfg.payRate, s)
+                                            setOpenQuickCell(null)
+                                          }}
+                                          className="flex w-full items-center gap-1 px-2 py-1 text-[10px] text-purple-700 hover:bg-purple-50 transition-colors whitespace-nowrap"
+                                        >
+                                          <span className="font-bold text-[9px] text-purple-400">B</span>
+                                          {s.name}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                              <button
+                                onClick={() => onOpenAssign(date, jobCfg.jobType, jobCfg.payRate)}
+                                className="text-gray-300 hover:text-blue-500 p-0.5 rounded hover:bg-blue-50 transition-colors"
+                                title="인력 추가"
+                              >
+                                <Plus className="h-3 w-3" />
+                              </button>
+                            </div>
                           </div>
 
                           {/* 날짜 지정 인력 */}

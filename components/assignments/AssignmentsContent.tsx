@@ -1103,6 +1103,10 @@ export default function AssignmentsContent() {
                     openModal(jobType, payRate, 1)
                   }}
                   onRemoveFromDate={handleRemoveFromDate}
+                  companyStaff={companyStaff}
+                  onQuickAssignCompany={async (date, jobType, _payRate, staff) => {
+                    await handleScheduleDateAssign(date, staff, staff.name, '본사', 0, jobType)
+                  }}
                 />
               </div>
             )}
