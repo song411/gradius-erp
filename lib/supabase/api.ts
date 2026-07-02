@@ -28,7 +28,7 @@ export const db = {
     Object.entries(opts.inFilter  || {}).forEach(([k, v]) => params.set(`in_${k}`, v.join(',')))
     Object.entries(opts.neqFilter || {}).forEach(([k, v]) => params.set(`neq_${k}`, v))
 
-    const res = await fetch(`${BASE}/${table}?${params}`)
+    const res = await fetch(`${BASE}/${table}?${params}`, { cache: 'no-store' })
     if (!res.ok) { const e = await res.json(); throw new Error(e.error) }
     const { data } = await res.json()
     return data as T[]

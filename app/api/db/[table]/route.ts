@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
+// 모든 응답을 동적으로 처리 (CDN/Next.js 캐싱 방지)
+export const dynamic = 'force-dynamic'
+
 // 허용된 테이블 목록 (보안 — 화이트리스트)
 const ALLOWED_TABLES = [
   'inquiries', 'customers', 'estimates', 'estimate_items',
@@ -47,7 +50,9 @@ export async function GET(
   const { data, error, count } = await query
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ data, count })
+  return NextResponse.json({ data, count }, {
+    headers: { 'Cache-Control': 'no-store' },
+  })
 }
 
 export async function POST(
