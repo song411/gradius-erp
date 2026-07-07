@@ -219,6 +219,9 @@ export default function AttendanceContent() {
     height: string
     weight: string
     mbti: string
+    // 점수 초기값 출처: saved=이 행사에 이미 저장된 평가 / staffAvg=크루의 과거 누적 평균 참고 / new=평가 이력 없음(기본값)
+    scoreSource: 'saved' | 'staffAvg' | 'new'
+    staffAvgTotal: number | null
     dirty: boolean
   }>>({})
 
@@ -299,18 +302,22 @@ export default function AttendanceContent() {
     asgns.filter(a => a.status !== '취소').forEach(a => {
       const existing = evals.find(e => e.assignment_id === a.id)
       const staffInfo = staffList.find(s => s.id === a.staff_id)
+      // 이 크루가 과거에 평가받은 적이 있는지 (staff 집계 점수가 0보다 크면 평가 이력 있음)
+      const hasStaffHistory = !existing && !!staffInfo && staffInfo.total_score > 0
       newEvalMap[a.id] = {
-        attendance_score: existing?.attendance_score ?? 3,
-        performance_score: existing?.performance_score ?? 3,
-        appearance_score: existing?.appearance_score ?? 3,
-        teamwork_score: existing?.teamwork_score ?? 3,
-        adaptability_score: existing?.adaptability_score ?? 3,
+        attendance_score: existing?.attendance_score ?? (hasStaffHistory ? staffInfo!.attendance_score : 3),
+        performance_score: existing?.performance_score ?? (hasStaffHistory ? staffInfo!.performance_score : 3),
+        appearance_score: existing?.appearance_score ?? (hasStaffHistory ? staffInfo!.appearance_score : 3),
+        teamwork_score: existing?.teamwork_score ?? (hasStaffHistory ? staffInfo!.teamwork_score : 3),
+        adaptability_score: existing?.adaptability_score ?? (hasStaffHistory ? staffInfo!.adaptability_score : 3),
         re_recommend: existing?.re_recommend ?? true,
         strengths: existing?.strengths || '',
         improvements: existing?.improvements || '',
         height: staffInfo?.height ? String(staffInfo.height) : '',
         weight: staffInfo?.weight ? String(staffInfo.weight) : '',
         mbti: staffInfo?.mbti || '',
+        scoreSource: existing ? 'saved' : hasStaffHistory ? 'staffAvg' : 'new',
+        staffAvgTotal: hasStaffHistory ? staffInfo!.total_score : null,
         dirty: false,
       }
     })
@@ -837,9 +844,17 @@ export default function AttendanceContent() {
                                   <span className="text-[10px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded-full">{asgn.job_type}</span>
                                 )}
                               </div>
-                              {existing && (
+                              {evalData.scoreSource === 'saved' && existing ? (
                                 <span className="text-[10px] text-purple-500">
-                                  이전 평가: {existing.total_score}점 ({existing.grade})
+                                  이 행사 평가 저장됨: {existing.total_score}점 ({existing.grade})
+                                </span>
+                              ) : evalData.scoreSource === 'staffAvg' ? (
+                                <span className="text-[10px] text-indigo-500">
+                                  과거 누적 평균 {evalData.staffAvgTotal}점 참고 · 이번 행사 평가를 입력하세요
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-gray-400">
+                                  신규평가자 · 첫 평가 (기본값 3점)
                                 </span>
                               )}
                             </div>
