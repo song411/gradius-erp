@@ -80,6 +80,12 @@ export function calcVAT(supplyPrice: number): {
   return { supply: supplyPrice, vat, total: supplyPrice + vat }
 }
 
+// 최종 합계(할인 반영 후) → 공급가액/부가세 역산
+export function calcVATReverse(finalTotal: number): { supply: number; vat: number } {
+  const supply = Math.round(finalTotal / 1.1)
+  return { supply, vat: finalTotal - supply }
+}
+
 // 수익률 계산
 export function calcProfitRate(supply: number, cost: number): number {
   if (supply <= 0) return 0

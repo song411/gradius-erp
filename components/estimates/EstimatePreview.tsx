@@ -47,6 +47,7 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
     item_type:  item.item_type || '인력',
     work_time:  item.spec?.split(' / ')[0] || '',
     spec:       item.spec?.split(' / ').slice(1).join(' / ') || '',
+    unit_discount_applied: item.unit_discount_applied || false,
   })
   const staffItems   = allItems.filter(i => !EXTRA_TYPES.includes(i.item_type || '') && !SUPPORT_TYPES.includes(i.item_type || '')).map(toRow)
   const extraItems   = allItems.filter(i => EXTRA_TYPES.includes(i.item_type || '')).map(toRow)
@@ -59,6 +60,9 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
   const hasVat        = vat > 0
   const staffSubtotal = staffItems.reduce((s, i) => s + i.quantity * i.days * i.unit_price, 0)
   const extraSubtotal = extraItems.reduce((s, i) => s + i.quantity * i.days * i.unit_price, 0)
+  const discountType  = estimate.discount_type || 'none'
+  const discountValue = estimate.discount_value || 0
+  const hasDiscount    = discountType !== 'none' && discountValue > 0
 
   // ── 날짜/기간 ──────────────────────────────────────────
   const today = new Date().toLocaleDateString('ko-KR', {
@@ -259,7 +263,7 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
                       <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.days}일</td>
                       <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.unit_price.toLocaleString()}</td>
                       <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'center', fontWeight: '700', color: '#1e3a5f', verticalAlign: 'middle', lineHeight: '1.2' }}>{amt.toLocaleString()}</td>
-                      <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', fontSize: '10px', color: '#6b7280', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.spec}</td>
+                      <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', fontSize: '10px', color: '#6b7280', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{[row.spec, row.unit_discount_applied ? '(할인가 적용)' : ''].filter(Boolean).join(' ')}</td>
                     </tr>
                   )
                 })}
@@ -280,7 +284,7 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
                       <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.days}일</td>
                       <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.unit_price > 0 ? row.unit_price.toLocaleString() : '-'}</td>
                       <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'center', fontWeight: '700', verticalAlign: 'middle', lineHeight: '1.2' }}>{amt > 0 ? amt.toLocaleString() : '-'}</td>
-                      <td style={{ padding: '8px 8px', border: '1px solid #fde68a', fontSize: '10px', color: '#92400e', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.spec}</td>
+                      <td style={{ padding: '8px 8px', border: '1px solid #fde68a', fontSize: '10px', color: '#92400e', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{[row.spec, row.unit_discount_applied ? '(할인가 적용)' : ''].filter(Boolean).join(' ')}</td>
                     </tr>
                   )
                 })}
@@ -305,6 +309,19 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
                     <td style={{ padding: '8px 8px', border: '1px solid #bae6fd', fontSize: '10px', color: '#0369a1', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.spec || '본사 지원'}</td>
                   </tr>
                 ))}
+                {hasDiscount && (
+                  <tr style={{ backgroundColor: '#fee2e2' }}>
+                    <td style={{ padding: '8px 8px', border: '1px solid #fecaca', fontWeight: '700', color: '#b91c1c', verticalAlign: 'middle', lineHeight: '1.2' }}>총액 에누리 (할인)</td>
+                    <td style={{ padding: '8px 8px', border: '1px solid #fecaca' }} />
+                    <td style={{ padding: '8px 8px', border: '1px solid #fecaca', textAlign: 'center' }}>-</td>
+                    <td style={{ padding: '8px 8px', border: '1px solid #fecaca', textAlign: 'center' }}>-</td>
+                    <td style={{ padding: '8px 8px', border: '1px solid #fecaca', textAlign: 'center' }}>-</td>
+                    <td style={{ padding: '8px 8px', border: '1px solid #fecaca', textAlign: 'center', fontWeight: '700', color: '#b91c1c' }}>
+                      {discountType === 'amount' ? `-${discountValue.toLocaleString()}` : `-${discountValue}%`}
+                    </td>
+                    <td style={{ padding: '8px 8px', border: '1px solid #fecaca' }} />
+                  </tr>
+                )}
                 {/* 총 합계 */}
                 <tr style={{ backgroundColor: '#1e3a5f' }}>
                   <td colSpan={5} style={{ padding: '9px 8px', textAlign: 'center', fontWeight: '800', color: '#fff', fontSize: '13px', border: '1px solid #1e3a5f' }}>총 합계</td>
