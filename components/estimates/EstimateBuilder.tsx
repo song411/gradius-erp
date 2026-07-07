@@ -47,7 +47,8 @@ interface ItemRow {
   work_time: string; is_leader: boolean
   item_type: ItemType; spec: string
   selectedFactors: string[]; _basePrice: number; _basePayPrice: number
-  unit_discount_applied: boolean
+  // 개별 단가 할인: 값이 있으면 견적서에 취소선(정상가) + 실제 단가로 비교 표시
+  original_unit_price: number | null
 }
 interface ReportMemo { strategy: string; staff: string; special: string; conclusion: string }
 interface Props {
@@ -65,7 +66,7 @@ function emptyRow(type: ItemType = '인력', defaultWorkTime = ''): ItemRow {
     key: makeKey(), role_id: '', role_name: '', quantity: 1, days: 1,
     unit_price: 0, pay_unit_price: 0, work_time: defaultWorkTime, is_leader: false,
     item_type: type, spec: '', selectedFactors: [], _basePrice: 0, _basePayPrice: 0,
-    unit_discount_applied: false,
+    original_unit_price: null,
   }
 }
 
@@ -118,6 +119,7 @@ export default function EstimateBuilder({
     date_undecided: false,
     discount_type: 'none' as 'none' | 'amount' | 'percentage',
     discount_value: 0,
+    discount_label: '총액 에누리 (할인)',
   })
   const [items, setItems] = useState<ItemRow[]>([emptyRow()])
 
@@ -157,6 +159,7 @@ export default function EstimateBuilder({
         date_undecided: !hasDate,
         discount_type: editTarget.discount_type || 'none',
         discount_value: editTarget.discount_value || 0,
+        discount_label: editTarget.discount_label || '총액 에누리 (할인)',
       })
       const rows: ItemRow[] = (editTarget.estimate_items || []).map(item => ({
         key: makeKey(), role_id: '', role_name: item.role_name || '',
@@ -168,7 +171,7 @@ export default function EstimateBuilder({
         is_leader: item.is_leader,
         item_type: (item.item_type as ItemType) || '인력',
         selectedFactors: [], _basePrice: item.unit_price, _basePayPrice: item.pay_unit_price,
-        unit_discount_applied: item.unit_discount_applied || false,
+        original_unit_price: item.original_unit_price ?? null,
       }))
       setItems(rows.length > 0 ? rows : [emptyRow()])
     } else {
@@ -191,6 +194,7 @@ export default function EstimateBuilder({
         date_undecided: !hasDate,
         discount_type: 'none',
         discount_value: 0,
+        discount_label: '총액 에누리 (할인)',
       })
       const wt = preInq?.event_time || ''
       setItems([{ ...emptyRow('인력', wt), days }])
@@ -367,6 +371,7 @@ export default function EstimateBuilder({
       profit_rate: profitRate,
       discount_type: form.discount_type,
       discount_value: form.discount_value,
+      discount_label: form.discount_label || '총액 에누리 (할인)',
       // expected_profit: DB에서 자동 계산되는 generated column — 직접 삽입 불가
     }
 
@@ -409,7 +414,7 @@ export default function EstimateBuilder({
         unit_price: row.unit_price,
         pay_unit_price: row.pay_unit_price,
         is_leader: row.is_leader,
-        unit_discount_applied: row.unit_discount_applied,
+        original_unit_price: row.original_unit_price,
         item_type: row.item_type,
         spec: [row.work_time, row.spec].filter(Boolean).join(' / ') || null,
         sort_order: idx,
@@ -904,18 +909,40 @@ export default function EstimateBuilder({
                   ))}
                 </div>
                 {form.discount_type !== 'none' && (
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      type="number" min={0}
-                      value={form.discount_value}
-                      onChange={e => setForm(f => ({ ...f, discount_value: Number(e.target.value) }))}
-                      placeholder={form.discount_type === 'amount' ? '150000' : '10'}
-                      className="w-28 h-7 border border-gray-200 rounded px-1.5 text-xs text-right"
-                    />
-                    <span className="text-xs text-gray-500">
-                      {form.discount_type === 'amount' ? '원 할인 (총 합계 기준)' : '% 할인 (총 합계 기준)'}
-                    </span>
-                  </div>
+                  <>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="number" min={0}
+                        value={form.discount_value}
+                        onChange={e => setForm(f => ({ ...f, discount_value: Number(e.target.value) }))}
+                        placeholder={form.discount_type === 'amount' ? '150000' : '10'}
+                        className="w-28 h-7 border border-gray-200 rounded px-1.5 text-xs text-right"
+                      />
+                      <span className="text-xs text-gray-500">
+                        {form.discount_type === 'amount' ? '원 할인 (총 합계 기준)' : '% 할인 (총 합계 기준)'}
+                      </span>
+                    </div>
+                    <div>
+                      <label className="label-xs">견적서에 표시될 할인 항목명</label>
+                      <input
+                        value={form.discount_label}
+                        onChange={e => setForm(f => ({ ...f, discount_label: e.target.value }))}
+                        placeholder="총액 에누리 (할인)"
+                        className="w-full h-7 border border-gray-200 rounded px-1.5 text-xs"
+                      />
+                      <div className="flex gap-1 flex-wrap mt-1">
+                        {['총액 에누리 (할인)', '파트너사 할인', '첫 이용 고객 할인', '프로모션 할인'].map(preset => (
+                          <button
+                            key={preset} type="button"
+                            onClick={() => setForm(f => ({ ...f, discount_label: preset }))}
+                            className="text-xs px-2 py-0.5 rounded-full bg-gray-50 text-gray-500 border border-gray-200 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200"
+                          >
+                            {preset}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </>
                 )}
               </div>
 
@@ -925,7 +952,7 @@ export default function EstimateBuilder({
                 {supportItems.length > 0 && <SumLine label="본사 지원품목" value={`${supportItems.length}종 (미청구)`} dimmed />}
                 {hasDiscount && (
                   <SumLine
-                    label={`총액 에누리 (${form.discount_type === 'amount' ? '정액' : '비율'})`}
+                    label={form.discount_label || '총액 에누리 (할인)'}
                     value={form.discount_type === 'amount' ? `- ${formatKRW(discountAmount)}` : `- ${form.discount_value}%`}
                   />
                 )}
@@ -986,7 +1013,7 @@ export default function EstimateBuilder({
                   staffItems={staffItems} extraItems={extraItems} supportItems={supportItems}
                   staffSubtotal={staffSubtotal} extraSubtotal={extraSubtotal}
                   supplyPrice={supplyPrice} vat={vat} finalTotal={finalTotal}
-                  hasDiscount={hasDiscount} discountType={form.discount_type} discountValue={form.discount_value} discountAmount={discountAmount}
+                  hasDiscount={hasDiscount} discountType={form.discount_type} discountValue={form.discount_value} discountAmount={discountAmount} discountLabel={form.discount_label}
                   eventPeriod={eventPeriod} today={today}
                 />
               </div>
@@ -1206,6 +1233,16 @@ function ItemRowCard({ row, roles, factors, expandedFactor, defaultWorkTime, onR
             <span className="text-gray-400">명 ×</span>
             <input type="number" min={1} value={row.days} onChange={e => onUpdate('days', Number(e.target.value))} className="w-10 h-7 border border-gray-200 rounded px-1.5 text-xs text-center" />
             <span className="text-gray-400">일</span>
+            {row.original_unit_price != null && (
+              <div className="flex items-center gap-0.5">
+                <span className="text-gray-400">정상가</span>
+                <input
+                  type="number" value={row.original_unit_price}
+                  onChange={e => onUpdate('original_unit_price', Number(e.target.value))}
+                  className="w-20 h-7 border border-red-200 bg-red-50 rounded px-1.5 text-xs text-right line-through text-gray-400"
+                />
+              </div>
+            )}
             <div className="flex items-center gap-0.5 ml-1">
               <span className="text-gray-400">단가</span>
               <input type="number" value={row.unit_price} onChange={e => onUpdate('unit_price', Number(e.target.value))} className="w-20 h-7 border border-gray-200 rounded px-1.5 text-xs text-right" />
@@ -1232,8 +1269,8 @@ function ItemRowCard({ row, roles, factors, expandedFactor, defaultWorkTime, onR
             <label className="flex items-center gap-1 text-xs text-gray-500 whitespace-nowrap shrink-0 cursor-pointer">
               <input
                 type="checkbox"
-                checked={row.unit_discount_applied}
-                onChange={e => onUpdate('unit_discount_applied', e.target.checked)}
+                checked={row.original_unit_price != null}
+                onChange={e => onUpdate('original_unit_price', e.target.checked ? row.unit_price : null)}
                 className="w-3.5 h-3.5 rounded"
               />
               단가할인
@@ -1417,17 +1454,27 @@ function KpiCard({ label, value, sub, color, highlight }: { label: string; value
 }
 
 // ── A4 미리보기 (별도 컴포넌트로 분리) ──────────────────
-type ItemRowSimple = { key: string; role_name: string; quantity: number; days: number; unit_price: number; pay_unit_price: number; is_leader: boolean; item_type: ItemType; spec: string; work_time: string; unit_discount_applied?: boolean }
+type ItemRowSimple = { key: string; role_name: string; quantity: number; days: number; unit_price: number; pay_unit_price: number; is_leader: boolean; item_type: ItemType; spec: string; work_time: string; original_unit_price?: number | null }
+function UnitPriceCell({ row }: { row: { unit_price: number; original_unit_price?: number | null } }) {
+  const discounted = row.original_unit_price != null && row.original_unit_price > row.unit_price
+  if (!discounted) return <>{row.unit_price.toLocaleString()}</>
+  return (
+    <>
+      <span style={{ textDecoration: 'line-through', color: '#9ca3af', fontSize: '9px', marginRight: '4px' }}>{row.original_unit_price!.toLocaleString()}</span>
+      <span style={{ color: '#dc2626', fontWeight: 700 }}>{row.unit_price.toLocaleString()}</span>
+    </>
+  )
+}
 function A4Preview({
   selectedInq, form, staffItems, extraItems, supportItems,
   staffSubtotal, extraSubtotal, supplyPrice, vat, finalTotal,
-  hasDiscount, discountType, discountValue, discountAmount,
+  hasDiscount, discountType, discountValue, discountAmount, discountLabel,
   eventPeriod, today,
 }: {
   selectedInq?: Inquiry; form: { company_name: string; manager: string; contact_phone: string; site_address: string; attire: string; meal: string; parking: string; notes: string; include_vat: boolean }
   staffItems: ItemRowSimple[]; extraItems: ItemRowSimple[]; supportItems: ItemRowSimple[]
   staffSubtotal: number; extraSubtotal: number; supplyPrice: number; vat: number; finalTotal: number
-  hasDiscount: boolean; discountType: 'none' | 'amount' | 'percentage'; discountValue: number; discountAmount: number
+  hasDiscount: boolean; discountType: 'none' | 'amount' | 'percentage'; discountValue: number; discountAmount: number; discountLabel: string
   eventPeriod: string; today: string
 }) {
   return (
@@ -1515,9 +1562,9 @@ function A4Preview({
                 <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', color: '#4b5563', fontSize: '10px', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.work_time}</td>
                 <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.quantity}명</td>
                 <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.days}일</td>
-                <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.unit_price.toLocaleString()}</td>
+                <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}><UnitPriceCell row={row} /></td>
                 <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'center', fontWeight: '700', color: '#1e3a5f', verticalAlign: 'middle', lineHeight: '1.2' }}>{amt.toLocaleString()}</td>
-                <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', fontSize: '10px', color: '#6b7280', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{[row.spec, row.unit_discount_applied ? '(할인가 적용)' : ''].filter(Boolean).join(' ')}</td>
+                <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', fontSize: '10px', color: '#6b7280', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{[row.spec, (row.original_unit_price != null && row.original_unit_price > row.unit_price) ? '(할인가 적용)' : ''].filter(Boolean).join(' ')}</td>
               </tr>
             )
           })}
@@ -1536,9 +1583,9 @@ function A4Preview({
                 <td style={{ padding: '8px 8px', border: '1px solid #fde68a', color: '#92400e', fontSize: '10px', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.work_time}</td>
                 <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.quantity}명</td>
                 <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.days}일</td>
-                <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.unit_price > 0 ? row.unit_price.toLocaleString() : '-'}</td>
+                <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.unit_price > 0 ? <UnitPriceCell row={row} /> : '-'}</td>
                 <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'center', fontWeight: '700', verticalAlign: 'middle', lineHeight: '1.2' }}>{amt > 0 ? amt.toLocaleString() : '-'}</td>
-                <td style={{ padding: '8px 8px', border: '1px solid #fde68a', fontSize: '10px', color: '#92400e', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{[row.spec, row.unit_discount_applied ? '(할인가 적용)' : ''].filter(Boolean).join(' ')}</td>
+                <td style={{ padding: '8px 8px', border: '1px solid #fde68a', fontSize: '10px', color: '#92400e', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{[row.spec, (row.original_unit_price != null && row.original_unit_price > row.unit_price) ? '(할인가 적용)' : ''].filter(Boolean).join(' ')}</td>
               </tr>
             )
           })}
@@ -1565,7 +1612,7 @@ function A4Preview({
           ))}
           {hasDiscount && (
             <tr style={{ backgroundColor: '#fee2e2' }}>
-              <td style={{ padding: '8px 8px', border: '1px solid #fecaca', fontWeight: '700', color: '#b91c1c', verticalAlign: 'middle', lineHeight: '1.2' }}>총액 에누리 (할인)</td>
+              <td style={{ padding: '8px 8px', border: '1px solid #fecaca', fontWeight: '700', color: '#b91c1c', verticalAlign: 'middle', lineHeight: '1.2' }}>{discountLabel || '총액 에누리 (할인)'}</td>
               <td style={{ padding: '8px 8px', border: '1px solid #fecaca' }} />
               <td style={{ padding: '8px 8px', border: '1px solid #fecaca', textAlign: 'center' }}>-</td>
               <td style={{ padding: '8px 8px', border: '1px solid #fecaca', textAlign: 'center' }}>-</td>

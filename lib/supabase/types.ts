@@ -150,6 +150,7 @@ export interface Estimate {
   // 할인
   discount_type?: 'none' | 'amount' | 'percentage'
   discount_value?: number
+  discount_label?: string
   // 이전 견적 스냅샷 (수정 시 자동 저장)
   prev_total_price?: number | null
   prev_items_summary?: string | null
@@ -209,7 +210,8 @@ export interface EstimateItem {
   notes?: string
   is_leader: boolean
   discount: number
-  unit_discount_applied?: boolean
+  // 개별 단가 할인: 할인 전 정상 단가 (설정 시 unit_price와 함께 취소선으로 비교 표시)
+  original_unit_price?: number | null
   item_type: string
   sort_order: number
   created_at: string

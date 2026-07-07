@@ -47,7 +47,7 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
     item_type:  item.item_type || '인력',
     work_time:  item.spec?.split(' / ')[0] || '',
     spec:       item.spec?.split(' / ').slice(1).join(' / ') || '',
-    unit_discount_applied: item.unit_discount_applied || false,
+    original_unit_price: item.original_unit_price ?? null,
   })
   const staffItems   = allItems.filter(i => !EXTRA_TYPES.includes(i.item_type || '') && !SUPPORT_TYPES.includes(i.item_type || '')).map(toRow)
   const extraItems   = allItems.filter(i => EXTRA_TYPES.includes(i.item_type || '')).map(toRow)
@@ -62,6 +62,7 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
   const extraSubtotal = extraItems.reduce((s, i) => s + i.quantity * i.days * i.unit_price, 0)
   const discountType  = estimate.discount_type || 'none'
   const discountValue = estimate.discount_value || 0
+  const discountLabel = estimate.discount_label || '총액 에누리 (할인)'
   const hasDiscount    = discountType !== 'none' && discountValue > 0
 
   // ── 날짜/기간 ──────────────────────────────────────────
@@ -261,9 +262,9 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
                       <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', color: '#4b5563', fontSize: '10px', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.work_time}</td>
                       <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.quantity}명</td>
                       <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.days}일</td>
-                      <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.unit_price.toLocaleString()}</td>
+                      <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}><UnitPriceCell row={row} /></td>
                       <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'center', fontWeight: '700', color: '#1e3a5f', verticalAlign: 'middle', lineHeight: '1.2' }}>{amt.toLocaleString()}</td>
-                      <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', fontSize: '10px', color: '#6b7280', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{[row.spec, row.unit_discount_applied ? '(할인가 적용)' : ''].filter(Boolean).join(' ')}</td>
+                      <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', fontSize: '10px', color: '#6b7280', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{[row.spec, (row.original_unit_price != null && row.original_unit_price > row.unit_price) ? '(할인가 적용)' : ''].filter(Boolean).join(' ')}</td>
                     </tr>
                   )
                 })}
@@ -282,9 +283,9 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
                       <td style={{ padding: '8px 8px', border: '1px solid #fde68a', color: '#92400e', fontSize: '10px', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.work_time}</td>
                       <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.quantity}명</td>
                       <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.days}일</td>
-                      <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.unit_price > 0 ? row.unit_price.toLocaleString() : '-'}</td>
+                      <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.unit_price > 0 ? <UnitPriceCell row={row} /> : '-'}</td>
                       <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'center', fontWeight: '700', verticalAlign: 'middle', lineHeight: '1.2' }}>{amt > 0 ? amt.toLocaleString() : '-'}</td>
-                      <td style={{ padding: '8px 8px', border: '1px solid #fde68a', fontSize: '10px', color: '#92400e', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{[row.spec, row.unit_discount_applied ? '(할인가 적용)' : ''].filter(Boolean).join(' ')}</td>
+                      <td style={{ padding: '8px 8px', border: '1px solid #fde68a', fontSize: '10px', color: '#92400e', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{[row.spec, (row.original_unit_price != null && row.original_unit_price > row.unit_price) ? '(할인가 적용)' : ''].filter(Boolean).join(' ')}</td>
                     </tr>
                   )
                 })}
@@ -311,7 +312,7 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
                 ))}
                 {hasDiscount && (
                   <tr style={{ backgroundColor: '#fee2e2' }}>
-                    <td style={{ padding: '8px 8px', border: '1px solid #fecaca', fontWeight: '700', color: '#b91c1c', verticalAlign: 'middle', lineHeight: '1.2' }}>총액 에누리 (할인)</td>
+                    <td style={{ padding: '8px 8px', border: '1px solid #fecaca', fontWeight: '700', color: '#b91c1c', verticalAlign: 'middle', lineHeight: '1.2' }}>{discountLabel}</td>
                     <td style={{ padding: '8px 8px', border: '1px solid #fecaca' }} />
                     <td style={{ padding: '8px 8px', border: '1px solid #fecaca', textAlign: 'center' }}>-</td>
                     <td style={{ padding: '8px 8px', border: '1px solid #fecaca', textAlign: 'center' }}>-</td>
@@ -393,6 +394,16 @@ function TblRow2({ l1, v1, l2, v2 }: { l1: string; v1: string; l2: string; v2: s
         <td style={{ padding: '4px 6px', fontSize: '10px', border: '1px solid #d1d5db', color: '#111827' }}>{v2}</td>
       </>}
     </tr>
+  )
+}
+function UnitPriceCell({ row }: { row: { unit_price: number; original_unit_price?: number | null } }) {
+  const discounted = row.original_unit_price != null && row.original_unit_price > row.unit_price
+  if (!discounted) return <>{row.unit_price.toLocaleString()}</>
+  return (
+    <>
+      <span style={{ textDecoration: 'line-through', color: '#9ca3af', fontSize: '9px', marginRight: '4px' }}>{row.original_unit_price!.toLocaleString()}</span>
+      <span style={{ color: '#dc2626', fontWeight: 700 }}>{row.unit_price.toLocaleString()}</span>
+    </>
   )
 }
 function DocSumRow({ label, value }: { label: string; value: string }) {

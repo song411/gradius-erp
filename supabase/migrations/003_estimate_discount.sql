@@ -4,7 +4,9 @@
 
 ALTER TABLE estimates
   ADD COLUMN IF NOT EXISTS discount_type  TEXT DEFAULT 'none' CHECK (discount_type IN ('none', 'amount', 'percentage')),
-  ADD COLUMN IF NOT EXISTS discount_value NUMERIC DEFAULT 0;
+  ADD COLUMN IF NOT EXISTS discount_value NUMERIC DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS discount_label TEXT DEFAULT '총액 에누리 (할인)';
 
 ALTER TABLE estimate_items
-  ADD COLUMN IF NOT EXISTS unit_discount_applied BOOLEAN DEFAULT false;
+  DROP COLUMN IF EXISTS unit_discount_applied,
+  ADD COLUMN IF NOT EXISTS original_unit_price NUMERIC DEFAULT NULL;
