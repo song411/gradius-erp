@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import type { Staff, Assignment, Payout } from '@/lib/supabase/types'
+import type { Staff, Assignment, Payout, Evaluation } from '@/lib/supabase/types'
 import { X, Edit2, Star, Phone, MapPin, Languages, Car, CreditCard, FileText, Eye, EyeOff, IdCard, History, CalendarDays, Briefcase, TrendingUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -96,11 +96,12 @@ export default function CrewProfileCard({ staff, onClose, onEdit }: Props) {
   const [activeTab, setActiveTab] = useState<'profile' | 'history'>('profile')
   const [assignments, setAssignments] = useState<Assignment[]>([])
   const [payouts, setPayouts] = useState<Payout[]>([])
+  const [evaluations, setEvaluations] = useState<Evaluation[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
 
   const loadHistory = useCallback(async () => {
     setHistoryLoading(true)
-    const [asgns, pays] = await Promise.all([
+    const [asgns, pays, evals] = await Promise.all([
       db.list<Assignment>('assignments', {
         filters: { staff_id: staff.id },
         order: 'assigned_at', asc: false,
@@ -109,9 +110,14 @@ export default function CrewProfileCard({ staff, onClose, onEdit }: Props) {
         filters: { staff_name: staff.name },
         order: 'created_at', asc: false,
       }),
+      db.list<Evaluation>('evaluations', {
+        filters: { staff_id: staff.id },
+        order: 'evaluated_at', asc: false,
+      }),
     ])
     setAssignments(asgns)
     setPayouts(pays)
+    setEvaluations(evals)
     setHistoryLoading(false)
   }, [staff.id, staff.name])
 
@@ -248,29 +254,51 @@ export default function CrewProfileCard({ staff, onClose, onEdit }: Props) {
                     <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
                       {assignments.map(a => {
                         const payout = payouts.find(p => p.assignment_id === a.id)
+                        const evaluation = evaluations.find(e => e.assignment_id === a.id)
                         return (
-                          <div key={a.id} className="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-2 hover:bg-gray-100 transition-colors">
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs font-medium text-gray-800 truncate">{a.event_name || '-'}</p>
-                              <div className="flex items-center gap-2 mt-0.5 text-[10px] text-gray-400">
-                                <span className="bg-blue-50 text-blue-600 px-1.5 rounded">{a.job_type || '-'}</span>
-                                {a.start_date && <span>{a.start_date.slice(0, 10)}</span>}
-                                {a.work_days && <span>{a.work_days}일</span>}
+                          <div key={a.id} className="bg-gray-50 rounded-lg px-3 py-2 hover:bg-gray-100 transition-colors">
+                            <div className="flex items-center gap-3">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-medium text-gray-800 truncate">{a.event_name || '-'}</p>
+                                <div className="flex items-center gap-2 mt-0.5 text-[10px] text-gray-400">
+                                  <span className="bg-blue-50 text-blue-600 px-1.5 rounded">{a.job_type || '-'}</span>
+                                  {a.start_date && <span>{a.start_date.slice(0, 10)}</span>}
+                                  {a.work_days && <span>{a.work_days}일</span>}
+                                  {evaluation && (
+                                    <span className={`px-1.5 rounded font-semibold ${
+                                      evaluation.grade === '우수' ? 'bg-emerald-50 text-emerald-600' :
+                                      evaluation.grade === '미흡' ? 'bg-red-50 text-red-600' :
+                                      'bg-yellow-50 text-yellow-700'
+                                    }`}>
+                                      평가 {evaluation.total_score}점 ({evaluation.grade})
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="text-right shrink-0">
+                                {payout ? (
+                                  <p className="text-xs font-semibold text-emerald-600">{formatKRW(payout.final_pay)}</p>
+                                ) : (
+                                  <p className="text-xs text-gray-300">미지급</p>
+                                )}
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                                  a.status === '확정' ? 'bg-green-100 text-green-600' :
+                                  a.status === '배정중' ? 'bg-yellow-100 text-yellow-600' :
+                                  a.status === '취소' ? 'bg-gray-100 text-gray-400' :
+                                  'bg-blue-100 text-blue-600'
+                                }`}>{a.status}</span>
                               </div>
                             </div>
-                            <div className="text-right shrink-0">
-                              {payout ? (
-                                <p className="text-xs font-semibold text-emerald-600">{formatKRW(payout.final_pay)}</p>
-                              ) : (
-                                <p className="text-xs text-gray-300">미지급</p>
-                              )}
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
-                                a.status === '확정' ? 'bg-green-100 text-green-600' :
-                                a.status === '배정중' ? 'bg-yellow-100 text-yellow-600' :
-                                a.status === '취소' ? 'bg-gray-100 text-gray-400' :
-                                'bg-blue-100 text-blue-600'
-                              }`}>{a.status}</span>
-                            </div>
+                            {(evaluation?.strengths || evaluation?.improvements) && (
+                              <div className="mt-1.5 pt-1.5 border-t border-gray-200/70 grid grid-cols-2 gap-2">
+                                {evaluation.strengths && (
+                                  <p className="text-[10px] text-gray-500"><span className="text-emerald-600 font-medium">장점</span> {evaluation.strengths}</p>
+                                )}
+                                {evaluation.improvements && (
+                                  <p className="text-[10px] text-gray-500"><span className="text-orange-600 font-medium">개선점</span> {evaluation.improvements}</p>
+                                )}
+                              </div>
+                            )}
                           </div>
                         )
                       })}
