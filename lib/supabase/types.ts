@@ -212,6 +212,8 @@ export interface EstimateItem {
   discount: number
   // 개별 단가 할인: 할인 전 정상 단가 (설정 시 unit_price와 함께 취소선으로 비교 표시)
   original_unit_price?: number | null
+  // 실비청구 등 부가세 제외 품목 여부 (true면 이 품목의 금액은 VAT 계산에서 제외)
+  vat_exempt?: boolean
   item_type: string
   sort_order: number
   created_at: string

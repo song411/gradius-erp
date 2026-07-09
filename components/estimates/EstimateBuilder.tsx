@@ -49,6 +49,8 @@ interface ItemRow {
   selectedFactors: string[]; _basePrice: number; _basePayPrice: number
   // 개별 단가 할인: 값이 있으면 견적서에 취소선(정상가) + 실제 단가로 비교 표시
   original_unit_price: number | null
+  // 실비청구 등 부가세 제외 품목 (true면 이 품목 금액은 VAT 계산에서 제외)
+  vat_exempt: boolean
 }
 interface ReportMemo { strategy: string; staff: string; special: string; conclusion: string }
 interface Props {
@@ -66,7 +68,7 @@ function emptyRow(type: ItemType = '인력', defaultWorkTime = ''): ItemRow {
     key: makeKey(), role_id: '', role_name: '', quantity: 1, days: 1,
     unit_price: 0, pay_unit_price: 0, work_time: defaultWorkTime, is_leader: false,
     item_type: type, spec: '', selectedFactors: [], _basePrice: 0, _basePayPrice: 0,
-    original_unit_price: null,
+    original_unit_price: null, vat_exempt: false,
   }
 }
 
@@ -172,6 +174,7 @@ export default function EstimateBuilder({
         item_type: (item.item_type as ItemType) || '인력',
         selectedFactors: [], _basePrice: item.unit_price, _basePayPrice: item.pay_unit_price,
         original_unit_price: item.original_unit_price ?? null,
+        vat_exempt: item.vat_exempt ?? false,
       }))
       setItems(rows.length > 0 ? rows : [emptyRow()])
     } else {
@@ -310,22 +313,44 @@ export default function EstimateBuilder({
   const extraSubtotal = extraItems.reduce((s, r) => s + r.quantity * r.days * r.unit_price, 0)
   const rawSupplyPrice = staffSubtotal + extraSubtotal + form.extra_cost
   const costPrice     = billableItems.reduce((s, r) => s + r.quantity * r.days * r.pay_unit_price, 0)
-  const { vat: rawVat, total: rawTotal } = calcVAT(form.include_vat ? rawSupplyPrice : 0)
-  const rawFinalTotal = form.include_vat ? rawTotal : rawSupplyPrice
+
+  // 실비청구 등 부가세 제외 품목: 과세 대상 공급가액에서 제외하고 VAT 계산
+  const vatExemptSubtotal     = billableItems.filter(r => r.vat_exempt).reduce((s, r) => s + r.quantity * r.days * r.unit_price, 0)
+  const vatApplicableSubtotal = rawSupplyPrice - vatExemptSubtotal
+  const { vat: rawVat } = calcVAT(form.include_vat ? vatApplicableSubtotal : 0)
+  const rawFinalTotal = rawSupplyPrice + (form.include_vat ? rawVat : 0)
 
   // ── 할인 적용 (총액 정액/비율) ──
-  // 할인 없음: 기존 계산과 완전히 동일 → 기존 견적서엔 영향 없음
+  // 할인 없음 & 부가세 제외 품목 없음: 기존 계산과 완전히 동일 → 기존 견적서엔 영향 없음
   const hasDiscount   = form.discount_type !== 'none' && form.discount_value > 0
   const discountAmount = !hasDiscount ? 0
     : form.discount_type === 'amount' ? form.discount_value
     : Math.round(rawFinalTotal * (form.discount_value / 100))
-  // 할인된 최종 총합계를 기준으로 공급가액/부가세 역산
-  const finalTotal    = hasDiscount ? Math.max(0, rawFinalTotal - discountAmount) : rawFinalTotal
-  const supplyPrice   = !hasDiscount ? rawSupplyPrice
-    : form.include_vat ? calcVATReverse(finalTotal).supply : finalTotal
-  const vat           = !hasDiscount ? (form.include_vat ? rawVat : 0)
-    : form.include_vat ? calcVATReverse(finalTotal).vat : 0
-  const profitRate    = calcProfitRate(supplyPrice, costPrice)
+  const finalTotal = Math.max(0, rawFinalTotal - discountAmount)
+
+  // 할인 없음: 과세/비과세 각각 원래 금액 그대로 사용
+  // 할인 있음: 할인액을 과세분/비과세분에 비례 배분한 뒤, 과세분 잔액만 공급가액/부가세로 역산
+  let supplyPrice: number, vat: number
+  if (!hasDiscount) {
+    supplyPrice = rawSupplyPrice
+    vat = form.include_vat ? rawVat : 0
+  } else {
+    const exemptGross  = vatExemptSubtotal
+    const taxableGross = rawFinalTotal - exemptGross
+    const exemptDiscount  = rawFinalTotal > 0 ? Math.round(discountAmount * exemptGross / rawFinalTotal) : 0
+    const taxableDiscount = discountAmount - exemptDiscount
+    const newExemptSupply = Math.max(0, exemptGross - exemptDiscount)
+    const newTaxableGross = Math.max(0, taxableGross - taxableDiscount)
+    if (form.include_vat) {
+      const rev = calcVATReverse(newTaxableGross)
+      supplyPrice = rev.supply + newExemptSupply
+      vat = rev.vat
+    } else {
+      supplyPrice = newTaxableGross + newExemptSupply
+      vat = 0
+    }
+  }
+  const profitRate = calcProfitRate(supplyPrice, costPrice)
 
   // 수익 리포트 전용 (인력 품목만)
   const staffBilling  = staffItems.reduce((s, r) => s + r.quantity * r.days * r.unit_price, 0)
@@ -415,6 +440,7 @@ export default function EstimateBuilder({
         pay_unit_price: row.pay_unit_price,
         is_leader: row.is_leader,
         original_unit_price: row.original_unit_price,
+        vat_exempt: row.vat_exempt,
         item_type: row.item_type,
         spec: [row.work_time, row.spec].filter(Boolean).join(' / ') || null,
         sort_order: idx,
@@ -957,6 +983,7 @@ export default function EstimateBuilder({
                   />
                 )}
                 <SumLine label="공급가액" value={formatKRW(supplyPrice)} bold />
+                {vatExemptSubtotal > 0 && <SumLine label="- 비과세(실비) 포함" value={formatKRW(vatExemptSubtotal)} dimmed />}
                 {form.include_vat && <SumLine label="부가세 (10%)" value={formatKRW(vat)} />}
                 <div className="flex justify-between font-bold text-blue-800 border-t border-blue-200 pt-2 text-base">
                   <span>청구 합계</span><span>{formatKRW(finalTotal)}</span>
@@ -1012,7 +1039,7 @@ export default function EstimateBuilder({
                   selectedInq={selectedInq} form={form}
                   staffItems={staffItems} extraItems={extraItems} supportItems={supportItems}
                   staffSubtotal={staffSubtotal} extraSubtotal={extraSubtotal}
-                  supplyPrice={supplyPrice} vat={vat} finalTotal={finalTotal}
+                  supplyPrice={supplyPrice} vat={vat} finalTotal={finalTotal} vatExemptSubtotal={vatExemptSubtotal}
                   hasDiscount={hasDiscount} discountType={form.discount_type} discountValue={form.discount_value} discountAmount={discountAmount} discountLabel={form.discount_label}
                   eventPeriod={eventPeriod} today={today}
                 />
@@ -1276,6 +1303,17 @@ function ItemRowCard({ row, roles, factors, expandedFactor, defaultWorkTime, onR
               단가할인
             </label>
           )}
+          {!isSupport && (
+            <label className="flex items-center gap-1 text-xs text-gray-500 whitespace-nowrap shrink-0 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={row.vat_exempt}
+                onChange={e => onUpdate('vat_exempt', e.target.checked)}
+                className="w-3.5 h-3.5 rounded"
+              />
+              실비(부가세 제외)
+            </label>
+          )}
         </div>
 
         {/* 인력 전용: 팀장 / 팩터 */}
@@ -1454,7 +1492,7 @@ function KpiCard({ label, value, sub, color, highlight }: { label: string; value
 }
 
 // ── A4 미리보기 (별도 컴포넌트로 분리) ──────────────────
-type ItemRowSimple = { key: string; role_name: string; quantity: number; days: number; unit_price: number; pay_unit_price: number; is_leader: boolean; item_type: ItemType; spec: string; work_time: string; original_unit_price?: number | null }
+type ItemRowSimple = { key: string; role_name: string; quantity: number; days: number; unit_price: number; pay_unit_price: number; is_leader: boolean; item_type: ItemType; spec: string; work_time: string; original_unit_price?: number | null; vat_exempt?: boolean }
 function UnitPriceCell({ row }: { row: { unit_price: number; original_unit_price?: number | null } }) {
   const discounted = row.original_unit_price != null && row.original_unit_price > row.unit_price
   if (!discounted) return <>{row.unit_price.toLocaleString()}</>
@@ -1467,13 +1505,13 @@ function UnitPriceCell({ row }: { row: { unit_price: number; original_unit_price
 }
 function A4Preview({
   selectedInq, form, staffItems, extraItems, supportItems,
-  staffSubtotal, extraSubtotal, supplyPrice, vat, finalTotal,
+  staffSubtotal, extraSubtotal, supplyPrice, vat, finalTotal, vatExemptSubtotal,
   hasDiscount, discountType, discountValue, discountAmount, discountLabel,
   eventPeriod, today,
 }: {
   selectedInq?: Inquiry; form: { company_name: string; manager: string; contact_phone: string; site_address: string; attire: string; meal: string; parking: string; notes: string; include_vat: boolean }
   staffItems: ItemRowSimple[]; extraItems: ItemRowSimple[]; supportItems: ItemRowSimple[]
-  staffSubtotal: number; extraSubtotal: number; supplyPrice: number; vat: number; finalTotal: number
+  staffSubtotal: number; extraSubtotal: number; supplyPrice: number; vat: number; finalTotal: number; vatExemptSubtotal: number
   hasDiscount: boolean; discountType: 'none' | 'amount' | 'percentage'; discountValue: number; discountAmount: number; discountLabel: string
   eventPeriod: string; today: string
 }) {
@@ -1564,7 +1602,7 @@ function A4Preview({
                 <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.days}일</td>
                 <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}><UnitPriceCell row={row} /></td>
                 <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'center', fontWeight: '700', color: '#1e3a5f', verticalAlign: 'middle', lineHeight: '1.2' }}>{amt.toLocaleString()}</td>
-                <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', fontSize: '10px', color: '#6b7280', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{[row.spec, (row.original_unit_price != null && row.original_unit_price > row.unit_price) ? '(할인가 적용)' : ''].filter(Boolean).join(' ')}</td>
+                <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', fontSize: '10px', color: '#6b7280', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{[row.spec, (row.original_unit_price != null && row.original_unit_price > row.unit_price) ? '(할인가 적용)' : '', row.vat_exempt ? '(부가세 제외)' : ''].filter(Boolean).join(' ')}</td>
               </tr>
             )
           })}
@@ -1585,7 +1623,7 @@ function A4Preview({
                 <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.days}일</td>
                 <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.unit_price > 0 ? <UnitPriceCell row={row} /> : '-'}</td>
                 <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'center', fontWeight: '700', verticalAlign: 'middle', lineHeight: '1.2' }}>{amt > 0 ? amt.toLocaleString() : '-'}</td>
-                <td style={{ padding: '8px 8px', border: '1px solid #fde68a', fontSize: '10px', color: '#92400e', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{[row.spec, (row.original_unit_price != null && row.original_unit_price > row.unit_price) ? '(할인가 적용)' : ''].filter(Boolean).join(' ')}</td>
+                <td style={{ padding: '8px 8px', border: '1px solid #fde68a', fontSize: '10px', color: '#92400e', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{[row.spec, (row.original_unit_price != null && row.original_unit_price > row.unit_price) ? '(할인가 적용)' : '', row.vat_exempt ? '(부가세 제외)' : ''].filter(Boolean).join(' ')}</td>
               </tr>
             )
           })}
@@ -1643,6 +1681,7 @@ function A4Preview({
         </div>
         <div style={{ width: '210px', border: '2px solid #1e3a5f', borderRadius: '4px', overflow: 'hidden' }}>
           <DocSumRow label="공급가액" value={supplyPrice.toLocaleString()} />
+          {vatExemptSubtotal > 0 && <DocSumRow label="(비과세 실비 포함)" value={vatExemptSubtotal.toLocaleString()} />}
           <DocSumRow label="부 가 세" value={form.include_vat ? vat.toLocaleString() : '별도'} />
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 14px', backgroundColor: '#1e3a5f', color: '#fff', fontWeight: '900', fontSize: '14px' }}>
             <span>합 계</span><span>{finalTotal.toLocaleString()}</span>

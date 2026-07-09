@@ -48,6 +48,7 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
     work_time:  item.spec?.split(' / ')[0] || '',
     spec:       item.spec?.split(' / ').slice(1).join(' / ') || '',
     original_unit_price: item.original_unit_price ?? null,
+    vat_exempt: item.vat_exempt ?? false,
   })
   const staffItems   = allItems.filter(i => !EXTRA_TYPES.includes(i.item_type || '') && !SUPPORT_TYPES.includes(i.item_type || '')).map(toRow)
   const extraItems   = allItems.filter(i => EXTRA_TYPES.includes(i.item_type || '')).map(toRow)
@@ -60,6 +61,7 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
   const hasVat        = vat > 0
   const staffSubtotal = staffItems.reduce((s, i) => s + i.quantity * i.days * i.unit_price, 0)
   const extraSubtotal = extraItems.reduce((s, i) => s + i.quantity * i.days * i.unit_price, 0)
+  const vatExemptSubtotal = [...staffItems, ...extraItems].filter(i => i.vat_exempt).reduce((s, i) => s + i.quantity * i.days * i.unit_price, 0)
   const discountType  = estimate.discount_type || 'none'
   const discountValue = estimate.discount_value || 0
   const discountLabel = estimate.discount_label || '총액 에누리 (할인)'
@@ -264,7 +266,7 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
                       <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.days}일</td>
                       <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}><UnitPriceCell row={row} /></td>
                       <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'center', fontWeight: '700', color: '#1e3a5f', verticalAlign: 'middle', lineHeight: '1.2' }}>{amt.toLocaleString()}</td>
-                      <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', fontSize: '10px', color: '#6b7280', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{[row.spec, (row.original_unit_price != null && row.original_unit_price > row.unit_price) ? '(할인가 적용)' : ''].filter(Boolean).join(' ')}</td>
+                      <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', fontSize: '10px', color: '#6b7280', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{[row.spec, (row.original_unit_price != null && row.original_unit_price > row.unit_price) ? '(할인가 적용)' : '', row.vat_exempt ? '(부가세 제외)' : ''].filter(Boolean).join(' ')}</td>
                     </tr>
                   )
                 })}
@@ -285,7 +287,7 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
                       <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.days}일</td>
                       <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.unit_price > 0 ? <UnitPriceCell row={row} /> : '-'}</td>
                       <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'center', fontWeight: '700', verticalAlign: 'middle', lineHeight: '1.2' }}>{amt > 0 ? amt.toLocaleString() : '-'}</td>
-                      <td style={{ padding: '8px 8px', border: '1px solid #fde68a', fontSize: '10px', color: '#92400e', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{[row.spec, (row.original_unit_price != null && row.original_unit_price > row.unit_price) ? '(할인가 적용)' : ''].filter(Boolean).join(' ')}</td>
+                      <td style={{ padding: '8px 8px', border: '1px solid #fde68a', fontSize: '10px', color: '#92400e', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{[row.spec, (row.original_unit_price != null && row.original_unit_price > row.unit_price) ? '(할인가 적용)' : '', row.vat_exempt ? '(부가세 제외)' : ''].filter(Boolean).join(' ')}</td>
                     </tr>
                   )
                 })}
@@ -344,6 +346,7 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
               </div>
               <div style={{ width: '200px', border: '1px solid #d1d5db', borderRadius: '4px', overflow: 'hidden' }}>
                 <DocSumRow label="공급가액" value={supplyPrice.toLocaleString()} />
+                {vatExemptSubtotal > 0 && <DocSumRow label="(비과세 실비 포함)" value={vatExemptSubtotal.toLocaleString()} />}
                 <DocSumRow label="부 가 세" value={hasVat ? vat.toLocaleString() : '별도'} />
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', backgroundColor: '#1e3a5f', color: '#fff', fontWeight: '800', fontSize: '13px' }}>
                   <span>합 계</span><span>{total.toLocaleString()}</span>
