@@ -22,10 +22,12 @@ interface ScheduleConfig {
   customJobs: Array<{ jobType: string; required: number; payRate: number }>
   hiddenJobs: string[]
   requiredOverrides: Record<string, number>
+  labelOverrides: Record<string, string>
 }
 
 interface JobConfig {
   jobType: string
+  label: string
   required: number
   payRate: number
   isCustom: boolean
@@ -119,6 +121,29 @@ function StaffChip({
         </button>
       )}
     </div>
+  )
+}
+
+// ─── 직무명 편집 입력 ─────────────────────────────────────
+
+function JobLabelInput({
+  value, onCommit,
+}: { value: string; onCommit: (next: string) => void }) {
+  const [draft, setDraft] = useState(value)
+  useEffect(() => { setDraft(value) }, [value])
+
+  return (
+    <input
+      type="text"
+      value={draft}
+      onChange={e => setDraft(e.target.value)}
+      onBlur={() => { if (draft.trim() && draft.trim() !== value) onCommit(draft.trim()) }}
+      onKeyDown={e => {
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+        if (e.key === 'Escape') setDraft(value)
+      }}
+      className="w-full text-xs font-semibold text-gray-700 border border-gray-200 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-300"
+    />
   )
 }
 
@@ -224,6 +249,7 @@ const DEFAULT_CONFIG: ScheduleConfig = {
   customJobs: [],
   hiddenJobs: [],
   requiredOverrides: {},
+  labelOverrides: {},
 }
 
 export default function ScheduleView({
@@ -259,6 +285,7 @@ export default function ScheduleView({
             customJobs:       p.customJobs       ?? [],
             hiddenJobs:       p.hiddenJobs       ?? [],
             requiredOverrides: p.requiredOverrides ?? {},
+            labelOverrides:    p.labelOverrides    ?? {},
           })
         } catch {}
       }
@@ -286,13 +313,14 @@ export default function ScheduleView({
       .filter(s => !config.hiddenJobs.includes(s.jobType))
       .map(s => ({
         jobType:  s.jobType,
+        label:    config.labelOverrides[s.jobType] ?? s.jobType,
         required: config.requiredOverrides[s.jobType] ?? s.required,
         payRate:  s.payRate,
         isCustom: false,
       }))
     const custom: JobConfig[] = config.customJobs
       .filter(j => !config.hiddenJobs.includes(j.jobType))
-      .map(j => ({ ...j, isCustom: true }))
+      .map(j => ({ ...j, label: config.labelOverrides[j.jobType] ?? j.jobType, isCustom: true }))
     return [...base, ...custom]
   }, [slots, config])
 
@@ -343,6 +371,23 @@ export default function ScheduleView({
     await persistConfig(next)
   }
 
+  // ── 직무명(품목) 수정 ─────────────────────────────────────
+  async function renameJob(jobType: string, label: string) {
+    const next: ScheduleConfig = {
+      ...config,
+      labelOverrides: { ...config.labelOverrides, [jobType]: label },
+    }
+    setConfig(next)
+    await persistConfig(next)
+  }
+
+  async function resetJobLabel(jobType: string) {
+    const { [jobType]: _removed, ...rest } = config.labelOverrides
+    const next: ScheduleConfig = { ...config, labelOverrides: rest }
+    setConfig(next)
+    await persistConfig(next)
+  }
+
   if (!inquiry.event_start || !inquiry.event_end) {
     return (
       <div className="flex items-center justify-center h-40 text-gray-400">
@@ -366,7 +411,7 @@ export default function ScheduleView({
                 onClick={() => restoreJob(j)}
                 className="text-[10px] px-1.5 py-0.5 border border-dashed border-gray-300 text-gray-400 rounded hover:border-blue-400 hover:text-blue-500 transition-colors"
               >
-                + {j} 복원
+                + {config.labelOverrides[j] ?? j} 복원
               </button>
             ))}
           </div>
@@ -419,7 +464,27 @@ export default function ScheduleView({
                   <tr key={jobCfg.jobType} className="hover:bg-gray-50/50">
                     {/* 직무 헤더 셀 */}
                     <td className="sticky left-0 z-10 bg-gray-50 border border-gray-200 px-2.5 py-2 align-top min-w-[112px] w-[112px]">
-                      <div className="font-semibold text-gray-700">{jobCfg.jobType}</div>
+                      {editMode ? (
+                        <div className="flex items-center gap-1">
+                          <JobLabelInput
+                            value={jobCfg.label}
+                            onCommit={v => renameJob(jobCfg.jobType, v)}
+                          />
+                          {jobCfg.label !== jobCfg.jobType && (
+                            <button
+                              onClick={() => resetJobLabel(jobCfg.jobType)}
+                              className="shrink-0 text-[9px] text-gray-300 hover:text-blue-500 transition-colors"
+                              title={`원래 이름(${jobCfg.jobType})으로 되돌리기`}
+                            >
+                              ↺
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="font-semibold text-gray-700" title={jobCfg.label !== jobCfg.jobType ? `원래 이름: ${jobCfg.jobType}` : undefined}>
+                          {jobCfg.label}
+                        </div>
+                      )}
                       {editMode ? (
                         <div className="flex items-center gap-1 mt-1">
                           <input
