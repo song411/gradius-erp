@@ -205,7 +205,7 @@ const NUMBER_FIELDS = new Set(['base_price', 'pay_price', 'leader_bonus', 'base_
 // mgmt_rate/profit_rate는 0.06 같은 비율로 저장되지만 사람은 %로 입력/확인하는 게 편해서 별도 처리
 const PERCENT_FIELDS = new Set(['mgmt_rate', 'profit_rate'])
 
-interface EditTarget { table: 'roles' | 'factors' | 'guides'; id: string; field: string; value: string }
+interface EditTarget { table: 'sim_roles' | 'sim_factors' | 'sim_guides'; id: string; field: string; value: string }
 type EditableValueComp = React.ComponentType<{ table: EditTarget['table']; id: string; field: string; value: unknown; suffix?: string }>
 
 function marginColor(pct: number) {
@@ -240,9 +240,9 @@ export default function PricingSimModal({ onClose }: Props) {
     setLoading(true)
     try {
       const [r, f, g] = await Promise.all([
-        db.list<RoleRow>('roles', { order: 'role_name', asc: true }),
-        db.list<FactorRow>('factors', { order: 'factor_name', asc: true }),
-        db.list<GuideRow>('guides', { order: 'id', asc: true }),
+        db.list<RoleRow>('sim_roles', { order: 'role_name', asc: true }),
+        db.list<FactorRow>('sim_factors', { order: 'factor_name', asc: true }),
+        db.list<GuideRow>('sim_guides', { order: 'id', asc: true }),
       ])
       const sortedRoles = sortRoles(r)
       setRoles(sortedRoles)
@@ -367,7 +367,7 @@ export default function PricingSimModal({ onClose }: Props) {
     if (!editing) return
     const { table, id, field, value } = editing
 
-    const list = table === 'roles' ? roles : table === 'factors' ? factors : guides
+    const list = table === 'sim_roles' ? roles : table === 'sim_factors' ? factors : guides
     const original = (list as { id: string }[]).find(r => r.id === id) as Record<string, unknown> | undefined
     if (!original) return
     const oldVal = original[field]
@@ -384,9 +384,9 @@ export default function PricingSimModal({ onClose }: Props) {
     try {
       await db.update(table, id, { [field]: parsedVal })
       await logHistory(table, id, field, oldVal, parsedVal)
-      if (table === 'roles') setRoles(prev => prev.map(r => r.id === id ? { ...r, [field]: parsedVal } : r))
-      if (table === 'factors') setFactors(prev => prev.map(r => r.id === id ? { ...r, [field]: parsedVal } : r))
-      if (table === 'guides') setGuides(prev => prev.map(r => r.id === id ? { ...r, [field]: parsedVal } : r))
+      if (table === 'sim_roles') setRoles(prev => prev.map(r => r.id === id ? { ...r, [field]: parsedVal } : r))
+      if (table === 'sim_factors') setFactors(prev => prev.map(r => r.id === id ? { ...r, [field]: parsedVal } : r))
+      if (table === 'sim_guides') setGuides(prev => prev.map(r => r.id === id ? { ...r, [field]: parsedVal } : r))
       toast.success('저장됐습니다.')
       setEditing(null)
     } catch {
@@ -397,10 +397,10 @@ export default function PricingSimModal({ onClose }: Props) {
   async function togglePublished(r: RoleRow) {
     const next = !r.is_published
     try {
-      await db.update('roles', r.id, { is_published: next })
-      await logHistory('roles', r.id, 'is_published', r.is_published, next)
+      await db.update('sim_roles', r.id, { is_published: next })
+      await logHistory('sim_roles', r.id, 'is_published', r.is_published, next)
       setRoles(prev => prev.map(x => x.id === r.id ? { ...x, is_published: next } : x))
-      toast.success(next ? '발행됨 — 견적서 작성 화면에 노출됩니다.' : '발행 취소됨 — 견적서 작성 화면에서 숨겨집니다.')
+      toast.success(next ? '발행됨 — 검토 완료로 표시됩니다. (실제 견적서 작성 화면에는 영향 없음)' : '발행 취소됨 — 다시 초안으로 표시됩니다.')
     } catch {
       toast.error('저장 실패')
     }
@@ -410,8 +410,8 @@ export default function PricingSimModal({ onClose }: Props) {
   // 다루는 EditableValue로는 표현이 안 돼서 전용 함수로 배열 전체를 갱신한다 ──
   async function saveFixedCosts(r: RoleRow, next: FixedCost[]) {
     try {
-      await db.update('roles', r.id, { fixed_costs: next })
-      await logHistory('roles', r.id, 'fixed_costs', JSON.stringify(r.fixed_costs), JSON.stringify(next))
+      await db.update('sim_roles', r.id, { fixed_costs: next })
+      await logHistory('sim_roles', r.id, 'fixed_costs', JSON.stringify(r.fixed_costs), JSON.stringify(next))
       setRoles(prev => prev.map(x => x.id === r.id ? { ...x, fixed_costs: next } : x))
     } catch {
       toast.error('저장 실패')
@@ -424,8 +424,8 @@ export default function PricingSimModal({ onClose }: Props) {
 
   async function updateFactorRule(f: FactorRow, ruleType: RuleType, params: RuleParams) {
     try {
-      await db.update('factors', f.id, { rule_type: ruleType, rule_params: params })
-      await logHistory('factors', f.id, 'rule_type', f.rule_type, ruleType)
+      await db.update('sim_factors', f.id, { rule_type: ruleType, rule_params: params })
+      await logHistory('sim_factors', f.id, 'rule_type', f.rule_type, ruleType)
       setFactors(prev => prev.map(x => x.id === f.id ? { ...x, rule_type: ruleType, rule_params: params } : x))
     } catch {
       toast.error('저장 실패')
@@ -434,8 +434,8 @@ export default function PricingSimModal({ onClose }: Props) {
 
   async function updateFactorLevel(f: FactorRow, level: string) {
     try {
-      await db.update('factors', f.id, { level })
-      await logHistory('factors', f.id, 'level', f.level, level)
+      await db.update('sim_factors', f.id, { level })
+      await logHistory('sim_factors', f.id, 'level', f.level, level)
       setFactors(prev => prev.map(x => x.id === f.id ? { ...x, level } : x))
     } catch {
       toast.error('저장 실패')
@@ -444,7 +444,7 @@ export default function PricingSimModal({ onClose }: Props) {
 
   async function addFactor(roleId: string | null) {
     try {
-      const rows = await db.insert<FactorRow>('factors', {
+      const rows = await db.insert<FactorRow>('sim_factors', {
         role_id: roleId, factor_name: '새 옵션', add_price: 0, add_pay_price: 0,
         level: '기본', rule_type: 'flat', rule_params: {},
       })
@@ -457,7 +457,7 @@ export default function PricingSimModal({ onClose }: Props) {
   async function deleteFactor(id: string) {
     if (!confirm('이 옵션을 삭제할까요?')) return
     try {
-      await db.delete('factors', id)
+      await db.delete('sim_factors', id)
       setFactors(prev => prev.filter(f => f.id !== id))
     } catch {
       toast.error('삭제 실패')
@@ -467,7 +467,7 @@ export default function PricingSimModal({ onClose }: Props) {
   async function addMarketEntry() {
     if (!role) return
     try {
-      const rows = await db.insert<GuideRow>('guides', {
+      const rows = await db.insert<GuideRow>('sim_guides', {
         role_id: role.id, label: '새 항목', price: 0,
         surveyed_at: new Date().toISOString().slice(0, 10),
       })
@@ -480,7 +480,7 @@ export default function PricingSimModal({ onClose }: Props) {
   async function deleteMarketEntry(id: string) {
     if (!confirm('이 시장 조사 항목을 삭제할까요?')) return
     try {
-      await db.delete('guides', id)
+      await db.delete('sim_guides', id)
       setGuides(prev => prev.filter(g => g.id !== id))
     } catch {
       toast.error('삭제 실패')
@@ -586,7 +586,7 @@ export default function PricingSimModal({ onClose }: Props) {
                 <TabBtn active={tab === 'market'} onClick={() => setTab('market')} icon={<BarChart3 className="h-3.5 w-3.5" />} label="시장 단가" />
                 <div className="flex-1" />
                 <label className={`text-xs px-2.5 py-1.5 rounded-full font-semibold ${role.is_published ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-500'}`}>
-                  {role.is_published ? '발행됨 (견적서에 노출)' : '초안 (견적서 미노출)'}
+                  {role.is_published ? '발행됨 (검토 완료)' : '초안 (검토 중)'}
                 </label>
               </div>
 
@@ -796,25 +796,25 @@ export default function PricingSimModal({ onClose }: Props) {
                       </div>
                       <div className="grid grid-cols-3 gap-4 text-sm">
                         <Field label="고객 청구 기본가">
-                          <EditableValue table="roles" id={role.id} field="base_price" value={role.base_price} suffix="원" />
+                          <EditableValue table="sim_roles" id={role.id} field="base_price" value={role.base_price} suffix="원" />
                         </Field>
                         <Field label="크루 지급 기본가">
-                          <EditableValue table="roles" id={role.id} field="pay_price" value={role.pay_price} suffix="원" />
+                          <EditableValue table="sim_roles" id={role.id} field="pay_price" value={role.pay_price} suffix="원" />
                         </Field>
                         <Field label="팀장 가산">
-                          <EditableValue table="roles" id={role.id} field="leader_bonus" value={role.leader_bonus} suffix="원" />
+                          <EditableValue table="sim_roles" id={role.id} field="leader_bonus" value={role.leader_bonus} suffix="원" />
                         </Field>
                         <Field label="기준 근무시간">
-                          <EditableValue table="roles" id={role.id} field="base_hours" value={role.base_hours} suffix="시간" />
+                          <EditableValue table="sim_roles" id={role.id} field="base_hours" value={role.base_hours} suffix="시간" />
                         </Field>
                         <Field label="기준시간 초과 1시간당 추가 청구가">
-                          <EditableValue table="roles" id={role.id} field="overtime_hourly" value={role.overtime_hourly} suffix="원" />
+                          <EditableValue table="sim_roles" id={role.id} field="overtime_hourly" value={role.overtime_hourly} suffix="원" />
                         </Field>
                         <Field label="일반관리비율">
-                          <EditableValue table="roles" id={role.id} field="mgmt_rate" value={role.mgmt_rate} />
+                          <EditableValue table="sim_roles" id={role.id} field="mgmt_rate" value={role.mgmt_rate} />
                         </Field>
                         <Field label="이익률">
-                          <EditableValue table="roles" id={role.id} field="profit_rate" value={role.profit_rate} />
+                          <EditableValue table="sim_roles" id={role.id} field="profit_rate" value={role.profit_rate} />
                         </Field>
                       </div>
 
@@ -883,17 +883,17 @@ export default function PricingSimModal({ onClose }: Props) {
                         <div className="space-y-3 text-sm">
                           <div className="grid grid-cols-2 gap-4">
                             <Field label="지킴 (경쟁사) 단가">
-                              <EditableValue table="guides" id={roleGuideMain.id} field="competitor_price" value={roleGuideMain.competitor_price} suffix="원" />
+                              <EditableValue table="sim_guides" id={roleGuideMain.id} field="competitor_price" value={roleGuideMain.competitor_price} suffix="원" />
                             </Field>
                             <Field label="시장 평균">
-                              <EditableValue table="guides" id={roleGuideMain.id} field="market_avg_price" value={roleGuideMain.market_avg_price} suffix="원" />
+                              <EditableValue table="sim_guides" id={roleGuideMain.id} field="market_avg_price" value={roleGuideMain.market_avg_price} suffix="원" />
                             </Field>
                           </div>
                           <Field label="비고 / 조사 메모">
-                            <EditableValue table="guides" id={roleGuideMain.id} field="consult_points" value={roleGuideMain.consult_points ?? ''} />
+                            <EditableValue table="sim_guides" id={roleGuideMain.id} field="consult_points" value={roleGuideMain.consult_points ?? ''} />
                           </Field>
                           <Field label="과거 체결가 (참고)">
-                            <EditableValue table="guides" id={roleGuideMain.id} field="past_contract_price" value={roleGuideMain.past_contract_price} suffix="원" />
+                            <EditableValue table="sim_guides" id={roleGuideMain.id} field="past_contract_price" value={roleGuideMain.past_contract_price} suffix="원" />
                           </Field>
                         </div>
                       ) : (
@@ -918,10 +918,10 @@ export default function PricingSimModal({ onClose }: Props) {
                           <tbody>
                             {roleGuideExtra.map(g => (
                               <tr key={g.id} className="border-t border-gray-100">
-                                <td className="py-1.5"><EditableValue table="guides" id={g.id} field="label" value={g.label} /></td>
-                                <td className="py-1.5"><EditableValue table="guides" id={g.id} field="price" value={g.price} suffix="원" /></td>
-                                <td className="py-1.5"><EditableValue table="guides" id={g.id} field="surveyed_at" value={g.surveyed_at} /></td>
-                                <td className="py-1.5"><EditableValue table="guides" id={g.id} field="consult_points" value={g.consult_points ?? ''} /></td>
+                                <td className="py-1.5"><EditableValue table="sim_guides" id={g.id} field="label" value={g.label} /></td>
+                                <td className="py-1.5"><EditableValue table="sim_guides" id={g.id} field="price" value={g.price} suffix="원" /></td>
+                                <td className="py-1.5"><EditableValue table="sim_guides" id={g.id} field="surveyed_at" value={g.surveyed_at} /></td>
+                                <td className="py-1.5"><EditableValue table="sim_guides" id={g.id} field="consult_points" value={g.consult_points ?? ''} /></td>
                                 <td className="py-1.5 text-right pr-1">
                                   <button onClick={() => deleteMarketEntry(g.id)} className="text-gray-300 hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>
                                 </td>
@@ -1025,7 +1025,7 @@ function FactorRuleEditor({ f, onSave, onSaveLevel, onDelete, EditableValue, exp
             <button onClick={onToggleExpand} className="text-gray-400 hover:text-rose-600">
               {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
             </button>
-            <EditableValue table="factors" id={f.id} field="factor_name" value={f.factor_name} />
+            <EditableValue table="sim_factors" id={f.id} field="factor_name" value={f.factor_name} />
           </span>
         </td>
         <td className="py-2">
@@ -1039,8 +1039,8 @@ function FactorRuleEditor({ f, onSave, onSaveLevel, onDelete, EditableValue, exp
         <td className="py-2">
           {ruleType === 'flat' && (
             <div className="flex flex-col gap-1 text-xs">
-              <span>추가 청구가: <EditableValue table="factors" id={f.id} field="add_price" value={f.add_price} suffix="원" /></span>
-              <span>추가 지급가: <EditableValue table="factors" id={f.id} field="add_pay_price" value={f.add_pay_price} suffix="원" /></span>
+              <span>추가 청구가: <EditableValue table="sim_factors" id={f.id} field="add_price" value={f.add_price} suffix="원" /></span>
+              <span>추가 지급가: <EditableValue table="sim_factors" id={f.id} field="add_pay_price" value={f.add_pay_price} suffix="원" /></span>
             </div>
           )}
           {ruleType === 'percent' && (
@@ -1068,7 +1068,7 @@ function FactorRuleEditor({ f, onSave, onSaveLevel, onDelete, EditableValue, exp
             </div>
           )}
         </td>
-        <td className="py-2"><EditableValue table="factors" id={f.id} field="alert" value={f.alert ?? ''} /></td>
+        <td className="py-2"><EditableValue table="sim_factors" id={f.id} field="alert" value={f.alert ?? ''} /></td>
         <td className="py-2 pr-2 text-right">
           <button onClick={() => onDelete(f.id)} className="text-gray-300 hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>
         </td>
@@ -1078,7 +1078,7 @@ function FactorRuleEditor({ f, onSave, onSaveLevel, onDelete, EditableValue, exp
           <td></td>
           <td colSpan={5} className="py-2 pr-3">
             <div className="text-xs text-gray-500">
-              상세 설명: <EditableValue table="factors" id={f.id} field="description" value={f.description ?? ''} />
+              상세 설명: <EditableValue table="sim_factors" id={f.id} field="description" value={f.description ?? ''} />
             </div>
           </td>
         </tr>
