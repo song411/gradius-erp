@@ -329,7 +329,7 @@ export default function PricingSimModal({ onClose }: Props) {
 
     const sub = role.base_price + varAdd + fcTotal + leaderAdd + overtimeAdd + weeklyAllowance
     const mgmt = Math.round(sub * (role.mgmt_rate ?? 0.06))
-    const profit = Math.round((sub + mgmt) * (role.profit_rate ?? 0.10))
+    const profit = Math.round(sub * (role.profit_rate ?? 0.10))
     const client = sub + mgmt + profit
     const crew = role.pay_price + payAdd + weeklyAllowance
     return { crew, client, margin: client - crew, sub, mgmt, profit, varAdd, fcTotal, leaderAdd, overtimeAdd, autoApplied, weeklyHours, weeklyEligible, hourlyWage, weeklyAllowance }
@@ -1098,7 +1098,7 @@ function DashboardView({ roles, factors, guides, onSelectRole }: {
     const legalCount = roleFactors.filter(f => f.alert).length
     const sub = r.base_price + (r.fixed_costs || []).reduce((s, f) => s + f.a, 0)
     const mgmt = Math.round(sub * (r.mgmt_rate ?? 0.06))
-    const profit = Math.round((sub + mgmt) * (r.profit_rate ?? 0.10))
+    const profit = Math.round(sub * (r.profit_rate ?? 0.10))
     const client = sub + mgmt + profit
     const margin = client - r.pay_price
     const marginPct = client > 0 ? Math.round((margin / client) * 100) : 0
