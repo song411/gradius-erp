@@ -130,7 +130,7 @@ export default function EstimateBuilder({
     if (!open) return
     setLoading(true)
     Promise.all([
-      db.list<Role>('roles', { order: 'role_name', asc: true }),
+      db.list<Role>('roles', { order: 'role_name', asc: true, filters: { is_published: 'true' } }),
       db.list<Factor>('factors', { order: 'factor_name', asc: true }),
     ]).then(([r, f]) => { setRoles(r); setFactors(f); setLoading(false) })
   }, [open])

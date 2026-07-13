@@ -11,6 +11,7 @@ const ALLOWED_TABLES = [
   'payouts', 'evaluations', 'roles', 'factors', 'guides',
   'estimate_versions', 'closings', 'improvement_notes',
   'guard_profiles', 'dispatch_reports', 'project_memos',
+  'pricing_history',
 ]
 
 export async function GET(

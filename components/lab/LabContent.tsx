@@ -12,6 +12,7 @@ import GuideModal from './tools/GuideModal'
 import KitModal from './tools/KitModal'
 import IncomeModal from './tools/IncomeModal'
 import DispatchModal from './tools/DispatchModal'
+import PricingSimModal from './tools/PricingSimModal'
 import NaverNewsModal from './tools/NaverNewsModal'
 import YoutubeModal from './tools/YoutubeModal'
 
@@ -115,13 +116,13 @@ const TOOLS: Tool[] = [
     gradient: 'from-emerald-500 to-teal-600',
   },
   {
-    id: 'profit-sim',
-    emoji: '📊',
-    name: '수익 시뮬레이터',
-    desc: '투입 인원·단가 조정으로 예상 수익률을 미리 시뮬레이션',
+    id: 'pricing-sim',
+    emoji: '💰',
+    name: '가디어스 단가 시뮬레이터',
+    desc: '직종별 기본가·가산옵션으로 견적 계산 + 단가 직접 편집 + 경쟁사 시장 단가 비교',
     category: '계산 도구',
-    status: 'soon',
-    gradient: 'from-amber-500 to-orange-600',
+    status: 'beta',
+    gradient: 'from-rose-600 to-orange-700',
   },
   // 재미 & 동기부여
   {
@@ -196,6 +197,7 @@ function ToolModal({ toolId, onClose }: { toolId: string; onClose: () => void })
   if (toolId === 'guide')          return <GuideModal     onClose={onClose} />
   if (toolId === 'income-ledger')  return <IncomeModal    onClose={onClose} />
   if (toolId === 'dispatch' || toolId === 'deploy-report') return <DispatchModal onClose={onClose} />
+  if (toolId === 'pricing-sim')    return <PricingSimModal onClose={onClose} />
 
   const isExtraWide = toolId === 'youtube' || toolId === 'naver-news'
   const maxW = isExtraWide ? 'max-w-3xl' : 'max-w-2xl'
