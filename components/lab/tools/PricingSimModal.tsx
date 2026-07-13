@@ -228,6 +228,8 @@ export default function PricingSimModal({ onClose }: Props) {
   const [qty, setQty] = useState(1)
   const [days, setDays] = useState(1)
   const [hours, setHours] = useState(8)
+  const [daysPerWeek, setDaysPerWeek] = useState(5)
+  const [attendancePerfect, setAttendancePerfect] = useState(true)
   const [tab, setTab] = useState<'calc' | 'edit' | 'market' | 'info'>('calc')
   const [changer, setChanger] = useState('')
   const [editing, setEditing] = useState<EditTarget | null>(null)
@@ -286,7 +288,11 @@ export default function PricingSimModal({ onClose }: Props) {
 
   // ── 가격 계산 (checkedSet을 인자로 받아 "이 옵션 체크 시 마진" 미리보기에도 재사용) ──
   function calcPrice(checkedSet: Set<string>) {
-    if (!role) return { crew: 0, client: 0, margin: 0, sub: 0, mgmt: 0, profit: 0, varAdd: 0, fcTotal: 0, leaderAdd: 0, overtimeAdd: 0, autoApplied: [] as { factor: FactorRow; amount: number }[] }
+    if (!role) return {
+      crew: 0, client: 0, margin: 0, sub: 0, mgmt: 0, profit: 0, varAdd: 0, fcTotal: 0, leaderAdd: 0, overtimeAdd: 0,
+      autoApplied: [] as { factor: FactorRow; amount: number }[],
+      weeklyHours: 0, weeklyEligible: false, hourlyWage: 0, weeklyAllowance: 0,
+    }
     let varAdd = 0, payAdd = 0
     manualFactors.filter(f => checkedSet.has(f.id)).forEach(f => {
       if (f.rule_type === 'flat') { varAdd += f.add_price; payAdd += f.add_pay_price }
@@ -312,12 +318,21 @@ export default function PricingSimModal({ onClose }: Props) {
     const leaderAdd = isLeader ? role.leader_bonus : 0
     const overtimeHours = Math.max(0, hours - (role.base_hours || 8))
     const overtimeAdd = overtimeHours * (role.overtime_hourly || 0)
-    const sub = role.base_price + varAdd + fcTotal + leaderAdd + overtimeAdd
+
+    // 주휴수당 (근로기준법 §55) — 1주 소정근로시간 15시간 이상 + 개근 시 발생
+    // 주휴수당 = 시급 × (min(주 소정근로시간,40)/40) × 8, 시급은 이번 견적의 일급(옵션 반영)÷근무시간으로 근사
+    const weeklyHours = daysPerWeek * hours
+    const weeklyEligible = weeklyHours >= 15 && attendancePerfect
+    const dailyPayBeforeAllowance = role.pay_price + payAdd
+    const hourlyWage = hours > 0 ? dailyPayBeforeAllowance / hours : 0
+    const weeklyAllowance = weeklyEligible ? Math.round(hourlyWage * (Math.min(weeklyHours, 40) / 40) * 8) : 0
+
+    const sub = role.base_price + varAdd + fcTotal + leaderAdd + overtimeAdd + weeklyAllowance
     const mgmt = Math.round(sub * (role.mgmt_rate ?? 0.06))
     const profit = Math.round((sub + mgmt) * (role.profit_rate ?? 0.10))
     const client = sub + mgmt + profit
-    const crew = role.pay_price + payAdd
-    return { crew, client, margin: client - crew, sub, mgmt, profit, varAdd, fcTotal, leaderAdd, overtimeAdd, autoApplied }
+    const crew = role.pay_price + payAdd + weeklyAllowance
+    return { crew, client, margin: client - crew, sub, mgmt, profit, varAdd, fcTotal, leaderAdd, overtimeAdd, autoApplied, weeklyHours, weeklyEligible, hourlyWage, weeklyAllowance }
   }
   const P = calcPrice(checked)
   const marginPct = P.client > 0 ? Math.round((P.margin / P.client) * 100) : 0
@@ -608,6 +623,29 @@ export default function PricingSimModal({ onClose }: Props) {
                       </div>
                     )}
 
+                    {/* 주휴수당 체크 (근로기준법 §55) */}
+                    <div className="bg-white border border-gray-200 rounded-xl p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-gray-600">주휴수당 체크 (근로기준법 §55)</span>
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${P.weeklyEligible ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-400'}`}>
+                          {P.weeklyEligible ? '발생' : '미발생'}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 items-end">
+                        <NumberField label="주당 근무일수" value={daysPerWeek} onChange={setDaysPerWeek} />
+                        <label className="flex items-center gap-2 text-xs text-gray-600 pb-1.5">
+                          <input type="checkbox" checked={attendancePerfect} onChange={() => setAttendancePerfect(v => !v)} />
+                          결근 없이 개근 (가정)
+                        </label>
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        주 소정근로시간 {P.weeklyHours}시간
+                        {P.weeklyHours < 15 ? ' — 15시간 미만이라 주휴수당 대상 아님' : !attendancePerfect ? ' — 개근하지 않으면 발생하지 않음' : (
+                          <> · 시급 환산 약 {fmt(P.hourlyWage)}원 · <b className="text-gray-700">주휴수당 {fmt(P.weeklyAllowance)}원</b> (아래 견적에 반영됨)</>
+                        )}
+                      </p>
+                    </div>
+
                     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
                       <table className="w-full text-sm">
                         <thead className="bg-gray-50 text-gray-500 text-xs">
@@ -676,6 +714,7 @@ export default function PricingSimModal({ onClose }: Props) {
                         {P.leaderAdd > 0 && <Row label="팀장 가산" val={P.leaderAdd} />}
                         {P.varAdd !== 0 && <Row label="옵션/조건 가산·할인 합계" val={P.varAdd} />}
                         {P.overtimeAdd > 0 && <Row label={`기준시간 초과 (${hours - (role.base_hours || 8)}H × ${fmt(role.overtime_hourly)}원)`} val={P.overtimeAdd} />}
+                        {P.weeklyAllowance > 0 && <Row label="주휴수당 (근로기준법 §55)" val={P.weeklyAllowance} />}
                         {(role.fixed_costs || []).map((fc, i) => <Row key={i} label={`${fc.l} (고정 원가)`} val={fc.a} />)}
                         <Row label="소계" val={P.sub} bold />
                         <Row label={`일반관리비 (${Math.round((role.mgmt_rate ?? 0.06) * 1000) / 10}%)`} val={P.mgmt} />
