@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { db } from '@/lib/supabase/api'
-import { X, RefreshCw, Calculator, Pencil, BarChart3, Save, ShieldAlert, Info, Plus, Trash2, AlertTriangle } from 'lucide-react'
+import { X, RefreshCw, Calculator, Pencil, BarChart3, Save, ShieldAlert, Info, Plus, Trash2, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react'
 import { toast } from 'sonner'
 
 // ── 타입 ─────────────────────────────────────────────────
@@ -14,9 +14,9 @@ interface RoleRow {
   base_hours: number; overtime_hourly: number
 }
 type RuleType = 'flat' | 'percent' | 'tier_qty' | 'tier_duration'
-interface RuleParams { pct?: number; min_qty?: number; min_days?: number }
+interface RuleParams { pct?: number; pay_pct?: number; min_qty?: number; min_days?: number }
 interface FactorRow {
-  id: string; role_id: string; factor_name: string; description?: string | null
+  id: string; role_id: string | null; factor_name: string; description?: string | null
   add_price: number; add_pay_price: number; level: string; alert?: string | null
   rule_type: RuleType; rule_params: RuleParams
 }
@@ -192,6 +192,7 @@ function fmt(n: number | null | undefined) { return Math.round(n || 0).toLocaleS
 const NUMBER_FIELDS = new Set(['base_price', 'pay_price', 'leader_bonus', 'base_hours', 'overtime_hourly', 'add_price', 'add_pay_price', 'market_avg_price', 'competitor_price', 'past_contract_price', 'price'])
 
 interface EditTarget { table: 'roles' | 'factors' | 'guides'; id: string; field: string; value: string }
+type EditableValueComp = React.ComponentType<{ table: EditTarget['table']; id: string; field: string; value: unknown; suffix?: string }>
 
 function marginColor(pct: number) {
   if (pct < 10) return 'text-red-600 bg-red-100'
@@ -216,6 +217,7 @@ export default function PricingSimModal({ onClose }: Props) {
   const [tab, setTab] = useState<'calc' | 'edit' | 'market' | 'info'>('calc')
   const [changer, setChanger] = useState('')
   const [editing, setEditing] = useState<EditTarget | null>(null)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
 
   async function loadAll() {
     setLoading(true)
@@ -240,8 +242,10 @@ export default function PricingSimModal({ onClose }: Props) {
 
   const role = roles.find(r => r.id === selectedRoleId) || null
   const roleFactors = factors.filter(f => f.role_id === selectedRoleId)
-  const manualFactors = roleFactors.filter(f => f.rule_type === 'flat' || f.rule_type === 'percent')
-  const tierFactors = roleFactors.filter(f => f.rule_type === 'tier_qty' || f.rule_type === 'tier_duration')
+  const commonFactors = factors.filter(f => f.role_id === null)
+  const allFactors = [...roleFactors, ...commonFactors]
+  const manualFactors = allFactors.filter(f => f.rule_type === 'flat' || f.rule_type === 'percent')
+  const tierFactors = allFactors.filter(f => f.rule_type === 'tier_qty' || f.rule_type === 'tier_duration')
   const roleGuideMain = guides.find(g => g.role_id === selectedRoleId && !g.label) || null
   const roleGuideExtra = guides.filter(g => g.role_id === selectedRoleId && g.label)
   const meta = role ? JOB_META[role.role_code] : null
@@ -269,7 +273,10 @@ export default function PricingSimModal({ onClose }: Props) {
     let varAdd = 0, payAdd = 0
     manualFactors.filter(f => checkedSet.has(f.id)).forEach(f => {
       if (f.rule_type === 'flat') { varAdd += f.add_price; payAdd += f.add_pay_price }
-      else { varAdd += Math.round(role.base_price * (f.rule_params?.pct || 0)) }
+      else {
+        varAdd += Math.round(role.base_price * (f.rule_params?.pct || 0))
+        payAdd += Math.round(role.pay_price * (f.rule_params?.pay_pct || 0))
+      }
     })
     const autoApplied: { factor: FactorRow; amount: number }[] = []
     tierFactors.forEach(f => {
@@ -278,7 +285,9 @@ export default function PricingSimModal({ onClose }: Props) {
         : days >= (f.rule_params?.min_days ?? Infinity)
       if (matches) {
         const amt = Math.round(role.base_price * (f.rule_params?.pct || 0))
+        const payAmt = Math.round(role.pay_price * (f.rule_params?.pay_pct || 0))
         varAdd += amt
+        payAdd += payAmt
         autoApplied.push({ factor: f, amount: amt })
       }
     })
@@ -305,7 +314,7 @@ export default function PricingSimModal({ onClose }: Props) {
     return hpct - marginPct
   }
 
-  // ── 인라인 편집 + 이력 기록 ────────────────────────────────
+  // ── 인라인 편집 + 이력 기록 (수정자 이름은 선택사항 — 미입력 시 '미기재'로 기록) ──
   function startEdit(table: EditTarget['table'], id: string, field: string, currentVal: unknown) {
     setEditing({ table, id, field, value: currentVal === null || currentVal === undefined ? '' : String(currentVal) })
   }
@@ -315,13 +324,12 @@ export default function PricingSimModal({ onClose }: Props) {
       table_name: table, row_id: id, field_name: field,
       old_value: oldVal === null || oldVal === undefined ? null : String(oldVal),
       new_value: newVal === null || newVal === undefined ? null : String(newVal),
-      changed_by: changer.trim(),
+      changed_by: changer.trim() || '미기재',
     })
   }
 
   async function saveEdit() {
     if (!editing) return
-    if (!changer.trim()) { toast.error('수정자 이름을 먼저 입력해 주세요'); return }
     const { table, id, field, value } = editing
 
     const list = table === 'roles' ? roles : table === 'factors' ? factors : guides
@@ -351,7 +359,6 @@ export default function PricingSimModal({ onClose }: Props) {
   }
 
   async function togglePublished(r: RoleRow) {
-    if (!changer.trim()) { toast.error('수정자 이름을 먼저 입력해 주세요'); return }
     const next = !r.is_published
     try {
       await db.update('roles', r.id, { is_published: next })
@@ -364,20 +371,39 @@ export default function PricingSimModal({ onClose }: Props) {
   }
 
   async function updateFactorRule(f: FactorRow, ruleType: RuleType, params: RuleParams) {
-    if (!changer.trim()) { toast.error('수정자 이름을 먼저 입력해 주세요'); return }
     try {
       await db.update('factors', f.id, { rule_type: ruleType, rule_params: params })
       await logHistory('factors', f.id, 'rule_type', f.rule_type, ruleType)
       setFactors(prev => prev.map(x => x.id === f.id ? { ...x, rule_type: ruleType, rule_params: params } : x))
-      toast.success('저장됐습니다.')
     } catch {
       toast.error('저장 실패')
     }
   }
 
+  async function addFactor(roleId: string | null) {
+    try {
+      const rows = await db.insert<FactorRow>('factors', {
+        role_id: roleId, factor_name: '새 옵션', add_price: 0, add_pay_price: 0,
+        level: '기본', rule_type: 'flat', rule_params: {},
+      })
+      setFactors(prev => [...prev, ...rows])
+    } catch {
+      toast.error('추가 실패')
+    }
+  }
+
+  async function deleteFactor(id: string) {
+    if (!confirm('이 옵션을 삭제할까요?')) return
+    try {
+      await db.delete('factors', id)
+      setFactors(prev => prev.filter(f => f.id !== id))
+    } catch {
+      toast.error('삭제 실패')
+    }
+  }
+
   async function addMarketEntry() {
     if (!role) return
-    if (!changer.trim()) { toast.error('수정자 이름을 먼저 입력해 주세요'); return }
     try {
       const rows = await db.insert<GuideRow>('guides', {
         role_id: role.id, label: '새 항목', price: 0,
@@ -390,7 +416,6 @@ export default function PricingSimModal({ onClose }: Props) {
   }
 
   async function deleteMarketEntry(id: string) {
-    if (!changer.trim()) { toast.error('수정자 이름을 먼저 입력해 주세요'); return }
     if (!confirm('이 시장 조사 항목을 삭제할까요?')) return
     try {
       await db.delete('guides', id)
@@ -401,14 +426,14 @@ export default function PricingSimModal({ onClose }: Props) {
   }
 
   // ── 편집 가능한 값 렌더 (클릭하면 인라인 편집) ─────────────
-  function EditableValue({ table, id, field, value, suffix = '' }: { table: EditTarget['table']; id: string; field: string; value: unknown; suffix?: string }) {
+  const EditableValue: EditableValueComp = ({ table, id, field, value, suffix = '' }) => {
     const isEditingThis = editing && editing.table === table && editing.id === id && editing.field === field
     if (isEditingThis) {
       return (
         <span className="inline-flex items-center gap-1">
           <input
             autoFocus
-            value={editing.value}
+            value={editing!.value}
             onChange={e => setEditing(prev => prev ? { ...prev, value: e.target.value } : null)}
             onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') setEditing(null) }}
             className="border border-blue-400 rounded px-1.5 py-0.5 text-sm w-28 focus:outline-none"
@@ -517,12 +542,12 @@ export default function PricingSimModal({ onClose }: Props) {
                     {/* 조건 입력: 근무시간 / 인원 / 일수 */}
                     <div className="grid grid-cols-3 gap-3 bg-white border border-gray-200 rounded-xl p-3">
                       <NumberField label={`근무시간 (기준 ${role.base_hours || 8}H)`} value={hours} onChange={setHours} />
-                      <NumberField label="투입 인원 (대량할인 조건용)" value={qty} onChange={setQty} />
-                      <NumberField label="투입 일수 (장기할인 조건용)" value={days} onChange={setDays} />
+                      <NumberField label="투입 인원 (인원 조건용)" value={qty} onChange={setQty} />
+                      <NumberField label="투입 일수 (기간 조건용)" value={days} onChange={setDays} />
                     </div>
                     {P.autoApplied.length > 0 && (
                       <div className="text-xs bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-blue-700">
-                        자동 적용된 조건: {P.autoApplied.map(a => `${a.factor.factor_name} (${fmt(a.amount)}원)`).join(' · ')}
+                        자동 적용된 조건: {P.autoApplied.map(a => `${a.factor.factor_name} (${a.amount < 0 ? '' : '+'}${fmt(a.amount)}원)`).join(' · ')}
                       </div>
                     )}
 
@@ -538,20 +563,33 @@ export default function PricingSimModal({ onClose }: Props) {
                           {manualFactors.map(f => {
                             const amount = f.rule_type === 'flat' ? f.add_price : Math.round(role.base_price * (f.rule_params?.pct || 0))
                             const delta = marginDeltaIfToggled(f)
+                            const isExpanded = expandedId === f.id
                             return (
-                              <tr key={f.id} className={checked.has(f.id) ? 'bg-rose-50/60' : ''}>
-                                <td className="text-center"><input type="checkbox" checked={checked.has(f.id)} onChange={() => toggleFactor(f.id)} /></td>
-                                <td className="py-1.5"><LevelBadge level={f.level} /></td>
-                                <td className="py-1.5">
-                                  {f.factor_name}
-                                  {f.rule_type === 'percent' && <span className="ml-1.5 text-[10px] bg-blue-100 text-blue-600 rounded px-1.5 py-0.5">정률</span>}
-                                  {f.alert && <span className="ml-1.5 text-[10px] bg-red-100 text-red-600 rounded px-1.5 py-0.5">{f.alert}</span>}
-                                </td>
-                                <td className="text-right py-1.5 font-semibold text-gray-700">{amount < 0 ? '' : '+'}{fmt(amount)}원</td>
-                                <td className={`text-right pr-3 py-1.5 text-xs ${delta === 0 ? 'text-gray-300' : delta > 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                                  {delta === 0 ? '—' : `${delta > 0 ? '▲' : '▼'}${Math.abs(delta)}%p`}
-                                </td>
-                              </tr>
+                              <Fragment key={f.id}>
+                                <tr className={checked.has(f.id) ? 'bg-rose-50/60' : ''}>
+                                  <td className="text-center"><input type="checkbox" checked={checked.has(f.id)} onChange={() => toggleFactor(f.id)} /></td>
+                                  <td className="py-1.5"><LevelBadge level={f.level} /></td>
+                                  <td className="py-1.5">
+                                    <button onClick={() => setExpandedId(isExpanded ? null : f.id)} className="inline-flex items-center gap-1 text-left hover:text-rose-600">
+                                      {isExpanded ? <ChevronDown className="h-3 w-3 shrink-0" /> : <ChevronRight className="h-3 w-3 shrink-0" />}
+                                      {f.factor_name}
+                                    </button>
+                                    {f.role_id === null && <span className="ml-1.5 text-[10px] bg-violet-100 text-violet-600 rounded px-1.5 py-0.5">공통</span>}
+                                    {f.rule_type === 'percent' && <span className="ml-1.5 text-[10px] bg-blue-100 text-blue-600 rounded px-1.5 py-0.5">정률</span>}
+                                    {f.alert && <span className="ml-1.5 text-[10px] bg-red-100 text-red-600 rounded px-1.5 py-0.5">{f.alert}</span>}
+                                  </td>
+                                  <td className="text-right py-1.5 font-semibold text-gray-700">{amount < 0 ? '' : '+'}{fmt(amount)}원</td>
+                                  <td className={`text-right pr-3 py-1.5 text-xs ${delta === 0 ? 'text-gray-300' : delta > 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                                    {delta === 0 ? '—' : `${delta > 0 ? '▲' : '▼'}${Math.abs(delta)}%p`}
+                                  </td>
+                                </tr>
+                                {isExpanded && (
+                                  <tr className="bg-gray-50">
+                                    <td></td>
+                                    <td colSpan={4} className="text-xs text-gray-500 py-2 pr-3">{f.description || '상세 설명이 아직 없습니다. 단가 편집 탭에서 추가할 수 있어요.'}</td>
+                                  </tr>
+                                )}
+                              </Fragment>
                             )
                           })}
                         </tbody>
@@ -674,20 +712,24 @@ export default function PricingSimModal({ onClose }: Props) {
                       )}
                     </div>
 
-                    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-                      <table className="w-full text-sm">
-                        <thead className="bg-gray-50 text-gray-500 text-xs">
-                          <tr>
-                            <th className="text-left py-2 pl-3">레벨</th><th className="text-left py-2">옵션명</th>
-                            <th className="text-left py-2">유형</th><th className="text-left py-2">조건/가산</th>
-                            <th className="text-left py-2 pr-3">경고</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {roleFactors.map(f => <FactorRuleEditor key={f.id} f={f} basePrice={role.base_price} onSave={updateFactorRule} EditableValue={EditableValue} />)}
-                        </tbody>
-                      </table>
-                    </div>
+                    <FactorTable
+                      title={`${role.role_name} 전용 옵션`}
+                      list={roleFactors}
+                      onAdd={() => addFactor(role.id)}
+                      onDelete={deleteFactor}
+                      onSaveRule={updateFactorRule}
+                      EditableValue={EditableValue}
+                      expandedId={expandedId} setExpandedId={setExpandedId}
+                    />
+                    <FactorTable
+                      title="공통 옵션 (모든 직종에 적용 — 예: 교통비 지원)"
+                      list={commonFactors}
+                      onAdd={() => addFactor(null)}
+                      onDelete={deleteFactor}
+                      onSaveRule={updateFactorRule}
+                      EditableValue={EditableValue}
+                      expandedId={expandedId} setExpandedId={setExpandedId}
+                    />
                   </div>
                 )}
 
@@ -758,71 +800,159 @@ export default function PricingSimModal({ onClose }: Props) {
   )
 }
 
-function FactorRuleEditor({ f, basePrice, onSave, EditableValue }: {
-  f: FactorRow; basePrice: number
+// ── 단가 편집 탭의 옵션 목록 (직종 전용 / 공통 공용) ────────
+function FactorTable({ title, list, onAdd, onDelete, onSaveRule, EditableValue, expandedId, setExpandedId }: {
+  title: string; list: FactorRow[]
+  onAdd: () => void; onDelete: (id: string) => void
+  onSaveRule: (f: FactorRow, ruleType: RuleType, params: RuleParams) => void
+  EditableValue: EditableValueComp
+  expandedId: string | null; setExpandedId: (id: string | null) => void
+}) {
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-200">
+        <h4 className="text-xs font-bold text-gray-600">{title}</h4>
+        <button onClick={onAdd} className="flex items-center gap-1 text-xs bg-rose-600 text-white px-2 py-1 rounded-lg hover:bg-rose-700">
+          <Plus className="h-3 w-3" />옵션 추가
+        </button>
+      </div>
+      <table className="w-full text-sm">
+        <thead className="bg-gray-50 text-gray-500 text-xs">
+          <tr>
+            <th className="text-left py-2 pl-3">레벨</th><th className="text-left py-2">옵션명</th>
+            <th className="text-left py-2">유형</th><th className="text-left py-2">조건/가산</th>
+            <th className="text-left py-2">경고</th><th className="w-8"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {list.length === 0 && (
+            <tr><td colSpan={6} className="text-center text-gray-400 text-xs py-3">옵션이 없습니다.</td></tr>
+          )}
+          {list.map(f => (
+            <FactorRuleEditor
+              key={f.id} f={f} onSave={onSaveRule} onDelete={onDelete} EditableValue={EditableValue}
+              expanded={expandedId === f.id} onToggleExpand={() => setExpandedId(expandedId === f.id ? null : f.id)}
+            />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function FactorRuleEditor({ f, onSave, onDelete, EditableValue, expanded, onToggleExpand }: {
+  f: FactorRow
   onSave: (f: FactorRow, ruleType: RuleType, params: RuleParams) => void
-  EditableValue: React.ComponentType<{ table: EditTarget['table']; id: string; field: string; value: unknown; suffix?: string }>
+  onDelete: (id: string) => void
+  EditableValue: EditableValueComp
+  expanded: boolean; onToggleExpand: () => void
 }) {
   const [ruleType, setRuleType] = useState<RuleType>(f.rule_type)
-  const [pct, setPct] = useState(((f.rule_params?.pct ?? 0) * 100).toString())
-  const [minQty, setMinQty] = useState((f.rule_params?.min_qty ?? 5).toString())
-  const [minDays, setMinDays] = useState((f.rule_params?.min_days ?? 3).toString())
+  const [pct, setPct] = useState(f.rule_params?.pct ?? 0)
+  const [payPct, setPayPct] = useState(f.rule_params?.pay_pct ?? 0)
+  const [minQty, setMinQty] = useState(f.rule_params?.min_qty ?? 5)
+  const [minDays, setMinDays] = useState(f.rule_params?.min_days ?? 3)
 
-  function handleTypeChange(t: RuleType) {
-    setRuleType(t)
-    const params: RuleParams = t === 'percent' ? { pct: Number(pct) / 100 }
-      : t === 'tier_qty' ? { min_qty: Number(minQty), pct: Number(pct) / 100 }
-      : t === 'tier_duration' ? { min_days: Number(minDays), pct: Number(pct) / 100 }
-      : {}
-    onSave(f, t, params)
+  function buildParams(t: RuleType, o: Partial<{ pct: number; payPct: number; minQty: number; minDays: number }> = {}): RuleParams {
+    const p = o.pct ?? pct, pp = o.payPct ?? payPct, mq = o.minQty ?? minQty, md = o.minDays ?? minDays
+    if (t === 'percent') return { pct: p, pay_pct: pp }
+    if (t === 'tier_qty') return { min_qty: mq, pct: p, pay_pct: pp }
+    if (t === 'tier_duration') return { min_days: md, pct: p, pay_pct: pp }
+    return {}
   }
-  function handleParamSave() {
-    const params: RuleParams = ruleType === 'percent' ? { pct: Number(pct) / 100 }
-      : ruleType === 'tier_qty' ? { min_qty: Number(minQty), pct: Number(pct) / 100 }
-      : ruleType === 'tier_duration' ? { min_days: Number(minDays), pct: Number(pct) / 100 }
-      : {}
-    onSave(f, ruleType, params)
+  function handleTypeChange(t: RuleType) { setRuleType(t); onSave(f, t, buildParams(t)) }
+  function commitPct(v: number) { setPct(v); onSave(f, ruleType, buildParams(ruleType, { pct: v })) }
+  function commitPayPct(v: number) { setPayPct(v); onSave(f, ruleType, buildParams(ruleType, { payPct: v })) }
+  function commitMinQty(v: string) { const n = Number(v) || 0; setMinQty(n); onSave(f, ruleType, buildParams(ruleType, { minQty: n })) }
+  function commitMinDays(v: string) { const n = Number(v) || 0; setMinDays(n); onSave(f, ruleType, buildParams(ruleType, { minDays: n })) }
+
+  return (
+    <>
+      <tr className="border-t border-gray-100 align-top">
+        <td className="py-2 pl-3"><LevelBadge level={f.level} /></td>
+        <td className="py-2">
+          <button onClick={onToggleExpand} className="inline-flex items-center gap-1 hover:text-rose-600">
+            {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}{f.factor_name}
+          </button>
+        </td>
+        <td className="py-2">
+          <select value={ruleType} onChange={e => handleTypeChange(e.target.value as RuleType)} className="border border-gray-200 rounded px-1.5 py-0.5 text-xs">
+            <option value="flat">정액가산</option>
+            <option value="percent">정률(수동 체크)</option>
+            <option value="tier_qty">인원수 조건(자동)</option>
+            <option value="tier_duration">기간 조건(자동)</option>
+          </select>
+        </td>
+        <td className="py-2">
+          {ruleType === 'flat' && (
+            <div className="flex flex-col gap-1 text-xs">
+              <span>추가 청구가: <EditableValue table="factors" id={f.id} field="add_price" value={f.add_price} suffix="원" /></span>
+              <span>추가 지급가: <EditableValue table="factors" id={f.id} field="add_pay_price" value={f.add_pay_price} suffix="원" /></span>
+            </div>
+          )}
+          {ruleType === 'percent' && (
+            <div className="flex flex-col gap-1">
+              <SignedPctField label="청구가 기준" value={pct} onCommit={commitPct} />
+              <SignedPctField label="지급가 기준" value={payPct} onCommit={commitPayPct} />
+            </div>
+          )}
+          {ruleType === 'tier_qty' && (
+            <div className="flex flex-col gap-1">
+              <span className="flex items-center gap-1 text-xs">
+                <input defaultValue={minQty} onBlur={e => commitMinQty(e.target.value)} className="w-12 border border-gray-200 rounded px-1 py-0.5" />명 이상 시
+              </span>
+              <SignedPctField label="청구가 기준" value={pct} onCommit={commitPct} />
+              <SignedPctField label="지급가 기준" value={payPct} onCommit={commitPayPct} />
+            </div>
+          )}
+          {ruleType === 'tier_duration' && (
+            <div className="flex flex-col gap-1">
+              <span className="flex items-center gap-1 text-xs">
+                <input defaultValue={minDays} onBlur={e => commitMinDays(e.target.value)} className="w-12 border border-gray-200 rounded px-1 py-0.5" />일 이상 시
+              </span>
+              <SignedPctField label="청구가 기준" value={pct} onCommit={commitPct} />
+              <SignedPctField label="지급가 기준" value={payPct} onCommit={commitPayPct} />
+            </div>
+          )}
+        </td>
+        <td className="py-2"><EditableValue table="factors" id={f.id} field="alert" value={f.alert ?? ''} /></td>
+        <td className="py-2 pr-2 text-right">
+          <button onClick={() => onDelete(f.id)} className="text-gray-300 hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>
+        </td>
+      </tr>
+      {expanded && (
+        <tr className="bg-gray-50">
+          <td></td>
+          <td colSpan={5} className="py-2 pr-3">
+            <div className="text-xs text-gray-500">
+              상세 설명: <EditableValue table="factors" id={f.id} field="description" value={f.description ?? ''} />
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  )
+}
+
+// 할인/가산 방향을 명시적으로 고르는 정률 입력 — 부호를 직접 타이핑하지 않아도 됨
+function SignedPctField({ label, value, onCommit }: { label: string; value: number; onCommit: (v: number) => void }) {
+  const [mode, setMode] = useState<'discount' | 'surcharge'>(value < 0 ? 'discount' : 'surcharge')
+  const [mag, setMag] = useState((Math.round(Math.abs(value) * 1000) / 10).toString())
+
+  function commit(nextMode: 'discount' | 'surcharge' = mode, nextMag: string = mag) {
+    const signed = (nextMode === 'discount' ? -1 : 1) * (Number(nextMag) || 0) / 100
+    onCommit(signed)
   }
 
   return (
-    <tr className="border-t border-gray-100 align-top">
-      <td className="py-2 pl-3"><LevelBadge level={f.level} /></td>
-      <td className="py-2">{f.factor_name}</td>
-      <td className="py-2">
-        <select value={ruleType} onChange={e => handleTypeChange(e.target.value as RuleType)} className="border border-gray-200 rounded px-1.5 py-0.5 text-xs">
-          <option value="flat">정액가산</option>
-          <option value="percent">정률(수동 체크)</option>
-          <option value="tier_qty">인원수 조건(자동)</option>
-          <option value="tier_duration">기간 조건(자동)</option>
-        </select>
-      </td>
-      <td className="py-2">
-        {ruleType === 'flat' && (
-          <span className="flex items-center gap-2">
-            <EditableValue table="factors" id={f.id} field="add_price" value={f.add_price} suffix="원(청구)" />
-            <EditableValue table="factors" id={f.id} field="add_pay_price" value={f.add_pay_price} suffix="원(지급)" />
-          </span>
-        )}
-        {ruleType === 'percent' && (
-          <span className="flex items-center gap-1 text-xs">
-            기본가의 <input value={pct} onChange={e => setPct(e.target.value)} onBlur={handleParamSave} className="w-14 border border-gray-200 rounded px-1 py-0.5" />% (예상 {fmt(Math.round(basePrice * Number(pct || 0) / 100))}원)
-          </span>
-        )}
-        {ruleType === 'tier_qty' && (
-          <span className="flex items-center gap-1 text-xs">
-            <input value={minQty} onChange={e => setMinQty(e.target.value)} onBlur={handleParamSave} className="w-12 border border-gray-200 rounded px-1 py-0.5" />명 이상 시
-            <input value={pct} onChange={e => setPct(e.target.value)} onBlur={handleParamSave} className="w-14 border border-gray-200 rounded px-1 py-0.5" />%
-          </span>
-        )}
-        {ruleType === 'tier_duration' && (
-          <span className="flex items-center gap-1 text-xs">
-            <input value={minDays} onChange={e => setMinDays(e.target.value)} onBlur={handleParamSave} className="w-12 border border-gray-200 rounded px-1 py-0.5" />일 이상 시
-            <input value={pct} onChange={e => setPct(e.target.value)} onBlur={handleParamSave} className="w-14 border border-gray-200 rounded px-1 py-0.5" />%
-          </span>
-        )}
-      </td>
-      <td className="py-2 pr-3"><EditableValue table="factors" id={f.id} field="alert" value={f.alert ?? ''} /></td>
-    </tr>
+    <span className="inline-flex items-center gap-1 text-xs text-gray-500">
+      {label}
+      <select value={mode} onChange={e => { const m = e.target.value as 'discount' | 'surcharge'; setMode(m); commit(m) }} className="border border-gray-200 rounded px-1 py-0.5">
+        <option value="discount">할인</option>
+        <option value="surcharge">가산</option>
+      </select>
+      <input value={mag} onChange={e => setMag(e.target.value)} onBlur={() => commit()} className="w-12 border border-gray-200 rounded px-1 py-0.5" />%
+    </span>
   )
 }
 
@@ -878,11 +1008,11 @@ function NumberField({ label, value, onChange }: { label: string; value: number;
 function ChangerInput({ changer, setChanger }: { changer: string; setChanger: (v: string) => void }) {
   return (
     <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
-      <span className="text-xs font-semibold text-blue-700 shrink-0">수정자 *</span>
+      <span className="text-xs font-semibold text-blue-700 shrink-0">수정자</span>
       <input
         value={changer}
         onChange={e => setChanger(e.target.value)}
-        placeholder="이름을 입력해야 저장 및 발행이 가능합니다"
+        placeholder="이름을 입력하면 변경 이력에 남습니다 (선택 입력)"
         className="flex-1 bg-white border border-blue-200 rounded px-2 py-1 text-sm focus:outline-none focus:border-blue-400"
       />
     </div>
