@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useState } from 'react'
 import { db } from '@/lib/supabase/api'
-import { X, RefreshCw, Calculator, Pencil, BarChart3, Save, ShieldAlert, Info, Plus, Trash2, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react'
+import { X, RefreshCw, Calculator, Pencil, BarChart3, Save, ShieldAlert, Info, Plus, Trash2, AlertTriangle, ChevronDown, ChevronRight, History } from 'lucide-react'
 import { toast } from 'sonner'
 
 // ── 타입 ─────────────────────────────────────────────────
@@ -200,6 +200,71 @@ function sortRoles(list: RoleRow[]) {
 
 function fmt(n: number | null | undefined) { return Math.round(n || 0).toLocaleString('ko-KR') }
 
+// ── 체결 히스토리 (실제 ERP 견적/문의 데이터 기반 참고 자료, 읽기 전용) ──
+// estimate_items.role_name은 완전 자유 텍스트라 포함(contains) 키워드로 근사 매칭한다.
+// 완벽한 매칭이 아니므로 UI에서 매칭된 원문을 그대로 보여줘 팀이 검증할 수 있게 한다.
+const ROLE_MATCH_KEYWORDS: Record<string, string[]> = {
+  staff: ['행사스탭', '행사팀장', '총괄팀장', '진행팀장', '스탭팀장'],
+  parking: ['주차요원'],
+  safety: ['안전요원'],
+  promoter: ['프로모터', '판촉스탭', '판촉 프로모터'],
+  narrator: ['나레이'],
+  mascot: ['인형탈'],
+  docent: ['도슨트'],
+  mc: ['MC'],
+  protocol: ['의전'],
+  driver: ['수행기사'],
+  guard: ['경호'],
+}
+const WON_STATUSES = new Set(['체결', '배정완료', '진행중', '완료', '정산완료'])
+const LOST_STATUSES = new Set(['미체결', '취소'])
+
+interface HistoryItem {
+  id: string; role_name: string; unit_price: number; quantity: number; days: number
+  status: string; outcome: 'won' | 'lost' | 'pending'
+  event_start: string | null; event_end: string | null; event_time: string | null
+  company_name: string | null
+}
+
+function classifyOutcome(status: string | undefined | null): 'won' | 'lost' | 'pending' {
+  if (!status) return 'pending'
+  if (WON_STATUSES.has(status)) return 'won'
+  if (LOST_STATUSES.has(status)) return 'lost'
+  return 'pending'
+}
+function matchesRoleName(roleName: string, roleCode: string): boolean {
+  const keywords = ROLE_MATCH_KEYWORDS[roleCode]
+  if (!keywords || !roleName) return false
+  return keywords.some(k => roleName.includes(k))
+}
+function priceBucket(price: number) { return Math.round(price / 10000) * 10000 }
+function formatEventDate(it: HistoryItem) {
+  if (!it.event_start) return '일정 미정'
+  const range = it.event_end && it.event_end !== it.event_start ? `${it.event_start} ~ ${it.event_end}` : it.event_start
+  return it.event_time ? `${range} (${it.event_time})` : range
+}
+
+function computeRoleHistory(roleCode: string, items: HistoryItem[]) {
+  const matched = items.filter(it => matchesRoleName(it.role_name, roleCode))
+  const decided = matched.filter(it => it.outcome !== 'pending')
+  const won = decided.filter(it => it.outcome === 'won')
+  const winRate = decided.length > 0 ? Math.round((won.length / decided.length) * 100) : null
+  const bucketMap = new Map<number, { total: number; won: number; items: HistoryItem[] }>()
+  matched.forEach(it => {
+    const b = priceBucket(it.unit_price)
+    if (!bucketMap.has(b)) bucketMap.set(b, { total: 0, won: 0, items: [] })
+    const rec = bucketMap.get(b)!
+    rec.total++
+    if (it.outcome === 'won') rec.won++
+    rec.items.push(it)
+  })
+  const buckets = Array.from(bucketMap.entries()).map(([price, v]) => ({ price, ...v })).sort((a, b) => a.price - b.price)
+  const wonPrices = won.map(w => w.unit_price)
+  const avgWonPrice = wonPrices.length > 0 ? Math.round(wonPrices.reduce((s, p) => s + p, 0) / wonPrices.length) : null
+  const recentWon = [...won].sort((a, b) => (b.event_start || '').localeCompare(a.event_start || ''))[0] || null
+  return { matched, decided, won, winRate, buckets, avgWonPrice, recentWon }
+}
+
 // 숫자로 저장하는 필드 목록 (인라인 편집 시 타입 변환용)
 const NUMBER_FIELDS = new Set(['base_price', 'pay_price', 'leader_bonus', 'base_hours', 'overtime_hourly', 'mgmt_rate', 'profit_rate', 'add_price', 'add_pay_price', 'market_avg_price', 'competitor_price', 'past_contract_price', 'price'])
 // mgmt_rate/profit_rate는 0.06 같은 비율로 저장되지만 사람은 %로 입력/확인하는 게 편해서 별도 처리
@@ -230,11 +295,48 @@ export default function PricingSimModal({ onClose }: Props) {
   const [hours, setHours] = useState(8)
   const [daysPerWeek, setDaysPerWeek] = useState(5)
   const [attendancePerfect, setAttendancePerfect] = useState(true)
-  const [tab, setTab] = useState<'calc' | 'edit' | 'market' | 'info'>('calc')
+  const [tab, setTab] = useState<'calc' | 'edit' | 'market' | 'info' | 'history'>('calc')
   const [changer, setChanger] = useState('')
   const [editing, setEditing] = useState<EditTarget | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'role' | 'dashboard'>('role')
+  const [historyItems, setHistoryItems] = useState<HistoryItem[]>([])
+  const [historyLoaded, setHistoryLoaded] = useState(false)
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [expandedBucket, setExpandedBucket] = useState<number | null>(null)
+
+  async function loadHistory() {
+    if (historyLoaded || historyLoading) return
+    setHistoryLoading(true)
+    try {
+      const [items, inquiries] = await Promise.all([
+        db.list<{ id: string; role_name: string; unit_price: number; quantity: number; days: number; inquiry_id: string | null }>(
+          'estimate_items', { select: 'id,role_name,unit_price,quantity,days,inquiry_id', limit: 5000 }
+        ),
+        db.list<{ id: string; status: string; event_start: string | null; event_end: string | null; event_time: string | null; company_name: string | null }>(
+          'inquiries', { select: 'id,status,event_start,event_end,event_time,company_name', limit: 5000 }
+        ),
+      ])
+      const inqById = new Map(inquiries.map(i => [i.id, i]))
+      const merged: HistoryItem[] = items
+        .filter(it => it.role_name && it.inquiry_id && inqById.has(it.inquiry_id))
+        .map(it => {
+          const inq = inqById.get(it.inquiry_id as string)!
+          return {
+            id: it.id, role_name: it.role_name, unit_price: it.unit_price, quantity: it.quantity, days: it.days,
+            status: inq.status, outcome: classifyOutcome(inq.status),
+            event_start: inq.event_start, event_end: inq.event_end, event_time: inq.event_time,
+            company_name: inq.company_name,
+          }
+        })
+      setHistoryItems(merged)
+      setHistoryLoaded(true)
+    } catch {
+      toast.error('체결 히스토리 조회 실패')
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
 
   async function loadAll() {
     setLoading(true)
@@ -542,7 +644,7 @@ export default function PricingSimModal({ onClose }: Props) {
           ) : (
             <nav className="py-2">
               <button
-                onClick={() => setViewMode('dashboard')}
+                onClick={() => { setViewMode('dashboard'); loadHistory() }}
                 className={`w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm font-semibold transition-colors ${
                   viewMode === 'dashboard' ? 'bg-blue-50 border-l-4 border-blue-500 text-blue-700' : 'border-l-4 border-transparent text-gray-600 hover:bg-gray-50'
                 }`}
@@ -574,7 +676,9 @@ export default function PricingSimModal({ onClose }: Props) {
         <div className="flex-1 flex flex-col overflow-hidden">
           {viewMode === 'dashboard' ? (
             <div className="flex-1 overflow-y-auto p-5">
-              <DashboardView roles={roles} factors={factors} guides={guides} onSelectRole={selectRole} />
+              <DashboardView roles={roles} factors={factors} guides={guides} onSelectRole={selectRole}
+                onViewHistory={id => { selectRole(id); setTab('history') }}
+                historyItems={historyItems} historyLoading={historyLoading} />
             </div>
           ) : role && (
             <>
@@ -584,6 +688,7 @@ export default function PricingSimModal({ onClose }: Props) {
                 <TabBtn active={tab === 'info'} onClick={() => setTab('info')} icon={<Info className="h-3.5 w-3.5" />} label="업무 안내" />
                 <TabBtn active={tab === 'edit'} onClick={() => setTab('edit')} icon={<Pencil className="h-3.5 w-3.5" />} label="단가 편집" />
                 <TabBtn active={tab === 'market'} onClick={() => setTab('market')} icon={<BarChart3 className="h-3.5 w-3.5" />} label="시장 단가" />
+                <TabBtn active={tab === 'history'} onClick={() => { setTab('history'); loadHistory() }} icon={<History className="h-3.5 w-3.5" />} label="체결 히스토리" />
                 <div className="flex-1" />
                 <label className={`text-xs px-2.5 py-1.5 rounded-full font-semibold ${role.is_published ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-500'}`}>
                   {role.is_published ? '발행됨 (검토 완료)' : '초안 (검토 중)'}
@@ -933,6 +1038,22 @@ export default function PricingSimModal({ onClose }: Props) {
                     </div>
                   </div>
                 )}
+
+                {tab === 'history' && (
+                  <div className="max-w-3xl space-y-4">
+                    <p className="text-[11px] text-gray-400 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                      실제 ERP 견적 데이터에서 품목명 텍스트로 근사 매칭한 참고 자료입니다. 완전히 정확하지 않을 수 있으니 아래 목록의 원문 품목명으로 직접 확인해 주세요.
+                    </p>
+                    {historyLoading ? (
+                      <p className="text-sm text-gray-400">불러오는 중...</p>
+                    ) : !historyLoaded ? (
+                      <p className="text-sm text-gray-400">데이터를 불러오지 못했습니다.</p>
+                    ) : (
+                      <RoleHistoryView roleCode={role.role_code} items={historyItems}
+                        expandedBucket={expandedBucket} setExpandedBucket={setExpandedBucket} />
+                    )}
+                  </div>
+                )}
               </div>
             </>
           )}
@@ -1110,8 +1231,9 @@ function SignedPctField({ label, value, onCommit }: { label: string; value: numb
 }
 
 // ── 전체 대시보드: 11개 직종을 한 화면에서 매트릭스로 비교 ──
-function DashboardView({ roles, factors, guides, onSelectRole }: {
+function DashboardView({ roles, factors, guides, onSelectRole, onViewHistory, historyItems, historyLoading }: {
   roles: RoleRow[]; factors: FactorRow[]; guides: GuideRow[]; onSelectRole: (id: string) => void
+  onViewHistory: (id: string) => void; historyItems: HistoryItem[]; historyLoading: boolean
 }) {
   const rows = roles.map(r => {
     const roleFactors = factors.filter(f => f.role_id === r.id)
@@ -1124,7 +1246,8 @@ function DashboardView({ roles, factors, guides, onSelectRole }: {
     const marginPct = client > 0 ? Math.round((margin / client) * 100) : 0
     const guide = guides.find(g => g.role_id === r.id && !g.label) || null
     const diffPct = guide?.market_avg_price ? Math.round(((r.base_price - guide.market_avg_price) / guide.market_avg_price) * 1000) / 10 : null
-    return { r, optionCount: roleFactors.length, legalCount, client, margin, marginPct, guide, diffPct }
+    const h = computeRoleHistory(r.role_code, historyItems)
+    return { r, optionCount: roleFactors.length, legalCount, client, margin, marginPct, guide, diffPct, history: h }
   })
   const commonCount = factors.filter(f => f.role_id === null).length
   const publishedCount = roles.filter(r => r.is_published).length
@@ -1139,17 +1262,21 @@ function DashboardView({ roles, factors, guides, onSelectRole }: {
       </div>
 
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-        <h4 className="px-3 py-2 text-xs font-bold text-gray-600 bg-gray-50 border-b border-gray-200">직종별 단가 한눈에 보기 (옵션 미적용 기준가, 클릭하면 상세로 이동)</h4>
+        <h4 className="px-3 py-2 text-xs font-bold text-gray-600 bg-gray-50 border-b border-gray-200">
+          직종별 단가 한눈에 보기 (옵션 미적용 기준가, 클릭하면 상세로 이동) — 이력 매칭건수/체결율은 실제 ERP 견적 데이터 기반 참고치{historyLoading ? ' (불러오는 중...)' : ''}
+        </h4>
         <table className="w-full text-sm">
           <thead className="text-gray-400 text-xs">
             <tr>
               <th className="text-left py-2 pl-3">직종</th><th className="text-right py-2">청구 기본가</th><th className="text-right py-2">지급 기본가</th>
               <th className="text-right py-2">기본 마진</th><th className="text-right py-2">마진율</th>
-              <th className="text-center py-2">옵션수</th><th className="text-center py-2">법적의무</th><th className="text-center py-2 pr-3">상태</th>
+              <th className="text-center py-2">옵션수</th><th className="text-center py-2">법적의무</th>
+              <th className="text-center py-2">이력건수</th><th className="text-center py-2">체결율</th>
+              <th className="text-center py-2 pr-3">상태</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map(({ r, optionCount, legalCount, margin, marginPct }) => (
+            {rows.map(({ r, optionCount, legalCount, margin, marginPct, history: h }) => (
               <tr key={r.id} className="border-t border-gray-100 hover:bg-rose-50/40 cursor-pointer" onClick={() => onSelectRole(r.id)}>
                 <td className="py-1.5 pl-3">{JOB_META[r.role_code]?.emoji} {r.role_name}</td>
                 <td className="text-right py-1.5">{fmt(r.base_price)}원</td>
@@ -1158,6 +1285,14 @@ function DashboardView({ roles, factors, guides, onSelectRole }: {
                 <td className="text-right py-1.5"><span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${marginColor(marginPct)}`}>{marginPct}%</span></td>
                 <td className="text-center py-1.5">{optionCount}</td>
                 <td className="text-center py-1.5">{legalCount > 0 ? <span className="text-red-500 font-bold">{legalCount}</span> : <span className="text-gray-300">—</span>}</td>
+                <td className="text-center py-1.5">{h.matched.length > 0 ? h.matched.length : <span className="text-gray-300">—</span>}</td>
+                <td className="text-center py-1.5">
+                  {h.winRate === null ? <span className="text-gray-300">—</span> : (
+                    <button onClick={e => { e.stopPropagation(); onViewHistory(r.id) }} className={`underline decoration-dotted ${marginColor(h.winRate)} px-1 rounded-full text-xs font-bold`}>
+                      {h.winRate}% ({h.won.length}/{h.decided.length})
+                    </button>
+                  )}
+                </td>
                 <td className="text-center py-1.5 pr-3">{r.is_published ? <span className="text-emerald-600 text-xs font-semibold">발행</span> : <span className="text-gray-400 text-xs">초안</span>}</td>
               </tr>
             ))}
@@ -1195,11 +1330,79 @@ function DashboardView({ roles, factors, guides, onSelectRole }: {
   )
 }
 
-function StatCard({ label, value, accent = 'text-gray-800' }: { label: string; value: number; accent?: string }) {
+function StatCard({ label, value, display, accent = 'text-gray-800' }: { label: string; value: number; display?: string; accent?: string }) {
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-3 text-center">
       <div className="text-[11px] text-gray-400">{label}</div>
-      <div className={`text-xl font-extrabold ${accent}`}>{value}</div>
+      <div className={`text-xl font-extrabold ${accent}`}>{display ?? value}</div>
+    </div>
+  )
+}
+
+// ── 역할별 체결 히스토리 뷰 ────────────────────────────────
+function RoleHistoryView({ roleCode, items, expandedBucket, setExpandedBucket }: {
+  roleCode: string; items: HistoryItem[]
+  expandedBucket: number | null; setExpandedBucket: (b: number | null) => void
+}) {
+  const h = computeRoleHistory(roleCode, items)
+
+  if (h.matched.length === 0) {
+    return <p className="text-sm text-gray-400">이 직종과 매칭되는 과거 견적 데이터가 없습니다. (키워드 매칭 기준이라 실제로는 데이터가 있어도 못 잡을 수 있어요)</p>
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-4 gap-3">
+        <StatCard label="매칭 건수" value={h.matched.length} />
+        <StatCard label="체결율 (결정건 기준)" value={0} display={h.winRate === null ? '—' : `${h.winRate}%`}
+          accent={h.winRate === null ? 'text-gray-400' : marginColor(h.winRate)} />
+        <StatCard label="평균 체결가" value={0} display={h.avgWonPrice ? `${fmt(h.avgWonPrice)}원` : '—'} />
+        <StatCard label="최근 체결" value={0} display={h.recentWon ? formatEventDate(h.recentWon) : '—'} />
+      </div>
+
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <h4 className="px-3 py-2 text-xs font-bold text-gray-600 bg-gray-50 border-b border-gray-200">가격대별 체결율 (클릭하면 개별 건 목록)</h4>
+        <table className="w-full text-sm">
+          <thead className="text-gray-400 text-xs">
+            <tr><th className="text-left py-2 pl-3">가격대</th><th className="text-right py-2">전체건수</th><th className="text-right py-2">성사</th><th className="text-right py-2 pr-3">체결율</th></tr>
+          </thead>
+          <tbody>
+            {h.buckets.map(b => {
+              const decided = b.items.filter(it => it.outcome !== 'pending').length
+              const rate = decided > 0 ? Math.round((b.won / decided) * 100) : null
+              const isOpen = expandedBucket === b.price
+              return (
+                <Fragment key={b.price}>
+                  <tr className="border-t border-gray-100 hover:bg-rose-50/40 cursor-pointer" onClick={() => setExpandedBucket(isOpen ? null : b.price)}>
+                    <td className="py-1.5 pl-3">{fmt(b.price)}원대</td>
+                    <td className="text-right py-1.5">{b.total}</td>
+                    <td className="text-right py-1.5">{b.won}</td>
+                    <td className="text-right py-1.5 pr-3">{rate === null ? <span className="text-gray-300">—</span> : `${rate}%`}</td>
+                  </tr>
+                  {isOpen && (
+                    <tr className="bg-gray-50">
+                      <td colSpan={4} className="py-2 px-3">
+                        <ul className="space-y-1 text-xs text-gray-500">
+                          {b.items.map(it => (
+                            <li key={it.id} className="flex items-center gap-2">
+                              <span className={it.outcome === 'won' ? 'text-emerald-600' : it.outcome === 'lost' ? 'text-red-400' : 'text-gray-400'}>
+                                {it.outcome === 'won' ? '●성사' : it.outcome === 'lost' ? '○미성사' : '△미정'}
+                              </span>
+                              <span>{formatEventDate(it)}</span>
+                              <span className="text-gray-400">· {it.company_name || '고객사 미기재'}</span>
+                              <span className="text-gray-400">· 원문: "{it.role_name}"</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
