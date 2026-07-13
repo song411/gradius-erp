@@ -12,6 +12,7 @@ interface RoleRow {
   base_price: number; pay_price: number; leader_bonus: number
   fixed_costs: FixedCost[]; is_published: boolean
   base_hours: number; overtime_hourly: number
+  mgmt_rate: number; profit_rate: number
 }
 type RuleType = 'flat' | 'percent' | 'tier_qty' | 'tier_duration'
 interface RuleParams { pct?: number; pay_pct?: number; min_qty?: number; min_days?: number }
@@ -186,10 +187,23 @@ const JOB_META: Record<string, {
   },
 }
 
+// 좌측 목록에 보여줄 직종 순서 — 여기 없는 직종은 이 뒤에 이름순으로 붙는다
+const ROLE_ORDER = ['guard', 'staff', 'safety', 'parking', 'promoter', 'protocol']
+function sortRoles(list: RoleRow[]) {
+  return [...list].sort((a, b) => {
+    const ai = ROLE_ORDER.indexOf(a.role_code), bi = ROLE_ORDER.indexOf(b.role_code)
+    const av = ai === -1 ? ROLE_ORDER.length : ai, bv = bi === -1 ? ROLE_ORDER.length : bi
+    if (av !== bv) return av - bv
+    return a.role_name.localeCompare(b.role_name, 'ko')
+  })
+}
+
 function fmt(n: number | null | undefined) { return Math.round(n || 0).toLocaleString('ko-KR') }
 
 // 숫자로 저장하는 필드 목록 (인라인 편집 시 타입 변환용)
-const NUMBER_FIELDS = new Set(['base_price', 'pay_price', 'leader_bonus', 'base_hours', 'overtime_hourly', 'add_price', 'add_pay_price', 'market_avg_price', 'competitor_price', 'past_contract_price', 'price'])
+const NUMBER_FIELDS = new Set(['base_price', 'pay_price', 'leader_bonus', 'base_hours', 'overtime_hourly', 'mgmt_rate', 'profit_rate', 'add_price', 'add_pay_price', 'market_avg_price', 'competitor_price', 'past_contract_price', 'price'])
+// mgmt_rate/profit_rate는 0.06 같은 비율로 저장되지만 사람은 %로 입력/확인하는 게 편해서 별도 처리
+const PERCENT_FIELDS = new Set(['mgmt_rate', 'profit_rate'])
 
 interface EditTarget { table: 'roles' | 'factors' | 'guides'; id: string; field: string; value: string }
 type EditableValueComp = React.ComponentType<{ table: EditTarget['table']; id: string; field: string; value: unknown; suffix?: string }>
@@ -218,6 +232,7 @@ export default function PricingSimModal({ onClose }: Props) {
   const [changer, setChanger] = useState('')
   const [editing, setEditing] = useState<EditTarget | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [viewMode, setViewMode] = useState<'role' | 'dashboard'>('role')
 
   async function loadAll() {
     setLoading(true)
@@ -227,10 +242,11 @@ export default function PricingSimModal({ onClose }: Props) {
         db.list<FactorRow>('factors', { order: 'factor_name', asc: true }),
         db.list<GuideRow>('guides', { order: 'id', asc: true }),
       ])
-      setRoles(r)
+      const sortedRoles = sortRoles(r)
+      setRoles(sortedRoles)
       setFactors(f)
       setGuides(g)
-      if (r.length > 0 && !selectedRoleId) setSelectedRoleId(r[0].id)
+      if (sortedRoles.length > 0 && !selectedRoleId) setSelectedRoleId(sortedRoles[0].id)
     } catch {
       toast.error('단가 데이터 조회 실패')
     } finally {
@@ -252,6 +268,7 @@ export default function PricingSimModal({ onClose }: Props) {
 
   function selectRole(id: string) {
     setSelectedRoleId(id)
+    setViewMode('role')
     setChecked(new Set())
     setIsLeader(false)
     setQty(1); setDays(1)
@@ -296,8 +313,8 @@ export default function PricingSimModal({ onClose }: Props) {
     const overtimeHours = Math.max(0, hours - (role.base_hours || 8))
     const overtimeAdd = overtimeHours * (role.overtime_hourly || 0)
     const sub = role.base_price + varAdd + fcTotal + leaderAdd + overtimeAdd
-    const mgmt = Math.round(sub * 0.06)
-    const profit = Math.round((sub + mgmt) * 0.10)
+    const mgmt = Math.round(sub * (role.mgmt_rate ?? 0.06))
+    const profit = Math.round((sub + mgmt) * (role.profit_rate ?? 0.10))
     const client = sub + mgmt + profit
     const crew = role.pay_price + payAdd
     return { crew, client, margin: client - crew, sub, mgmt, profit, varAdd, fcTotal, leaderAdd, overtimeAdd, autoApplied }
@@ -316,7 +333,10 @@ export default function PricingSimModal({ onClose }: Props) {
 
   // ── 인라인 편집 + 이력 기록 (수정자 이름은 선택사항 — 미입력 시 '미기재'로 기록) ──
   function startEdit(table: EditTarget['table'], id: string, field: string, currentVal: unknown) {
-    setEditing({ table, id, field, value: currentVal === null || currentVal === undefined ? '' : String(currentVal) })
+    const display = currentVal === null || currentVal === undefined ? ''
+      : PERCENT_FIELDS.has(field) ? String((currentVal as number) * 100)
+      : String(currentVal)
+    setEditing({ table, id, field, value: display })
   }
 
   async function logHistory(table: string, id: string, field: string, oldVal: unknown, newVal: unknown) {
@@ -341,6 +361,7 @@ export default function PricingSimModal({ onClose }: Props) {
     if (NUMBER_FIELDS.has(field)) {
       parsedVal = value === '' ? 0 : Number(value)
       if (isNaN(parsedVal as number)) { toast.error('숫자 형식이 올바르지 않습니다.'); return }
+      if (PERCENT_FIELDS.has(field)) parsedVal = (parsedVal as number) / 100
     } else if (value === '') {
       parsedVal = null
     }
@@ -369,6 +390,22 @@ export default function PricingSimModal({ onClose }: Props) {
       toast.error('저장 실패')
     }
   }
+
+  // ── 고정 원가(fixed_costs) 편집 — roles.fixed_costs는 JSONB 배열이라 컬럼 하나로
+  // 다루는 EditableValue로는 표현이 안 돼서 전용 함수로 배열 전체를 갱신한다 ──
+  async function saveFixedCosts(r: RoleRow, next: FixedCost[]) {
+    try {
+      await db.update('roles', r.id, { fixed_costs: next })
+      await logHistory('roles', r.id, 'fixed_costs', JSON.stringify(r.fixed_costs), JSON.stringify(next))
+      setRoles(prev => prev.map(x => x.id === r.id ? { ...x, fixed_costs: next } : x))
+    } catch {
+      toast.error('저장 실패')
+    }
+  }
+  function addFixedCost(r: RoleRow) { saveFixedCosts(r, [...(r.fixed_costs || []), { l: '새 고정원가', a: 0 }]) }
+  function updateFixedCostLabel(r: RoleRow, i: number, l: string) { saveFixedCosts(r, r.fixed_costs.map((fc, idx) => idx === i ? { ...fc, l } : fc)) }
+  function updateFixedCostAmount(r: RoleRow, i: number, a: number) { saveFixedCosts(r, r.fixed_costs.map((fc, idx) => idx === i ? { ...fc, a } : fc)) }
+  function deleteFixedCost(r: RoleRow, i: number) { saveFixedCosts(r, r.fixed_costs.filter((_, idx) => idx !== i)) }
 
   async function updateFactorRule(f: FactorRow, ruleType: RuleType, params: RuleParams) {
     try {
@@ -448,7 +485,8 @@ export default function PricingSimModal({ onClose }: Props) {
         className="underline decoration-dotted decoration-gray-300 hover:decoration-blue-400 hover:text-blue-600 text-left"
         title="클릭해서 수정"
       >
-        {NUMBER_FIELDS.has(field) ? fmt(value as number) : String(value ?? '—')}{suffix}
+        {PERCENT_FIELDS.has(field) ? `${Math.round((value as number) * 1000) / 10}%`
+          : NUMBER_FIELDS.has(field) ? fmt(value as number) : String(value ?? '—')}{suffix}
       </button>
     )
   }
@@ -478,6 +516,15 @@ export default function PricingSimModal({ onClose }: Props) {
             <div className="p-4 text-center text-gray-400 text-xs">데이터가 없습니다.<br />마이그레이션 시드가 적용됐는지 확인해 주세요.</div>
           ) : (
             <nav className="py-2">
+              <button
+                onClick={() => setViewMode('dashboard')}
+                className={`w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm font-semibold transition-colors ${
+                  viewMode === 'dashboard' ? 'bg-blue-50 border-l-4 border-blue-500 text-blue-700' : 'border-l-4 border-transparent text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                <BarChart3 className="h-4 w-4" />📊 전체 대시보드
+              </button>
+              <div className="border-b border-gray-100 my-1" />
               {roles.map(r => {
                 const m = JOB_META[r.role_code]
                 return (
@@ -485,7 +532,7 @@ export default function PricingSimModal({ onClose }: Props) {
                     key={r.id}
                     onClick={() => selectRole(r.id)}
                     className={`w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm transition-colors ${
-                      selectedRoleId === r.id ? 'bg-rose-50 border-l-4 border-rose-500 font-semibold' : 'border-l-4 border-transparent hover:bg-gray-50'
+                      viewMode === 'role' && selectedRoleId === r.id ? 'bg-rose-50 border-l-4 border-rose-500 font-semibold' : 'border-l-4 border-transparent hover:bg-gray-50'
                     }`}
                   >
                     <span>{m?.emoji || '👤'}</span>
@@ -500,7 +547,11 @@ export default function PricingSimModal({ onClose }: Props) {
 
         {/* 우측: 본문 */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {role && (
+          {viewMode === 'dashboard' ? (
+            <div className="flex-1 overflow-y-auto p-5">
+              <DashboardView roles={roles} factors={factors} guides={guides} onSelectRole={selectRole} />
+            </div>
+          ) : role && (
             <>
               {/* 탭 */}
               <div className="flex items-center gap-1 px-4 pt-3 bg-white border-b border-gray-200 shrink-0">
@@ -521,6 +572,12 @@ export default function PricingSimModal({ onClose }: Props) {
                       <span className="text-2xl">{meta?.emoji}</span>
                       <h3 className="text-base font-bold text-gray-800">{role.role_name}</h3>
                       {meta && <span className="text-xs rounded-full px-2 py-0.5" style={{ background: meta.cb, color: meta.cc }}>{meta.cat}</span>}
+                      <div className="flex-1" />
+                      <span className="text-xs text-gray-400">청구 기본가</span>
+                      <span className="text-sm font-extrabold text-gray-800">{fmt(role.base_price)}원</span>
+                      <span className="text-xs text-gray-300">/</span>
+                      <span className="text-xs text-gray-400">지급 기본가</span>
+                      <span className="text-sm font-bold text-gray-500">{fmt(role.pay_price)}원</span>
                     </div>
 
                     {uncheckedAlerts.length > 0 && (
@@ -621,8 +678,8 @@ export default function PricingSimModal({ onClose }: Props) {
                         {P.overtimeAdd > 0 && <Row label={`기준시간 초과 (${hours - (role.base_hours || 8)}H × ${fmt(role.overtime_hourly)}원)`} val={P.overtimeAdd} />}
                         {(role.fixed_costs || []).map((fc, i) => <Row key={i} label={`${fc.l} (고정 원가)`} val={fc.a} />)}
                         <Row label="소계" val={P.sub} bold />
-                        <Row label="일반관리비 (6%)" val={P.mgmt} />
-                        <Row label="이익 (10%)" val={P.profit} />
+                        <Row label={`일반관리비 (${Math.round((role.mgmt_rate ?? 0.06) * 1000) / 10}%)`} val={P.mgmt} />
+                        <Row label={`이익 (${Math.round((role.profit_rate ?? 0.10) * 1000) / 10}%)`} val={P.profit} />
                         <Row label="최종 청구가 (VAT 별도, 1인 기준)" val={P.client} bold big />
                       </div>
                     </div>
@@ -704,12 +761,45 @@ export default function PricingSimModal({ onClose }: Props) {
                         <Field label="기준시간 초과 1시간당 추가 청구가">
                           <EditableValue table="roles" id={role.id} field="overtime_hourly" value={role.overtime_hourly} suffix="원" />
                         </Field>
+                        <Field label="일반관리비율">
+                          <EditableValue table="roles" id={role.id} field="mgmt_rate" value={role.mgmt_rate} />
+                        </Field>
+                        <Field label="이익률">
+                          <EditableValue table="roles" id={role.id} field="profit_rate" value={role.profit_rate} />
+                        </Field>
                       </div>
-                      {(role.fixed_costs || []).length > 0 && (
-                        <p className="text-xs text-gray-400 pt-2 border-t border-gray-100">
-                          고정 원가: {role.fixed_costs.map(fc => `${fc.l} ${fmt(fc.a)}원`).join(' · ')} (편집은 후속 작업)
-                        </p>
-                      )}
+
+                      <div className="border-t border-gray-100 pt-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-bold text-gray-600">고정 원가 (항상 더해지는 원가 항목)</span>
+                          <button onClick={() => addFixedCost(role)} className="flex items-center gap-1 text-xs bg-rose-600 text-white px-2 py-1 rounded-lg hover:bg-rose-700">
+                            <Plus className="h-3 w-3" />항목 추가
+                          </button>
+                        </div>
+                        {(role.fixed_costs || []).length === 0 ? (
+                          <p className="text-xs text-gray-400">고정 원가 항목이 없습니다.</p>
+                        ) : (
+                          <ul className="space-y-1.5">
+                            {role.fixed_costs.map((fc, i) => (
+                              <li key={i} className="flex items-center gap-2 text-sm">
+                                <input
+                                  defaultValue={fc.l}
+                                  onBlur={e => updateFixedCostLabel(role, i, e.target.value)}
+                                  className="flex-1 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:border-rose-400"
+                                />
+                                <input
+                                  type="number"
+                                  defaultValue={fc.a}
+                                  onBlur={e => updateFixedCostAmount(role, i, Number(e.target.value) || 0)}
+                                  className="w-24 border border-gray-200 rounded px-2 py-1 text-xs text-right focus:outline-none focus:border-rose-400"
+                                />
+                                <span className="text-xs text-gray-400">원</span>
+                                <button onClick={() => deleteFixedCost(role, i)} className="text-gray-300 hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
                     </div>
 
                     <FactorTable
@@ -772,7 +862,7 @@ export default function PricingSimModal({ onClose }: Props) {
                       ) : (
                         <table className="w-full text-sm">
                           <thead className="text-gray-400 text-xs">
-                            <tr><th className="text-left py-1">항목명</th><th className="text-left py-1">단가</th><th className="text-left py-1">조사일자</th><th></th></tr>
+                            <tr><th className="text-left py-1">항목명</th><th className="text-left py-1">단가</th><th className="text-left py-1">조사일자</th><th className="text-left py-1">메모</th><th></th></tr>
                           </thead>
                           <tbody>
                             {roleGuideExtra.map(g => (
@@ -780,6 +870,7 @@ export default function PricingSimModal({ onClose }: Props) {
                                 <td className="py-1.5"><EditableValue table="guides" id={g.id} field="label" value={g.label} /></td>
                                 <td className="py-1.5"><EditableValue table="guides" id={g.id} field="price" value={g.price} suffix="원" /></td>
                                 <td className="py-1.5"><EditableValue table="guides" id={g.id} field="surveyed_at" value={g.surveyed_at} /></td>
+                                <td className="py-1.5"><EditableValue table="guides" id={g.id} field="consult_points" value={g.consult_points ?? ''} /></td>
                                 <td className="py-1.5 text-right pr-1">
                                   <button onClick={() => deleteMarketEntry(g.id)} className="text-gray-300 hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>
                                 </td>
@@ -871,9 +962,12 @@ function FactorRuleEditor({ f, onSave, onDelete, EditableValue, expanded, onTogg
       <tr className="border-t border-gray-100 align-top">
         <td className="py-2 pl-3"><LevelBadge level={f.level} /></td>
         <td className="py-2">
-          <button onClick={onToggleExpand} className="inline-flex items-center gap-1 hover:text-rose-600">
-            {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}{f.factor_name}
-          </button>
+          <span className="inline-flex items-center gap-1">
+            <button onClick={onToggleExpand} className="text-gray-400 hover:text-rose-600">
+              {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+            </button>
+            <EditableValue table="factors" id={f.id} field="factor_name" value={f.factor_name} />
+          </span>
         </td>
         <td className="py-2">
           <select value={ruleType} onChange={e => handleTypeChange(e.target.value as RuleType)} className="border border-gray-200 rounded px-1.5 py-0.5 text-xs">
@@ -953,6 +1047,101 @@ function SignedPctField({ label, value, onCommit }: { label: string; value: numb
       </select>
       <input value={mag} onChange={e => setMag(e.target.value)} onBlur={() => commit()} className="w-12 border border-gray-200 rounded px-1 py-0.5" />%
     </span>
+  )
+}
+
+// ── 전체 대시보드: 11개 직종을 한 화면에서 매트릭스로 비교 ──
+function DashboardView({ roles, factors, guides, onSelectRole }: {
+  roles: RoleRow[]; factors: FactorRow[]; guides: GuideRow[]; onSelectRole: (id: string) => void
+}) {
+  const rows = roles.map(r => {
+    const roleFactors = factors.filter(f => f.role_id === r.id)
+    const legalCount = roleFactors.filter(f => f.alert).length
+    const sub = r.base_price + (r.fixed_costs || []).reduce((s, f) => s + f.a, 0)
+    const mgmt = Math.round(sub * (r.mgmt_rate ?? 0.06))
+    const profit = Math.round((sub + mgmt) * (r.profit_rate ?? 0.10))
+    const client = sub + mgmt + profit
+    const margin = client - r.pay_price
+    const marginPct = client > 0 ? Math.round((margin / client) * 100) : 0
+    const guide = guides.find(g => g.role_id === r.id && !g.label) || null
+    const diffPct = guide?.market_avg_price ? Math.round(((r.base_price - guide.market_avg_price) / guide.market_avg_price) * 1000) / 10 : null
+    return { r, optionCount: roleFactors.length, legalCount, client, margin, marginPct, guide, diffPct }
+  })
+  const commonCount = factors.filter(f => f.role_id === null).length
+  const publishedCount = roles.filter(r => r.is_published).length
+
+  return (
+    <div className="max-w-5xl space-y-4">
+      <div className="grid grid-cols-4 gap-3">
+        <StatCard label="전체 직종" value={roles.length} />
+        <StatCard label="발행됨" value={publishedCount} accent="text-emerald-600" />
+        <StatCard label="초안" value={roles.length - publishedCount} accent="text-gray-500" />
+        <StatCard label="공통 옵션" value={commonCount} accent="text-violet-600" />
+      </div>
+
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <h4 className="px-3 py-2 text-xs font-bold text-gray-600 bg-gray-50 border-b border-gray-200">직종별 단가 한눈에 보기 (옵션 미적용 기준가, 클릭하면 상세로 이동)</h4>
+        <table className="w-full text-sm">
+          <thead className="text-gray-400 text-xs">
+            <tr>
+              <th className="text-left py-2 pl-3">직종</th><th className="text-right py-2">청구 기본가</th><th className="text-right py-2">지급 기본가</th>
+              <th className="text-right py-2">기본 마진</th><th className="text-right py-2">마진율</th>
+              <th className="text-center py-2">옵션수</th><th className="text-center py-2">법적의무</th><th className="text-center py-2 pr-3">상태</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ r, optionCount, legalCount, margin, marginPct }) => (
+              <tr key={r.id} className="border-t border-gray-100 hover:bg-rose-50/40 cursor-pointer" onClick={() => onSelectRole(r.id)}>
+                <td className="py-1.5 pl-3">{JOB_META[r.role_code]?.emoji} {r.role_name}</td>
+                <td className="text-right py-1.5">{fmt(r.base_price)}원</td>
+                <td className="text-right py-1.5">{fmt(r.pay_price)}원</td>
+                <td className="text-right py-1.5">{fmt(margin)}원</td>
+                <td className="text-right py-1.5"><span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${marginColor(marginPct)}`}>{marginPct}%</span></td>
+                <td className="text-center py-1.5">{optionCount}</td>
+                <td className="text-center py-1.5">{legalCount > 0 ? <span className="text-red-500 font-bold">{legalCount}</span> : <span className="text-gray-300">—</span>}</td>
+                <td className="text-center py-1.5 pr-3">{r.is_published ? <span className="text-emerald-600 text-xs font-semibold">발행</span> : <span className="text-gray-400 text-xs">초안</span>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <h4 className="px-3 py-2 text-xs font-bold text-gray-600 bg-gray-50 border-b border-gray-200">시장 단가 비교 한눈에 보기</h4>
+        <table className="w-full text-sm">
+          <thead className="text-gray-400 text-xs">
+            <tr>
+              <th className="text-left py-2 pl-3">직종</th><th className="text-right py-2">우리 기본가</th>
+              <th className="text-right py-2">지킴</th><th className="text-right py-2">시장 평균</th><th className="text-right py-2 pr-3">시장평균 대비</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ r, guide, diffPct }) => (
+              <tr key={r.id} className="border-t border-gray-100 hover:bg-rose-50/40 cursor-pointer" onClick={() => onSelectRole(r.id)}>
+                <td className="py-1.5 pl-3">{JOB_META[r.role_code]?.emoji} {r.role_name}</td>
+                <td className="text-right py-1.5">{fmt(r.base_price)}원</td>
+                <td className="text-right py-1.5">{guide?.competitor_price ? `${fmt(guide.competitor_price)}원` : <span className="text-gray-300">—</span>}</td>
+                <td className="text-right py-1.5">{guide?.market_avg_price ? `${fmt(guide.market_avg_price)}원` : <span className="text-gray-300">—</span>}</td>
+                <td className="text-right py-1.5 pr-3">
+                  {diffPct === null ? <span className="text-gray-300">—</span> : (
+                    <span className={diffPct >= 0 ? 'text-emerald-600' : 'text-red-500'}>{diffPct > 0 ? '+' : ''}{diffPct}%</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function StatCard({ label, value, accent = 'text-gray-800' }: { label: string; value: number; accent?: string }) {
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-3 text-center">
+      <div className="text-[11px] text-gray-400">{label}</div>
+      <div className={`text-xl font-extrabold ${accent}`}>{value}</div>
+    </div>
   )
 }
 
