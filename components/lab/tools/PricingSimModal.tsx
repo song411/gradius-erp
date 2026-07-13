@@ -432,6 +432,16 @@ export default function PricingSimModal({ onClose }: Props) {
     }
   }
 
+  async function updateFactorLevel(f: FactorRow, level: string) {
+    try {
+      await db.update('factors', f.id, { level })
+      await logHistory('factors', f.id, 'level', f.level, level)
+      setFactors(prev => prev.map(x => x.id === f.id ? { ...x, level } : x))
+    } catch {
+      toast.error('저장 실패')
+    }
+  }
+
   async function addFactor(roleId: string | null) {
     try {
       const rows = await db.insert<FactorRow>('factors', {
@@ -847,6 +857,7 @@ export default function PricingSimModal({ onClose }: Props) {
                       onAdd={() => addFactor(role.id)}
                       onDelete={deleteFactor}
                       onSaveRule={updateFactorRule}
+                      onSaveLevel={updateFactorLevel}
                       EditableValue={EditableValue}
                       expandedId={expandedId} setExpandedId={setExpandedId}
                     />
@@ -856,6 +867,7 @@ export default function PricingSimModal({ onClose }: Props) {
                       onAdd={() => addFactor(null)}
                       onDelete={deleteFactor}
                       onSaveRule={updateFactorRule}
+                      onSaveLevel={updateFactorLevel}
                       EditableValue={EditableValue}
                       expandedId={expandedId} setExpandedId={setExpandedId}
                     />
@@ -931,10 +943,11 @@ export default function PricingSimModal({ onClose }: Props) {
 }
 
 // ── 단가 편집 탭의 옵션 목록 (직종 전용 / 공통 공용) ────────
-function FactorTable({ title, list, onAdd, onDelete, onSaveRule, EditableValue, expandedId, setExpandedId }: {
+function FactorTable({ title, list, onAdd, onDelete, onSaveRule, onSaveLevel, EditableValue, expandedId, setExpandedId }: {
   title: string; list: FactorRow[]
   onAdd: () => void; onDelete: (id: string) => void
   onSaveRule: (f: FactorRow, ruleType: RuleType, params: RuleParams) => void
+  onSaveLevel: (f: FactorRow, level: string) => void
   EditableValue: EditableValueComp
   expandedId: string | null; setExpandedId: (id: string | null) => void
 }) {
@@ -960,7 +973,7 @@ function FactorTable({ title, list, onAdd, onDelete, onSaveRule, EditableValue, 
           )}
           {list.map(f => (
             <FactorRuleEditor
-              key={f.id} f={f} onSave={onSaveRule} onDelete={onDelete} EditableValue={EditableValue}
+              key={f.id} f={f} onSave={onSaveRule} onSaveLevel={onSaveLevel} onDelete={onDelete} EditableValue={EditableValue}
               expanded={expandedId === f.id} onToggleExpand={() => setExpandedId(expandedId === f.id ? null : f.id)}
             />
           ))}
@@ -970,9 +983,10 @@ function FactorTable({ title, list, onAdd, onDelete, onSaveRule, EditableValue, 
   )
 }
 
-function FactorRuleEditor({ f, onSave, onDelete, EditableValue, expanded, onToggleExpand }: {
+function FactorRuleEditor({ f, onSave, onSaveLevel, onDelete, EditableValue, expanded, onToggleExpand }: {
   f: FactorRow
   onSave: (f: FactorRow, ruleType: RuleType, params: RuleParams) => void
+  onSaveLevel: (f: FactorRow, level: string) => void
   onDelete: (id: string) => void
   EditableValue: EditableValueComp
   expanded: boolean; onToggleExpand: () => void
@@ -999,7 +1013,13 @@ function FactorRuleEditor({ f, onSave, onDelete, EditableValue, expanded, onTogg
   return (
     <>
       <tr className="border-t border-gray-100 align-top">
-        <td className="py-2 pl-3"><LevelBadge level={f.level} /></td>
+        <td className="py-2 pl-3">
+          <select value={f.level} onChange={e => onSaveLevel(f, e.target.value)} className="border border-gray-200 rounded px-1 py-0.5 text-xs">
+            <option value="기본">기본</option>
+            <option value="★">★</option>
+            <option value="★★">★★</option>
+          </select>
+        </td>
         <td className="py-2">
           <span className="inline-flex items-center gap-1">
             <button onClick={onToggleExpand} className="text-gray-400 hover:text-rose-600">
