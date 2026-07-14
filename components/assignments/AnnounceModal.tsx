@@ -58,6 +58,7 @@ export default function AnnounceModal({ inquiry, assignments, onClose }: Props) 
   )
   const [contact, setContact] = useState('')
   const [gatherMin, setGatherMin] = useState('10')
+  const [workTime, setWorkTime] = useState(inquiry.event_time || '')
   const [copied, setCopied] = useState(false)
 
   // ── 선택 근무일의 크루 (취소 제외, 해당일 근무자만, 이름 중복 제거) ──
@@ -89,7 +90,7 @@ export default function AnnounceModal({ inquiry, assignments, onClose }: Props) 
     })
   }
 
-  const startTime = (inquiry.event_time || '').split('~')[0].trim()
+  const startTime = workTime.split('~')[0].trim()
 
   // ── 공지문 생성 ──
   const message = useMemo(() => {
@@ -112,7 +113,7 @@ export default function AnnounceModal({ inquiry, assignments, onClose }: Props) 
     if (period) lines.push(`[${period}]`)
     lines.push('')
     if (workDate) lines.push(`📌 ${fmtMdDow(workDate)}`)
-    if (inquiry.event_time) lines.push(`⏰ 근무 시간: ${inquiry.event_time} ⏰`)
+    if (workTime.trim()) lines.push(`⏰ 근무 시간: ${workTime.trim()} ⏰`)
     if (gatherMin.trim()) lines.push(` - ${gatherMin.trim()}분전 집결 부탁드립니다 :)`)
     lines.push('')
     lines.push(`👥 투입 인원: ${crew.length}명`)
@@ -127,7 +128,7 @@ export default function AnnounceModal({ inquiry, assignments, onClose }: Props) 
       lines.push(`도착하시면 ${contact.trim()}으로 전화주세요 :)`)
     }
     return lines.join('\n')
-  }, [crew, leaders, startTime, special, siteName, mapLink, workDate, inquiry, gatherMin, attire, contact])
+  }, [crew, leaders, startTime, special, siteName, mapLink, workDate, inquiry, gatherMin, attire, contact, workTime])
 
   async function copy() {
     try {
@@ -185,8 +186,8 @@ export default function AnnounceModal({ inquiry, assignments, onClose }: Props) 
               <Field label="집결 (분 전)">
                 <input value={gatherMin} onChange={e => setGatherMin(e.target.value)} className={inputCls} placeholder="10" />
               </Field>
-              <Field label="근무시간 (자동)">
-                <input value={inquiry.event_time || ''} disabled className={`${inputCls} bg-gray-50 text-gray-400`} placeholder="문의에 미입력" />
+              <Field label="근무시간">
+                <input value={workTime} onChange={e => setWorkTime(e.target.value)} className={inputCls} placeholder="예: 10:00 ~ 18:00" />
               </Field>
             </div>
 
