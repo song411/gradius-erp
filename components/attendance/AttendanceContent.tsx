@@ -9,8 +9,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
   Search, CalendarDays, MapPin, Users, CheckCircle2,
-  Clock, AlertCircle, ChevronRight, Star,
+  Clock, AlertCircle, ChevronRight, ChevronLeft, Star,
   ClipboardList, Award, Save, RefreshCw, HelpCircle,
+  Smartphone, X, Check, ThumbsUp, ThumbsDown,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -94,6 +95,26 @@ interface EvalScores {
   appearance_score: number
   teamwork_score: number
   adaptability_score: number
+}
+
+// 평가 편집 항목 (점수 + 크루 보정 정보). 인라인 카드와 현장 평가 모드가 공유.
+type EvalEntry = EvalScores & {
+  re_recommend: boolean
+  strengths: string
+  improvements: string
+  height: string
+  weight: string
+  mbti: string
+  // 점수 초기값 출처: saved=이 행사에 이미 저장된 평가 / staffAvg=과거 누적 평균 참고 / new=평가 이력 없음(기본값 3)
+  scoreSource: 'saved' | 'staffAvg' | 'new'
+  staffAvgTotal: number | null
+  dirty: boolean
+}
+
+// 특정 점수(1~5)에 해당하는 가이드 한 줄 추출 ("4점: ..." 형태)
+function guideForScore(guide: string, score: number): string {
+  const line = guide.split('\n').find(l => l.trim().startsWith(`${score}점`))
+  return line ? line.replace(/^\s*\d점\s*:\s*/, '') : ''
 }
 
 // 별점 + 숫자 입력 통합 컴포넌트
@@ -212,18 +233,11 @@ export default function AttendanceContent() {
   }>>({})
 
   // 평가 편집 상태 (assignmentId → 점수 + 크루 정보)
-  const [evalMap, setEvalMap] = useState<Record<string, EvalScores & {
-    re_recommend: boolean
-    strengths: string
-    improvements: string
-    height: string
-    weight: string
-    mbti: string
-    // 점수 초기값 출처: saved=이 행사에 이미 저장된 평가 / staffAvg=크루의 과거 누적 평균 참고 / new=평가 이력 없음(기본값)
-    scoreSource: 'saved' | 'staffAvg' | 'new'
-    staffAvgTotal: number | null
-    dirty: boolean
-  }>>({})
+  const [evalMap, setEvalMap] = useState<Record<string, EvalEntry>>({})
+  // 크루 마스터 정보 (staff_id → Staff) — 현장 평가 모드에서 프로필 표시용
+  const [staffMap, setStaffMap] = useState<Record<string, Staff>>({})
+  // 현장 평가 모드 (한 명씩 전체화면)
+  const [fieldMode, setFieldMode] = useState(false)
 
   // 행사 목록 로드 (배정완료/진행중/완료)
   const loadInquiries = useCallback(async () => {
@@ -296,9 +310,10 @@ export default function AttendanceContent() {
     const staffList = staffIds.length
       ? await db.list<Staff>('staff', { inFilter: { id: staffIds } })
       : []
+    setStaffMap(Object.fromEntries(staffList.map(s => [s.id, s])))
 
     // 기존 평가 데이터로 evalMap 초기화
-    const newEvalMap: typeof evalMap = {}
+    const newEvalMap: Record<string, EvalEntry> = {}
     asgns.filter(a => a.status !== '취소').forEach(a => {
       const existing = evals.find(e => e.assignment_id === a.id)
       const staffInfo = staffList.find(s => s.id === a.staff_id)
@@ -444,8 +459,14 @@ export default function AttendanceContent() {
     setEvalMap(prev => ({ ...prev, [assignId]: { ...prev[assignId], [field]: value, dirty: true } }))
   }
 
+  // 점수 외 필드(재투입·장단점·키/몸무게/MBTI) 일괄 갱신 — 현장 평가 모드 공용
+  function handleEvalField(assignId: string, patch: Partial<EvalEntry>) {
+    setEvalMap(prev => ({ ...prev, [assignId]: { ...prev[assignId], ...patch, dirty: true } }))
+  }
+
   // 평가 저장 (한 명)
-  async function handleSaveEval(asgn: Assignment) {
+  async function handleSaveEval(asgn: Assignment, opts?: { reload?: boolean }) {
+    const reload = opts?.reload ?? true
     if (!selectedInq) return
     const data = evalMap[asgn.id]
     if (!data) return
@@ -512,9 +533,9 @@ export default function AttendanceContent() {
         }
       }
 
-      setEvalMap(prev => ({ ...prev, [asgn.id]: { ...prev[asgn.id], dirty: false } }))
+      setEvalMap(prev => ({ ...prev, [asgn.id]: { ...prev[asgn.id], dirty: false, scoreSource: 'saved' } }))
       toast.success(`${asgn.staff_name} 평가 저장 완료 (${grade} · ${total}점)`)
-      loadDetail(selectedInq)
+      if (reload) loadDetail(selectedInq)
     } catch (e) {
       toast.error('평가 저장 실패: ' + (e as Error).message)
     }
@@ -806,6 +827,17 @@ export default function AttendanceContent() {
                     </p>
                   </div>
 
+                  {/* 현장 평가 모드 진입 (폰에서 한 명씩 크게) */}
+                  {assignments.filter(a => a.staff_type !== '본사').length > 0 && (
+                    <button
+                      onClick={() => setFieldMode(true)}
+                      className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold py-3.5 rounded-2xl shadow-md active:scale-[0.99] transition-transform"
+                    >
+                      <Smartphone className="h-5 w-5" />
+                      현장 평가 모드 — 한 명씩 크게 평가
+                    </button>
+                  )}
+
                   {assignments
                     .filter(a => a.staff_type !== '본사')
                     .map(asgn => {
@@ -1005,6 +1037,267 @@ export default function AttendanceContent() {
             </div>
           </>
         )}
+      </div>
+
+      {/* 현장 평가 모드 — 한 명씩 전체화면 */}
+      {fieldMode && selectedInq && (
+        <FieldEvalMode
+          assignments={assignments.filter(a => a.staff_type !== '본사')}
+          evalMap={evalMap}
+          staffMap={staffMap}
+          eventName={selectedInq.event_name || ''}
+          onScoreChange={handleEvalChange}
+          onFieldChange={handleEvalField}
+          onSave={(asgn) => handleSaveEval(asgn, { reload: false })}
+          onClose={() => { setFieldMode(false); if (selectedInq) loadDetail(selectedInq) }}
+        />
+      )}
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════
+// 현장 평가 모드 — 폰에서 한 명씩 크게 평가. 별점 대신 큰 탭 버튼.
+// ══════════════════════════════════════════════════════════════
+interface FieldEvalModeProps {
+  assignments: Assignment[]
+  evalMap: Record<string, EvalEntry>
+  staffMap: Record<string, Staff>
+  eventName: string
+  onScoreChange: (asgnId: string, key: keyof EvalScores, v: number) => void
+  onFieldChange: (asgnId: string, patch: Partial<EvalEntry>) => void
+  onSave: (asgn: Assignment) => Promise<void> | void
+  onClose: () => void
+}
+
+function scoreColor(v: number) {
+  return v >= 4 ? 'text-green-600' : v >= 2.5 ? 'text-yellow-600' : 'text-red-500'
+}
+
+function FieldEvalMode({ assignments, evalMap, staffMap, onScoreChange, onFieldChange, onSave, onClose }: FieldEvalModeProps) {
+  const [idx, setIdx] = useState(0)
+  const [saving, setSaving] = useState(false)
+
+  const total = assignments.length
+  const asgn = assignments[idx]
+  const data = asgn ? evalMap[asgn.id] : undefined
+  const staff = asgn?.staff_id ? staffMap[asgn.staff_id] : undefined
+
+  if (!asgn || !data) {
+    return (
+      <div className="fixed inset-0 z-[9999] bg-white flex flex-col items-center justify-center gap-4 p-6 text-center">
+        <p className="text-gray-500">평가할 크루가 없습니다.</p>
+        <button onClick={onClose} className="px-5 py-2.5 rounded-xl bg-gray-800 text-white font-semibold">닫기</button>
+      </div>
+    )
+  }
+
+  const avg = Math.round(
+    (data.attendance_score + data.performance_score + data.appearance_score +
+     data.teamwork_score + data.adaptability_score) / 5 * 10
+  ) / 10
+
+  async function saveAndNext() {
+    setSaving(true)
+    try { await onSave(asgn) } finally { setSaving(false) }
+    if (idx < total - 1) setIdx(idx + 1)
+    else onClose()
+  }
+
+  const chips: string[] = []
+  if (staff?.region) chips.push(`📍 ${staff.region}`)
+  if (data.mbti) chips.push(`🧬 ${data.mbti}`)
+  if (staff?.gender) chips.push(staff.gender)
+  if (staff?.age) chips.push(`${staff.age}세`)
+  if (data.height) chips.push(`${data.height}cm`)
+  if (staff?.driving) chips.push('🚗 운전')
+  if (staff?.english_skill && staff.english_skill !== '없음') chips.push(`🗣 ${staff.english_skill}`)
+
+  const recommendColor = staff?.recommend === '우선투입' ? 'bg-green-100 text-green-700'
+    : staff?.recommend === '보류' ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-600'
+
+  return (
+    <div className="fixed inset-0 z-[9999] bg-gray-50 flex flex-col">
+      {/* 헤더 */}
+      <div className="shrink-0 bg-gradient-to-r from-purple-600 to-indigo-600 px-4 py-3 flex items-center justify-between">
+        <div className="text-white">
+          <p className="text-[11px] text-purple-100">현장 평가 모드</p>
+          <p className="font-bold text-base">{idx + 1} <span className="text-purple-200 font-normal">/ {total}명</span></p>
+        </div>
+        <button onClick={onClose} className="text-purple-100 active:text-white p-2 -mr-2"><X className="h-6 w-6" /></button>
+      </div>
+      {/* 진행 바 */}
+      <div className="h-1.5 bg-purple-900/20 shrink-0">
+        <div className="h-full bg-white/80 transition-all" style={{ width: `${((idx + 1) / total) * 100}%` }} />
+      </div>
+
+      {/* 본문 */}
+      <div className="flex-1 overflow-y-auto px-4 pt-4 pb-32 space-y-4">
+        {/* 크루 프로필 */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
+          <div className="flex items-center gap-3">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-400 to-indigo-500 text-white text-2xl font-black flex items-center justify-center shrink-0 shadow">
+              {asgn.staff_name?.[0] || '?'}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xl font-extrabold text-gray-900">{asgn.staff_name}</span>
+                {asgn.job_type && <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-semibold">{asgn.job_type}</span>}
+                {staff?.recommend && <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${recommendColor}`}>{staff.recommend}</span>}
+              </div>
+              {data.scoreSource === 'saved' ? (
+                <p className="text-xs text-purple-500 mt-1">이 행사 평가 저장됨 · 수정 중</p>
+              ) : data.scoreSource === 'staffAvg' ? (
+                <p className="text-xs text-indigo-500 mt-1">과거 누적 평균 {data.staffAvgTotal}점 참고 · 이번 평가 입력</p>
+              ) : (
+                <p className="text-xs text-gray-400 mt-1">첫 평가 (기본값 3점)</p>
+              )}
+            </div>
+          </div>
+
+          {chips.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-3">
+              {chips.map((c, i) => (
+                <span key={i} className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-lg">{c}</span>
+              ))}
+            </div>
+          )}
+
+          {staff && staff.total_score > 0 && (
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <p className="text-[11px] text-gray-400 mb-1.5 font-semibold">과거 누적 점수</p>
+              <div className="grid grid-cols-5 gap-1 text-center">
+                {EVAL_FIELDS.map(f => {
+                  const v = staff[f.key] as number
+                  return (
+                    <div key={f.key}>
+                      <div className="text-base">{f.emoji}</div>
+                      <div className={`text-sm font-bold ${scoreColor(v)}`}>{v || '-'}</div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {(Array.isArray(staff?.certifications) && staff!.certifications.length > 0) && (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {staff!.certifications.map((c, i) => (
+                <span key={i} className="text-[11px] bg-amber-50 text-amber-700 border border-amber-100 px-1.5 py-0.5 rounded">🎓 {c}</span>
+              ))}
+            </div>
+          )}
+          {staff?.memo && <p className="mt-3 text-xs text-gray-500 bg-gray-50 rounded-lg px-2.5 py-2">📝 {staff.memo}</p>}
+        </div>
+
+        {/* 5축 큰 버튼 */}
+        {EVAL_FIELDS.map(f => {
+          const val = data[f.key]
+          const picked = Math.round(val)
+          const guideLine = guideForScore(f.guide, picked)
+          return (
+            <div key={f.key} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-xl">{f.emoji}</span>
+                <span className="text-base font-bold text-gray-800">{f.label}</span>
+                <span className={`ml-auto text-lg font-black ${scoreColor(val)}`}>{val}</span>
+              </div>
+              <div className="grid grid-cols-5 gap-2">
+                {[1, 2, 3, 4, 5].map(n => {
+                  const active = picked === n
+                  return (
+                    <button
+                      key={n}
+                      onClick={() => onScoreChange(asgn.id, f.key, n)}
+                      className={`h-14 rounded-xl text-lg font-extrabold transition-all active:scale-95 ${
+                        active
+                          ? 'bg-purple-600 text-white shadow-md scale-105'
+                          : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                      }`}
+                    >
+                      {n}
+                    </button>
+                  )
+                })}
+              </div>
+              {guideLine && (
+                <p className="text-xs text-gray-500 mt-2.5 leading-relaxed bg-purple-50/60 rounded-lg px-2.5 py-1.5">
+                  <b className="text-purple-600">{picked}점</b> · {guideLine}
+                </p>
+              )}
+            </div>
+          )
+        })}
+
+        {/* 재투입 */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
+          <p className="text-base font-bold text-gray-800 mb-3">재투입 추천</p>
+          <div className="grid grid-cols-2 gap-2.5">
+            <button
+              onClick={() => onFieldChange(asgn.id, { re_recommend: true })}
+              className={`h-14 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95 ${
+                data.re_recommend ? 'bg-green-500 text-white shadow-md' : 'bg-gray-100 text-gray-400'
+              }`}
+            >
+              <ThumbsUp className="h-5 w-5" /> 추천
+            </button>
+            <button
+              onClick={() => onFieldChange(asgn.id, { re_recommend: false })}
+              className={`h-14 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95 ${
+                !data.re_recommend ? 'bg-red-400 text-white shadow-md' : 'bg-gray-100 text-gray-400'
+              }`}
+            >
+              <ThumbsDown className="h-5 w-5" /> 비추천
+            </button>
+          </div>
+        </div>
+
+        {/* 장점 / 개선점 */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 space-y-3">
+          <div>
+            <label className="text-sm font-bold text-gray-700 mb-1.5 block">👍 장점</label>
+            <textarea
+              value={data.strengths}
+              onChange={e => onFieldChange(asgn.id, { strengths: e.target.value })}
+              placeholder="예: 시간 엄수, 의사소통 탁월"
+              rows={2}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-base focus:outline-none focus:border-purple-400 resize-none"
+            />
+          </div>
+          <div>
+            <label className="text-sm font-bold text-gray-700 mb-1.5 block">🔧 개선점</label>
+            <textarea
+              value={data.improvements}
+              onChange={e => onFieldChange(asgn.id, { improvements: e.target.value })}
+              placeholder="예: 보고 누락, 장비 미숙"
+              rows={2}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-base focus:outline-none focus:border-purple-400 resize-none"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* 하단 고정 네비게이션 */}
+      <div className="absolute bottom-0 inset-x-0 bg-white border-t border-gray-200 px-4 py-3 flex items-center gap-2.5" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
+        <button
+          onClick={() => setIdx(i => Math.max(0, i - 1))}
+          disabled={idx === 0}
+          className="h-14 w-14 shrink-0 rounded-xl bg-gray-100 text-gray-600 flex items-center justify-center disabled:opacity-30 active:scale-95"
+        >
+          <ChevronLeft className="h-6 w-6" />
+        </button>
+        <div className="shrink-0 text-center px-2">
+          <div className="text-[10px] text-gray-400">평균</div>
+          <div className={`text-xl font-black ${scoreColor(avg)}`}>{avg.toFixed(1)}</div>
+        </div>
+        <button
+          onClick={saveAndNext}
+          disabled={saving}
+          className="flex-1 h-14 rounded-xl bg-purple-600 text-white font-bold text-base flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-60 shadow-md"
+        >
+          {saving ? <RefreshCw className="h-5 w-5 animate-spin" /> : <Check className="h-5 w-5" />}
+          {idx < total - 1 ? '저장 후 다음' : '저장 후 완료'}
+        </button>
       </div>
     </div>
   )
