@@ -11,11 +11,12 @@ import { Card } from '@/components/ui/card'
 import {
   Search, UserPlus, CheckCircle2, Clock, XCircle, ChevronRight,
   Users, CalendarDays, MapPin, Briefcase, Trash2, AlertCircle, UserX, Edit2, Sparkles,
-  PanelLeftClose, PanelLeftOpen, GripVertical
+  PanelLeftClose, PanelLeftOpen, GripVertical, Megaphone
 } from 'lucide-react'
 import StaffSearchModal from './StaffSearchModal'
 import TeamAssignModal, { type TeamAssignData } from './TeamAssignModal'
 import StaffRecommendModal from './StaffRecommendModal'
+import AnnounceModal from './AnnounceModal'
 import ProjectMemoPanel from '@/components/memos/ProjectMemoPanel'
 import CrewProfileCard from '@/components/staff/CrewProfileCard'
 import ScheduleView from './ScheduleView'
@@ -260,6 +261,7 @@ export default function AssignmentsContent() {
   const [inquiries, setInquiries]     = useState<Inquiry[]>([])
   const [selectedInq, setSelectedInq] = useState<Inquiry | null>(null)
   const [showRecommend, setShowRecommend] = useState(false)
+  const [showAnnounce, setShowAnnounce] = useState(false)
   const [slots, setSlots]             = useState<SlotGroup[]>([])
   const [allAssignments, setAllAssignments] = useState<Assignment[]>([])
   const [loading, setLoading]         = useState(true)
@@ -1074,6 +1076,10 @@ export default function AssignmentsContent() {
                     <Sparkles className="h-3.5 w-3.5" />
                     추천 인력
                   </Button>
+                  <Button size="sm" variant="outline" onClick={() => setShowAnnounce(true)} className="h-7 text-xs border-amber-400 text-amber-700 hover:bg-amber-50">
+                    <Megaphone className="h-3.5 w-3.5" />
+                    공지문 생성
+                  </Button>
                   <Button
                     size="sm"
                     variant="outline"
@@ -1413,6 +1419,13 @@ export default function AssignmentsContent() {
             // 추천 인력 선택 → 기본값으로 배정 추가 (이름·직종 자동완성, 단가는 기본 0으로 추가 후 수정 가능)
             handleAssign(staff, staff.name, '외부', 0, '', 1)
           }}
+        />
+      )}
+      {showAnnounce && selectedInq && (
+        <AnnounceModal
+          inquiry={selectedInq}
+          assignments={slots.flatMap(g => g.assignments)}
+          onClose={() => setShowAnnounce(false)}
         />
       )}
       {/* 크루 프로필 모달 */}
