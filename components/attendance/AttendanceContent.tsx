@@ -1077,13 +1077,23 @@ function scoreColor(v: number) {
 function FieldEvalMode({ assignments, evalMap, staffMap, onScoreChange, onFieldChange, onSave, onClose }: FieldEvalModeProps) {
   const [idx, setIdx] = useState(0)
   const [saving, setSaving] = useState(false)
+  const [view, setView] = useState<'roster' | 'detail'>('roster')
+  const [search, setSearch] = useState('')
 
   const total = assignments.length
-  const asgn = assignments[idx]
-  const data = asgn ? evalMap[asgn.id] : undefined
-  const staff = asgn?.staff_id ? staffMap[asgn.staff_id] : undefined
 
-  if (!asgn || !data) {
+  const evalStatus = (a: Assignment): 'done' | 'editing' | 'none' => {
+    const d = evalMap[a.id]
+    if (!d) return 'none'
+    if (d.dirty) return 'editing'
+    return d.scoreSource === 'saved' ? 'done' : 'none'
+  }
+  const avgOf = (d: EvalEntry) => Math.round(
+    (d.attendance_score + d.performance_score + d.appearance_score + d.teamwork_score + d.adaptability_score) / 5 * 10
+  ) / 10
+  const doneCount = assignments.filter(a => evalStatus(a) === 'done').length
+
+  if (total === 0) {
     return (
       <div className="fixed inset-0 z-[9999] bg-white flex flex-col items-center justify-center gap-4 p-6 text-center">
         <p className="text-gray-500">평가할 크루가 없습니다.</p>
@@ -1092,16 +1102,100 @@ function FieldEvalMode({ assignments, evalMap, staffMap, onScoreChange, onFieldC
     )
   }
 
-  const avg = Math.round(
-    (data.attendance_score + data.performance_score + data.appearance_score +
-     data.teamwork_score + data.adaptability_score) / 5 * 10
-  ) / 10
+  // ── 명단 뷰 (촤라락 카드 → 선택) ──
+  if (view === 'roster') {
+    const filtered = assignments
+      .map((a, i) => ({ a, i }))
+      .filter(({ a }) => !search || (a.staff_name || '').includes(search))
+    return (
+      <div className="fixed inset-0 z-[9999] bg-gray-50 flex flex-col">
+        <div className="shrink-0 bg-gradient-to-r from-purple-600 to-indigo-600 px-4 py-3 flex items-center justify-between">
+          <div className="text-white">
+            <p className="text-[11px] text-purple-100">현장 평가 모드 · 명단</p>
+            <p className="font-bold text-base">{doneCount} <span className="text-purple-200 font-normal">/ {total}명 완료</span></p>
+          </div>
+          <button onClick={onClose} className="text-purple-100 active:text-white p-2 -mr-2"><X className="h-6 w-6" /></button>
+        </div>
+        <div className="h-1.5 bg-purple-900/20 shrink-0">
+          <div className="h-full bg-white/80 transition-all" style={{ width: `${(doneCount / total) * 100}%` }} />
+        </div>
+        <div className="px-4 pt-3 pb-2 shrink-0">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="이름 검색"
+              className="w-full h-11 pl-10 pr-3 rounded-xl border border-gray-200 bg-white text-base focus:outline-none focus:border-purple-400"
+            />
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto px-4 pb-6">
+          <div className="grid grid-cols-2 gap-2.5">
+            {filtered.map(({ a, i }) => {
+              const st = evalStatus(a)
+              const d = evalMap[a.id]
+              const stf = a.staff_id ? staffMap[a.staff_id] : undefined
+              return (
+                <button
+                  key={a.id}
+                  onClick={() => { setIdx(i); setView('detail') }}
+                  className={`text-left rounded-2xl border p-3 active:scale-[0.98] transition-all shadow-sm ${
+                    st === 'done' ? 'bg-green-50 border-green-200'
+                    : st === 'editing' ? 'bg-amber-50 border-amber-200'
+                    : 'bg-white border-gray-200'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-400 to-indigo-500 text-white text-base font-black flex items-center justify-center shrink-0">
+                      {a.staff_name?.[0] || '?'}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-bold text-gray-900 truncate">{a.staff_name}</p>
+                      {a.job_type && <p className="text-[11px] text-gray-400 truncate">{a.job_type}</p>}
+                    </div>
+                  </div>
+                  <div className="mt-2 flex items-center gap-1.5">
+                    {st === 'done' ? (
+                      <span className="text-[11px] font-bold text-green-600 flex items-center gap-1"><Check className="h-3.5 w-3.5" />완료 {d ? avgOf(d).toFixed(1) : ''}</span>
+                    ) : st === 'editing' ? (
+                      <span className="text-[11px] font-bold text-amber-600">✎ 작성중</span>
+                    ) : (
+                      <span className="text-[11px] text-gray-400">미평가</span>
+                    )}
+                    {stf?.recommend === '우선투입' && <span className="ml-auto text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">우선</span>}
+                    {stf?.recommend === '보류' && <span className="ml-auto text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">보류</span>}
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+          {filtered.length === 0 && <p className="text-center text-gray-400 text-sm mt-10">검색 결과가 없습니다.</p>}
+        </div>
+      </div>
+    )
+  }
 
-  async function saveAndNext() {
+  // ── 상세(평가) 뷰 ──
+  const asgn = assignments[idx]
+  const data = asgn ? evalMap[asgn.id] : undefined
+  const staff = asgn?.staff_id ? staffMap[asgn.staff_id] : undefined
+
+  if (!asgn || !data) {
+    return (
+      <div className="fixed inset-0 z-[9999] bg-white flex flex-col items-center justify-center gap-4 p-6 text-center">
+        <p className="text-gray-500">크루 정보를 불러오지 못했습니다.</p>
+        <button onClick={() => setView('roster')} className="px-5 py-2.5 rounded-xl bg-gray-800 text-white font-semibold">명단으로</button>
+      </div>
+    )
+  }
+
+  const avg = avgOf(data)
+
+  async function saveCrew() {
     setSaving(true)
     try { await onSave(asgn) } finally { setSaving(false) }
-    if (idx < total - 1) setIdx(idx + 1)
-    else onClose()
+    setView('roster')
   }
 
   const chips: string[] = []
@@ -1119,16 +1213,15 @@ function FieldEvalMode({ assignments, evalMap, staffMap, onScoreChange, onFieldC
   return (
     <div className="fixed inset-0 z-[9999] bg-gray-50 flex flex-col">
       {/* 헤더 */}
-      <div className="shrink-0 bg-gradient-to-r from-purple-600 to-indigo-600 px-4 py-3 flex items-center justify-between">
-        <div className="text-white">
-          <p className="text-[11px] text-purple-100">현장 평가 모드</p>
-          <p className="font-bold text-base">{idx + 1} <span className="text-purple-200 font-normal">/ {total}명</span></p>
+      <div className="shrink-0 bg-gradient-to-r from-purple-600 to-indigo-600 px-3 py-3 flex items-center justify-between gap-2">
+        <button onClick={() => setView('roster')} className="text-purple-50 active:text-white flex items-center gap-0.5 text-sm font-semibold p-1 -ml-1 shrink-0">
+          <ChevronLeft className="h-5 w-5" />명단
+        </button>
+        <div className="text-white text-center min-w-0">
+          <p className="text-[11px] text-purple-100">{idx + 1} / {total}명 · 완료 {doneCount}</p>
+          <p className="font-bold text-base leading-tight truncate">{asgn.staff_name}</p>
         </div>
-        <button onClick={onClose} className="text-purple-100 active:text-white p-2 -mr-2"><X className="h-6 w-6" /></button>
-      </div>
-      {/* 진행 바 */}
-      <div className="h-1.5 bg-purple-900/20 shrink-0">
-        <div className="h-full bg-white/80 transition-all" style={{ width: `${((idx + 1) / total) * 100}%` }} />
+        <button onClick={onClose} className="text-purple-100 active:text-white p-1 -mr-1 shrink-0"><X className="h-6 w-6" /></button>
       </div>
 
       {/* 본문 */}
@@ -1278,25 +1371,18 @@ function FieldEvalMode({ assignments, evalMap, staffMap, onScoreChange, onFieldC
       </div>
 
       {/* 하단 고정 네비게이션 */}
-      <div className="absolute bottom-0 inset-x-0 bg-white border-t border-gray-200 px-4 py-3 flex items-center gap-2.5" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
-        <button
-          onClick={() => setIdx(i => Math.max(0, i - 1))}
-          disabled={idx === 0}
-          className="h-14 w-14 shrink-0 rounded-xl bg-gray-100 text-gray-600 flex items-center justify-center disabled:opacity-30 active:scale-95"
-        >
-          <ChevronLeft className="h-6 w-6" />
-        </button>
-        <div className="shrink-0 text-center px-2">
+      <div className="absolute bottom-0 inset-x-0 bg-white border-t border-gray-200 px-4 py-3 flex items-center gap-3" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
+        <div className="shrink-0 text-center px-1">
           <div className="text-[10px] text-gray-400">평균</div>
           <div className={`text-xl font-black ${scoreColor(avg)}`}>{avg.toFixed(1)}</div>
         </div>
         <button
-          onClick={saveAndNext}
+          onClick={saveCrew}
           disabled={saving}
           className="flex-1 h-14 rounded-xl bg-purple-600 text-white font-bold text-base flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-60 shadow-md"
         >
           {saving ? <RefreshCw className="h-5 w-5 animate-spin" /> : <Check className="h-5 w-5" />}
-          {idx < total - 1 ? '저장 후 다음' : '저장 후 완료'}
+          저장 후 명단으로
         </button>
       </div>
     </div>
