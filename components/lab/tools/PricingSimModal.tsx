@@ -2,8 +2,9 @@
 
 import { Fragment, useEffect, useState } from 'react'
 import { db } from '@/lib/supabase/api'
-import { X, RefreshCw, Calculator, Pencil, BarChart3, Save, ShieldAlert, Info, Plus, Trash2, AlertTriangle, ChevronDown, ChevronRight, History } from 'lucide-react'
+import { X, RefreshCw, Calculator, Pencil, BarChart3, Save, ShieldAlert, Info, Plus, Trash2, AlertTriangle, ChevronDown, ChevronRight, History, List, LayoutGrid } from 'lucide-react'
 import { toast } from 'sonner'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 
 // ── 타입 ─────────────────────────────────────────────────
 interface FixedCost { l: string; a: number }
@@ -238,6 +239,9 @@ function matchesRoleName(roleName: string, roleCode: string): boolean {
   return keywords.some(k => roleName.includes(k))
 }
 function priceBucket(price: number) { return Math.round(price / 10000) * 10000 }
+// 전체 직종 비교 매트릭스 전용 — 직종마다 가격대가 7만원~70만원까지 넓게 퍼져 있어서
+// 1만원 단위(priceBucket)로 나누면 열이 60개 넘게 생겨 못 읽는다. 10만원 단위로 묶어서 압축.
+function priceBucketCoarse(price: number) { return Math.floor(price / 100000) * 100000 }
 function formatEventDate(it: HistoryItem) {
   if (!it.event_start) return '일정 미정'
   const range = it.event_end && it.event_end !== it.event_start ? `${it.event_start} ~ ${it.event_end}` : it.event_start
@@ -265,6 +269,27 @@ function computeRoleHistory(roleCode: string, items: HistoryItem[]) {
   return { matched, decided, won, winRate, buckets, avgWonPrice, recentWon }
 }
 
+// 전체 직종 x 가격대(10만원 단위) 체결율 매트릭스 — "전체보기" 매트릭스 뷰 전용
+function computeAllRolesMatrix(roles: RoleRow[], items: HistoryItem[]) {
+  const perRole = roles.map(r => {
+    const matched = items.filter(it => matchesRoleName(it.role_name, r.role_code))
+    const cellMap = new Map<number, { total: number; won: number; lost: number }>()
+    matched.forEach(it => {
+      const b = priceBucketCoarse(it.unit_price)
+      if (!cellMap.has(b)) cellMap.set(b, { total: 0, won: 0, lost: 0 })
+      const c = cellMap.get(b)!
+      c.total++
+      if (it.outcome === 'won') c.won++
+      if (it.outcome === 'lost') c.lost++
+    })
+    return { role: r, cellMap, total: matched.length }
+  })
+  const allBuckets = new Set<number>()
+  perRole.forEach(p => p.cellMap.forEach((_, b) => allBuckets.add(b)))
+  const buckets = Array.from(allBuckets).sort((a, b) => a - b)
+  return { perRole, buckets }
+}
+
 // 숫자로 저장하는 필드 목록 (인라인 편집 시 타입 변환용)
 const NUMBER_FIELDS = new Set(['base_price', 'pay_price', 'leader_bonus', 'base_hours', 'overtime_hourly', 'mgmt_rate', 'profit_rate', 'add_price', 'add_pay_price', 'market_avg_price', 'competitor_price', 'past_contract_price', 'price'])
 // mgmt_rate/profit_rate는 0.06 같은 비율로 저장되지만 사람은 %로 입력/확인하는 게 편해서 별도 처리
@@ -276,6 +301,13 @@ type EditableValueComp = React.ComponentType<{ table: EditTarget['table']; id: s
 function marginColor(pct: number) {
   if (pct < 10) return 'text-red-600 bg-red-100'
   if (pct < 15) return 'text-amber-600 bg-amber-100'
+  return 'text-emerald-700 bg-emerald-100'
+}
+// marginColor는 마진율(보통 10~30%대) 기준 임계값이라 0~100% 범위인 체결율에는 안 맞는다
+// (체결율은 대부분 15% 이상이라 marginColor를 쓰면 사실상 다 초록색이 됨) — 별도 3분위 기준.
+function winRateColor(pct: number) {
+  if (pct < 40) return 'text-red-600 bg-red-100'
+  if (pct < 70) return 'text-amber-600 bg-amber-100'
   return 'text-emerald-700 bg-emerald-100'
 }
 
@@ -304,6 +336,8 @@ export default function PricingSimModal({ onClose }: Props) {
   const [historyLoaded, setHistoryLoaded] = useState(false)
   const [historyLoading, setHistoryLoading] = useState(false)
   const [expandedBucket, setExpandedBucket] = useState<number | null>(null)
+  const [historyViewMode, setHistoryViewMode] = useState<'list' | 'graph' | 'matrix'>('list')
+  const [matrixScope, setMatrixScope] = useState<'role' | 'all'>('role')
 
   async function loadHistory() {
     if (historyLoaded || historyLoading) return
@@ -1040,17 +1074,37 @@ export default function PricingSimModal({ onClose }: Props) {
                 )}
 
                 {tab === 'history' && (
-                  <div className="max-w-3xl space-y-4">
+                  <div className={historyViewMode === 'matrix' && matrixScope === 'all' ? 'max-w-full space-y-4' : 'max-w-3xl space-y-4'}>
                     <p className="text-[11px] text-gray-400 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
                       실제 ERP 견적 데이터에서 품목명 텍스트로 근사 매칭한 참고 자료입니다. 완전히 정확하지 않을 수 있으니 아래 목록의 원문 품목명으로 직접 확인해 주세요.
                     </p>
+                    <div className="flex items-center justify-between">
+                      <ViewSwitchTabs value={historyViewMode} onChange={setHistoryViewMode} options={[
+                        { value: 'list', label: '목록형', icon: <List className="h-3.5 w-3.5" /> },
+                        { value: 'graph', label: '그래프형', icon: <BarChart3 className="h-3.5 w-3.5" /> },
+                        { value: 'matrix', label: '매트릭스형', icon: <LayoutGrid className="h-3.5 w-3.5" /> },
+                      ]} />
+                      {historyViewMode === 'matrix' && (
+                        <ViewSwitchTabs value={matrixScope} onChange={setMatrixScope} options={[
+                          { value: 'role', label: '이 직종만' },
+                          { value: 'all', label: '전체 직종 비교' },
+                        ]} />
+                      )}
+                    </div>
                     {historyLoading ? (
                       <p className="text-sm text-gray-400">불러오는 중...</p>
                     ) : !historyLoaded ? (
                       <p className="text-sm text-gray-400">데이터를 불러오지 못했습니다.</p>
-                    ) : (
+                    ) : historyViewMode === 'list' ? (
                       <RoleHistoryView roleCode={role.role_code} items={historyItems}
                         expandedBucket={expandedBucket} setExpandedBucket={setExpandedBucket} />
+                    ) : historyViewMode === 'graph' ? (
+                      <RoleHistoryGraphView roleCode={role.role_code} items={historyItems} />
+                    ) : matrixScope === 'role' ? (
+                      <RoleMatrixView roleCode={role.role_code} items={historyItems} />
+                    ) : (
+                      <AllRolesMatrixView roles={roles} items={historyItems}
+                        onSelectRole={id => { selectRole(id); setTab('history'); setMatrixScope('role') }} />
                     )}
                   </div>
                 )}
@@ -1288,7 +1342,7 @@ function DashboardView({ roles, factors, guides, onSelectRole, onViewHistory, hi
                 <td className="text-center py-1.5">{h.matched.length > 0 ? h.matched.length : <span className="text-gray-300">—</span>}</td>
                 <td className="text-center py-1.5">
                   {h.winRate === null ? <span className="text-gray-300">—</span> : (
-                    <button onClick={e => { e.stopPropagation(); onViewHistory(r.id) }} className={`underline decoration-dotted ${marginColor(h.winRate)} px-1 rounded-full text-xs font-bold`}>
+                    <button onClick={e => { e.stopPropagation(); onViewHistory(r.id) }} className={`underline decoration-dotted ${winRateColor(h.winRate)} px-1 rounded-full text-xs font-bold`}>
                       {h.winRate}% ({h.won.length}/{h.decided.length})
                     </button>
                   )}
@@ -1355,7 +1409,7 @@ function RoleHistoryView({ roleCode, items, expandedBucket, setExpandedBucket }:
       <div className="grid grid-cols-4 gap-3">
         <StatCard label="매칭 건수" value={h.matched.length} />
         <StatCard label="체결율 (결정건 기준)" value={0} display={h.winRate === null ? '—' : `${h.winRate}%`}
-          accent={h.winRate === null ? 'text-gray-400' : marginColor(h.winRate)} />
+          accent={h.winRate === null ? 'text-gray-400' : winRateColor(h.winRate)} />
         <StatCard label="평균 체결가" value={0} display={h.avgWonPrice ? `${fmt(h.avgWonPrice)}원` : '—'} />
         <StatCard label="최근 체결" value={0} display={h.recentWon ? formatEventDate(h.recentWon) : '—'} />
       </div>
@@ -1400,6 +1454,174 @@ function RoleHistoryView({ roleCode, items, expandedBucket, setExpandedBucket }:
                 </Fragment>
               )
             })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// 목록형/그래프형/매트릭스형, 이 직종만/전체 직종 비교 — 같은 스위처 UI를 재사용
+function ViewSwitchTabs<T extends string>({ value, onChange, options }: {
+  value: T; onChange: (v: T) => void; options: { value: T; label: string; icon?: React.ReactNode }[]
+}) {
+  return (
+    <div className="inline-flex bg-gray-100 rounded-lg p-0.5 gap-0.5">
+      {options.map(o => (
+        <button
+          key={o.value}
+          onClick={() => onChange(o.value)}
+          className={`flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+            value === o.value ? 'bg-white text-rose-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          {o.icon}{o.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// ── 그래프형: 가격대별 성사/미성사/미정 건수를 막대로 (recharts, 대시보드 화면과 톤 통일) ──
+function RoleHistoryGraphView({ roleCode, items }: { roleCode: string; items: HistoryItem[] }) {
+  const h = computeRoleHistory(roleCode, items)
+  if (h.matched.length === 0) {
+    return <p className="text-sm text-gray-400">이 직종과 매칭되는 과거 견적 데이터가 없습니다. (키워드 매칭 기준이라 실제로는 데이터가 있어도 못 잡을 수 있어요)</p>
+  }
+  const data = h.buckets.map(b => ({
+    label: `${fmt(b.price)}원대`,
+    성사: b.items.filter(it => it.outcome === 'won').length,
+    미성사: b.items.filter(it => it.outcome === 'lost').length,
+    미정: b.items.filter(it => it.outcome === 'pending').length,
+  }))
+  const height = Math.max(160, data.length * 36 + 40)
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-4 gap-3">
+        <StatCard label="매칭 건수" value={h.matched.length} />
+        <StatCard label="체결율 (결정건 기준)" value={0} display={h.winRate === null ? '—' : `${h.winRate}%`}
+          accent={h.winRate === null ? 'text-gray-400' : winRateColor(h.winRate)} />
+        <StatCard label="평균 체결가" value={0} display={h.avgWonPrice ? `${fmt(h.avgWonPrice)}원` : '—'} />
+        <StatCard label="최근 체결" value={0} display={h.recentWon ? formatEventDate(h.recentWon) : '—'} />
+      </div>
+      <div className="bg-white border border-gray-200 rounded-xl p-3">
+        <h4 className="text-xs font-bold text-gray-600 mb-2">가격대별 성사·미성사·미정 건수</h4>
+        <ResponsiveContainer width="100%" height={height}>
+          <BarChart data={data} layout="vertical" margin={{ left: 10, right: 20, top: 5, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+            <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
+            <YAxis type="category" dataKey="label" width={80} tick={{ fontSize: 11 }} />
+            <Tooltip />
+            <Legend wrapperStyle={{ fontSize: 12 }} />
+            <Bar dataKey="성사" stackId="a" fill="#059669" radius={[0, 0, 0, 0]} />
+            <Bar dataKey="미성사" stackId="a" fill="#f87171" />
+            <Bar dataKey="미정" stackId="a" fill="#9ca3af" radius={[0, 4, 4, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  )
+}
+
+// ── 매트릭스형(이 직종만): 가격대 x 결과 그리드 — 클릭 없이 전체 분포를 한눈에 ──
+function RoleMatrixView({ roleCode, items }: { roleCode: string; items: HistoryItem[] }) {
+  const h = computeRoleHistory(roleCode, items)
+  if (h.matched.length === 0) {
+    return <p className="text-sm text-gray-400">이 직종과 매칭되는 과거 견적 데이터가 없습니다. (키워드 매칭 기준이라 실제로는 데이터가 있어도 못 잡을 수 있어요)</p>
+  }
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-4 gap-3">
+        <StatCard label="매칭 건수" value={h.matched.length} />
+        <StatCard label="체결율 (결정건 기준)" value={0} display={h.winRate === null ? '—' : `${h.winRate}%`}
+          accent={h.winRate === null ? 'text-gray-400' : winRateColor(h.winRate)} />
+        <StatCard label="평균 체결가" value={0} display={h.avgWonPrice ? `${fmt(h.avgWonPrice)}원` : '—'} />
+        <StatCard label="최근 체결" value={0} display={h.recentWon ? formatEventDate(h.recentWon) : '—'} />
+      </div>
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <h4 className="px-3 py-2 text-xs font-bold text-gray-600 bg-gray-50 border-b border-gray-200">가격대별 매트릭스</h4>
+        <table className="w-full text-sm">
+          <thead className="text-gray-400 text-xs">
+            <tr>
+              <th className="text-left py-2 pl-3">가격대</th><th className="text-center py-2">성사</th>
+              <th className="text-center py-2">미성사</th><th className="text-center py-2">미정</th>
+              <th className="text-center py-2 pr-3">체결율</th>
+            </tr>
+          </thead>
+          <tbody>
+            {h.buckets.map(b => {
+              const won = b.items.filter(it => it.outcome === 'won').length
+              const lost = b.items.filter(it => it.outcome === 'lost').length
+              const pending = b.items.filter(it => it.outcome === 'pending').length
+              const decided = won + lost
+              const rate = decided > 0 ? Math.round((won / decided) * 100) : null
+              return (
+                <tr key={b.price} className="border-t border-gray-100">
+                  <td className="py-1.5 pl-3">{fmt(b.price)}원대</td>
+                  <td className="text-center py-1.5 text-emerald-600 font-semibold">{won || <span className="text-gray-200">—</span>}</td>
+                  <td className="text-center py-1.5 text-red-400 font-semibold">{lost || <span className="text-gray-200">—</span>}</td>
+                  <td className="text-center py-1.5 text-gray-400">{pending || <span className="text-gray-200">—</span>}</td>
+                  <td className="text-center py-1.5 pr-3">
+                    {rate === null ? <span className="text-gray-300">—</span> : (
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${winRateColor(rate)}`}>{rate}%</span>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// ── 매트릭스형(전체 직종 비교): 직종 x 가격대(10만원 단위) 그리드 — 11개 직종을 한 화면에서 비교 ──
+function AllRolesMatrixView({ roles, items, onSelectRole }: {
+  roles: RoleRow[]; items: HistoryItem[]; onSelectRole: (id: string) => void
+}) {
+  const { perRole, buckets } = computeAllRolesMatrix(roles, items)
+  const activeRows = perRole.filter(p => p.total > 0)
+
+  if (activeRows.length === 0) {
+    return <p className="text-sm text-gray-400">매칭된 체결 이력이 있는 직종이 없습니다.</p>
+  }
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <h4 className="px-3 py-2 text-xs font-bold text-gray-600 bg-gray-50 border-b border-gray-200">
+        전체 직종 × 가격대(10만원 단위) 체결율 — 행 클릭 시 해당 직종 상세로 이동
+      </h4>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="text-gray-400 text-xs">
+            <tr>
+              <th className="text-left py-2 pl-3 sticky left-0 bg-white">직종</th>
+              {buckets.map(b => <th key={b} className="text-center py-2 px-2 whitespace-nowrap">{fmt(b)}원~</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {activeRows.map(({ role, cellMap, total }) => (
+              <tr key={role.id} className="border-t border-gray-100 hover:bg-rose-50/40 cursor-pointer" onClick={() => onSelectRole(role.id)}>
+                <td className="py-1.5 pl-3 sticky left-0 bg-white font-medium whitespace-nowrap">
+                  {JOB_META[role.role_code]?.emoji} {role.role_name} <span className="text-gray-300 font-normal">({total})</span>
+                </td>
+                {buckets.map(b => {
+                  const c = cellMap.get(b)
+                  if (!c) return <td key={b} className="text-center py-1.5 text-gray-200">—</td>
+                  const decided = c.won + c.lost
+                  const rate = decided > 0 ? Math.round((c.won / decided) * 100) : null
+                  return (
+                    <td key={b} className="text-center py-1.5">
+                      {rate === null ? <span className="text-gray-300 text-xs">—</span> : (
+                        <span className={`inline-block text-xs px-1.5 py-0.5 rounded-full font-bold ${winRateColor(rate)}`}>{rate}%</span>
+                      )}
+                      <div className="text-[9px] text-gray-400">{c.total}건</div>
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
