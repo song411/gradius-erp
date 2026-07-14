@@ -224,7 +224,7 @@ interface HistoryItem {
   id: string; role_name: string; unit_price: number; quantity: number; days: number
   status: string; outcome: 'won' | 'lost' | 'pending'
   event_start: string | null; event_end: string | null; event_time: string | null
-  company_name: string | null
+  company_name: string | null; event_name: string | null; location: string | null
 }
 
 function classifyOutcome(status: string | undefined | null): 'won' | 'lost' | 'pending' {
@@ -347,8 +347,8 @@ export default function PricingSimModal({ onClose }: Props) {
         db.list<{ id: string; role_name: string; unit_price: number; quantity: number; days: number; inquiry_id: string | null }>(
           'estimate_items', { select: 'id,role_name,unit_price,quantity,days,inquiry_id', limit: 5000 }
         ),
-        db.list<{ id: string; status: string; event_start: string | null; event_end: string | null; event_time: string | null; company_name: string | null }>(
-          'inquiries', { select: 'id,status,event_start,event_end,event_time,company_name', limit: 5000 }
+        db.list<{ id: string; status: string; event_start: string | null; event_end: string | null; event_time: string | null; company_name: string | null; event_name: string | null; location: string | null }>(
+          'inquiries', { select: 'id,status,event_start,event_end,event_time,company_name,event_name,location', limit: 5000 }
         ),
       ])
       const inqById = new Map(inquiries.map(i => [i.id, i]))
@@ -360,7 +360,7 @@ export default function PricingSimModal({ onClose }: Props) {
             id: it.id, role_name: it.role_name, unit_price: it.unit_price, quantity: it.quantity, days: it.days,
             status: inq.status, outcome: classifyOutcome(inq.status),
             event_start: inq.event_start, event_end: inq.event_end, event_time: inq.event_time,
-            company_name: inq.company_name,
+            company_name: inq.company_name, event_name: inq.event_name, location: inq.location,
           }
         })
       setHistoryItems(merged)
@@ -1436,18 +1436,32 @@ function RoleHistoryView({ roleCode, items, expandedBucket, setExpandedBucket }:
                   {isOpen && (
                     <tr className="bg-gray-50">
                       <td colSpan={4} className="py-2 px-3">
-                        <ul className="space-y-1 text-xs text-gray-500">
-                          {b.items.map(it => (
-                            <li key={it.id} className="flex items-center gap-2">
-                              <span className={it.outcome === 'won' ? 'text-emerald-600' : it.outcome === 'lost' ? 'text-red-400' : 'text-gray-400'}>
-                                {it.outcome === 'won' ? '●성사' : it.outcome === 'lost' ? '○미성사' : '△미정'}
-                              </span>
-                              <span>{formatEventDate(it)}</span>
-                              <span className="text-gray-400">· {it.company_name || '고객사 미기재'}</span>
-                              <span className="text-gray-400">· 원문: "{it.role_name}"</span>
-                            </li>
-                          ))}
-                        </ul>
+                        <table className="w-full text-xs">
+                          <thead className="text-gray-400">
+                            <tr>
+                              <th className="text-left font-normal py-1">상태</th>
+                              <th className="text-left font-normal py-1">일시</th>
+                              <th className="text-left font-normal py-1">행사명</th>
+                              <th className="text-left font-normal py-1">장소</th>
+                              <th className="text-left font-normal py-1">고객사</th>
+                              <th className="text-left font-normal py-1">원문 품목명</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {[...b.items].sort((x, y) => (y.event_start || '').localeCompare(x.event_start || '')).map(it => (
+                              <tr key={it.id} className="border-t border-gray-200/70">
+                                <td className={`py-1 pr-2 whitespace-nowrap ${it.outcome === 'won' ? 'text-emerald-600' : it.outcome === 'lost' ? 'text-red-400' : 'text-gray-400'}`}>
+                                  {it.outcome === 'won' ? '●성사' : it.outcome === 'lost' ? '○미성사' : '△미정'}
+                                </td>
+                                <td className="py-1 pr-2 text-gray-500 whitespace-nowrap">{formatEventDate(it)}</td>
+                                <td className="py-1 pr-2 text-gray-600">{it.event_name || '—'}</td>
+                                <td className="py-1 pr-2 text-gray-500">{it.location || '—'}</td>
+                                <td className="py-1 pr-2 text-gray-500">{it.company_name || '미기재'}</td>
+                                <td className="py-1 text-gray-400">&quot;{it.role_name}&quot;</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </td>
                     </tr>
                   )}
