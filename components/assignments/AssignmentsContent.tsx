@@ -1027,7 +1027,7 @@ export default function AssignmentsContent() {
                     <MapPin className="h-3.5 w-3.5" />{selectedInq.location}
                   </span>
                 )}
-                <div className="ml-auto flex items-center gap-2">
+                <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
                   {/* 뷰 탭 */}
                   <div className="flex border border-gray-200 rounded-lg overflow-hidden text-xs mr-1">
                     <button
