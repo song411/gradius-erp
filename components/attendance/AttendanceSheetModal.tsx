@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import * as XLSX from 'xlsx'
+import type { Borders, FillPattern, Workbook } from 'exceljs'
 import type { Inquiry, Assignment, Attendance, Staff } from '@/lib/supabase/types'
 import { Dialog, DialogHeader, DialogTitle, DialogContent, DialogFooter, DialogClose } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -47,6 +47,59 @@ function compactDate(dateStr: string): string {
   return dateStr.replace(/-/g, '')
 }
 
+// 동적 import한 exceljs에서 실제로 쓰는 부분만 좁혀 잡은 타입
+type ExcelJSModule = { Workbook: new () => Workbook }
+
+// ── 엑셀 서식 상수 ───────────────────────────────────────
+const THIN: Partial<Borders> = {
+  top:    { style: 'thin', color: { argb: 'FF000000' } },
+  left:   { style: 'thin', color: { argb: 'FF000000' } },
+  bottom: { style: 'thin', color: { argb: 'FF000000' } },
+  right:  { style: 'thin', color: { argb: 'FF000000' } },
+}
+const HEAD_FILL: FillPattern = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F1F1' } }
+
+type ColAlign = 'left' | 'center'
+interface SheetCol { key: string; label: string; width: number; align: ColAlign }
+
+// 출석부 표 컬럼 정의 — 엑셀 시트가 이 순서/너비를 그대로 따른다
+function SHEET_COLS(withPhone: boolean): SheetCol[] {
+  return [
+    { key: 'no',       label: 'No',    width: 5,  align: 'center' },
+    { key: 'name',     label: '성 명',  width: 12, align: 'center' },
+    { key: 'group',    label: '구 분',  width: 7,  align: 'center' },
+    { key: 'job',      label: '직 무',  width: 14, align: 'center' },
+    ...(withPhone ? [{ key: 'phone', label: '연 락 처', width: 15, align: 'center' as ColAlign }] : []),
+    { key: 'clockIn',  label: '출근',   width: 8,  align: 'center' },
+    { key: 'clockOut', label: '퇴근',   width: 8,  align: 'center' },
+    { key: 'status',   label: '출결',   width: 7,  align: 'center' },
+    { key: 'sign',     label: '서 명',  width: 14, align: 'center' },
+    { key: 'notes',    label: '비 고',  width: 24, align: 'left' },
+  ]
+}
+
+// 1 → 'A', 10 → 'J'
+function colLetter(n: number): string {
+  let s = ''
+  while (n > 0) {
+    const r = (n - 1) % 26
+    s = String.fromCharCode(65 + r) + s
+    n = Math.floor((n - 1) / 26)
+  }
+  return s
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
@@ -81,6 +134,8 @@ export default function AttendanceSheetModal({
   // ('all' = 전체 날짜를 날짜별 여러 장으로) 닫을 때 null로 되돌려 다음 열기에 기본값 복귀.
   const [dateOverride, setDateOverride] = useState<string | null>(null)
   const [includePhone, setIncludePhone] = useState(true)
+  // 엑셀 생성 중 (exceljs 동적 로드 + 파일 조립)
+  const [busy, setBusy] = useState(false)
   const dateSel = dateOverride ?? currentDate ?? dates[0] ?? ''
 
   function handleClose() {
@@ -228,87 +283,228 @@ export default function AttendanceSheetModal({
   }
 
   // ── 엑셀 다운로드 ──────────────────────────────────────
-  function handleExcel() {
+  // 파일 자체를 서식 있는 출석부 양식으로 만든다(테두리·제목 병합·인쇄 설정).
+  // xlsx(무료판)는 셀 스타일을 쓸 수 없어 exceljs를 사용.
+  async function handleExcel() {
     if (rowCount === 0) { toast.error('배정된 인원이 없습니다.'); return }
+    setBusy(true)
+    try {
+      // exceljs는 브라우저에서 UMD 번들(package.json의 browser 필드)로 해석된다.
+      // 번들러에 따라 네임스페이스에 바로 오기도, default에 담기기도 하므로 둘 다 받는다.
+      const mod = await import('exceljs')
+      const ExcelJS = ((mod as unknown as { default?: ExcelJSModule }).default
+        ?? (mod as unknown as ExcelJSModule))
+      const wb = new ExcelJS.Workbook()
+      wb.creator = '가디우스 ERP'
 
-    const wb = XLSX.utils.book_new()
-    const colCount = includePhone ? 9 : 8
+      targetDates.forEach(date => {
+        const rows = buildRows(date)
+        const sheetName = (isMultiDay ? date.slice(5).replace(/-/g, '.') : '출석부').slice(0, 31)
+        const ws = wb.addWorksheet(sheetName, {
+          pageSetup: {
+            paperSize: 9,              // A4
+            orientation: 'portrait',
+            fitToPage: true,
+            fitToWidth: 1,
+            fitToHeight: 0,            // 세로는 여러 장 허용
+            horizontalCentered: true,
+            margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.3, footer: 0.3 },
+          },
+        })
 
-    targetDates.forEach(date => {
-      const rows = buildRows(date)
-      const header = [
-        'No', '성명', '구분', '직무',
-        ...(includePhone ? ['연락처'] : []),
-        '출근', '퇴근', '출결', '서명', '비고',
-      ]
+        ws.columns = SHEET_COLS(includePhone).map(c => ({ width: c.width }))
+        const nCols = ws.columns.length
+        const last = colLetter(nCols)
+        // 좌/우 2단 정보표에서 오른쪽 라벨이 놓일 열
+        const labelCol2 = includePhone ? 6 : 5
 
-      const aoa: (string | number)[][] = [
-        ['출 석 부'],
-        [],
-        ['행사명', inquiry.event_name || '', '', '일자', formatDateLong(date)],
-        ['업체명', inquiry.company_name || '', '', '인원', `${rowCount}명`],
-        ['장소', inquiry.location || '', '', '근무시간', inquiry.event_time || ''],
-        [],
-        header,
-        ...rows.map(r => [
-          r.no,
-          r.name,
-          r.isHQ ? '본사' : r.isLeader ? '팀장' : '크루',
-          r.job,
-          ...(includePhone ? [r.phone] : []),
-          r.clockIn, r.clockOut, r.status, '', r.notes,
-        ]),
-      ]
+        // 1행: 제목
+        ws.mergeCells(`A1:${last}1`)
+        const title = ws.getCell('A1')
+        title.value = '출 석 부'
+        title.font = { name: '맑은 고딕', size: 20, bold: true }
+        title.alignment = { horizontal: 'center', vertical: 'middle' }
+        ws.getRow(1).height = 34
+        ws.getRow(2).height = 6
 
-      if (mode === 'record') {
-        const c = (s: string) => rows.filter(r => r.status === s).length
-        aoa.push([])
-        aoa.push(['집계', `출석 ${c('출석')}`, `지각 ${c('지각')}`, `결근 ${c('결근')}`, `조퇴 ${c('조퇴')}`, `외출 ${c('외출')}`])
-      }
-      aoa.push([])
-      aoa.push(['현장 담당자 확인', '', '', '(서명)'])
+        // 3~5행: 행사 정보표
+        const meta: [string, string, string, string][] = [
+          ['행사명', inquiry.event_name || '', '일 자', formatDateLong(date)],
+          ['업체명', inquiry.company_name || '', '인 원', `${rowCount}명`],
+          ['장 소', inquiry.location || '', '근무시간', inquiry.event_time || ''],
+        ]
+        meta.forEach(([l1, v1, l2, v2], i) => {
+          const r = 3 + i
+          ws.getRow(r).height = 20
+          ws.mergeCells(r, 2, r, labelCol2 - 1)
+          ws.mergeCells(r, labelCol2 + 1, r, nCols)
+          ws.getCell(r, 1).value = l1
+          ws.getCell(r, 2).value = v1
+          ws.getCell(r, labelCol2).value = l2
+          ws.getCell(r, labelCol2 + 1).value = v2
+          for (let c = 1; c <= nCols; c++) {
+            const cell = ws.getCell(r, c)
+            cell.border = THIN
+            cell.font = { name: '맑은 고딕', size: 10 }
+            cell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 }
+          }
+          ;[1, labelCol2].forEach(c => {
+            const cell = ws.getCell(r, c)
+            cell.font = { name: '맑은 고딕', size: 10, bold: true }
+            cell.fill = HEAD_FILL
+            cell.alignment = { vertical: 'middle', horizontal: 'center' }
+          })
+        })
+        ws.getRow(6).height = 8
 
-      const ws = XLSX.utils.aoa_to_sheet(aoa)
-      ws['!cols'] = [
-        { wch: 5 }, { wch: 12 }, { wch: 7 }, { wch: 14 },
-        ...(includePhone ? [{ wch: 15 }] : []),
-        { wch: 8 }, { wch: 8 }, { wch: 7 }, { wch: 14 }, { wch: 24 },
-      ]
-      // 제목 행 병합
-      ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: colCount } }]
-      ws['!margins'] = { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.3, footer: 0.3 }
+        // 7행: 표 머리글
+        const HEADER_ROW = 7
+        const cols = SHEET_COLS(includePhone)
+        const head = ws.getRow(HEADER_ROW)
+        head.height = 24
+        cols.forEach((c, i) => {
+          const cell = head.getCell(i + 1)
+          cell.value = c.label
+          cell.font = { name: '맑은 고딕', size: 10, bold: true }
+          cell.fill = HEAD_FILL
+          cell.alignment = { horizontal: 'center', vertical: 'middle' }
+          cell.border = THIN
+        })
 
-      const sheetName = (isMultiDay ? date.slice(5) : '출석부').replace(/-/g, '.')
-      XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31))
-    })
+        // 8행~: 인원
+        rows.forEach((r, i) => {
+          const row = ws.getRow(HEADER_ROW + 1 + i)
+          row.height = 21
+          const values: (string | number)[] = [
+            r.no,
+            r.name,
+            r.isHQ ? '본사' : r.isLeader ? '팀장' : '크루',
+            r.job,
+            ...(includePhone ? [r.phone] : []),
+            r.clockIn, r.clockOut, r.status, '', r.notes,
+          ]
+          values.forEach((v, ci) => {
+            const cell = row.getCell(ci + 1)
+            cell.value = v
+            cell.border = THIN
+            cell.font = { name: '맑은 고딕', size: 10, bold: cols[ci].key === 'name' }
+            cell.alignment = {
+              horizontal: cols[ci].align,
+              vertical: 'middle',
+              indent: cols[ci].align === 'left' ? 1 : 0,
+            }
+            // 연락처는 앞자리 0이 사라지지 않도록 문자열 서식 고정
+            if (cols[ci].key === 'phone') cell.numFmt = '@'
+          })
+        })
 
-    // 다일 행사 + 기록 모드: 날짜별 출결을 한 장에 모은 종합 시트
-    if (mode === 'record' && targetDates.length > 1) {
-      const rows = buildRows(targetDates[0])
-      const header = ['No', '성명', '직무', ...(includePhone ? ['연락처'] : []), ...targetDates.map(d => d.slice(5)), '출석일수']
-      const body = rows.map(r => {
-        const perDate = targetDates.map(d =>
-          attendances.find(at => at.assignment_id === r.assignId && at.work_date === d)?.status || ''
-        )
-        const present = perDate.filter(s => s && s !== '결근').length
-        return [r.no, r.name, r.job, ...(includePhone ? [r.phone] : []), ...perDate, present]
+        let cursor = HEADER_ROW + rows.length
+        // 집계 (기록 모드)
+        if (mode === 'record') {
+          const c = (s: string) => rows.filter(r => r.status === s).length
+          cursor += 2
+          ws.mergeCells(cursor, 1, cursor, nCols)
+          const cell = ws.getCell(cursor, 1)
+          cell.value = `집계   출석 ${c('출석')}   ·   지각 ${c('지각')}   ·   결근 ${c('결근')}   ·   조퇴 ${c('조퇴')}   ·   외출 ${c('외출')}`
+          cell.font = { name: '맑은 고딕', size: 10 }
+          cell.alignment = { horizontal: 'right', vertical: 'middle', indent: 1 }
+        }
+
+        // 담당자 확인란
+        cursor += 2
+        ws.mergeCells(cursor, 1, cursor, nCols)
+        const confirm = ws.getCell(cursor, 1)
+        confirm.value = '위와 같이 근무 인원의 출결을 확인합니다.      현장 담당자 : ________________  (서명)'
+        confirm.font = { name: '맑은 고딕', size: 10 }
+        confirm.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 }
+        ws.getRow(cursor).height = 26
+
+        // 인쇄 시 페이지마다 머리글 반복 + 화면에서 머리글 고정
+        ws.pageSetup.printTitlesRow = `${HEADER_ROW}:${HEADER_ROW}`
+        ws.views = [{ state: 'frozen', ySplit: HEADER_ROW }]
       })
-      const ws = XLSX.utils.aoa_to_sheet([
-        [`${inquiry.event_name || ''} 출석 종합`], [], header, ...body,
-      ])
-      ws['!cols'] = [
-        { wch: 5 }, { wch: 12 }, { wch: 14 },
-        ...(includePhone ? [{ wch: 15 }] : []),
-        ...targetDates.map(() => ({ wch: 8 })), { wch: 9 },
-      ]
-      XLSX.utils.book_append_sheet(wb, ws, '종합')
-    }
 
-    const suffix = targetDates.length > 1
-      ? `${compactDate(targetDates[0])}-${compactDate(targetDates[targetDates.length - 1])}`
-      : compactDate(targetDates[0])
-    XLSX.writeFile(wb, `출석부_${inquiry.event_name || '행사'}_${suffix}.xlsx`)
-    toast.success('엑셀 파일이 다운로드되었습니다.')
+      // 다일 행사 + 기록 모드: 날짜별 출결을 한 장에 모은 종합 시트
+      if (mode === 'record' && targetDates.length > 1) {
+        const rows = buildRows(targetDates[0])
+        const ws = wb.addWorksheet('종합', {
+          pageSetup: {
+            paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0,
+            margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.3, footer: 0.3 },
+          },
+        })
+        const headLabels = [
+          'No', '성명', '직무',
+          ...(includePhone ? ['연락처'] : []),
+          ...targetDates.map(d => d.slice(5).replace('-', '/')),
+          '출석일수',
+        ]
+        ws.columns = [
+          { width: 5 }, { width: 12 }, { width: 14 },
+          ...(includePhone ? [{ width: 15 }] : []),
+          ...targetDates.map(() => ({ width: 9 })), { width: 10 },
+        ]
+        const nCols = headLabels.length
+
+        ws.mergeCells(1, 1, 1, nCols)
+        const title = ws.getCell(1, 1)
+        title.value = `${inquiry.event_name || ''} 출석 종합`
+        title.font = { name: '맑은 고딕', size: 16, bold: true }
+        title.alignment = { horizontal: 'center', vertical: 'middle' }
+        ws.getRow(1).height = 30
+        ws.getRow(2).height = 6
+
+        const head = ws.getRow(3)
+        head.height = 22
+        headLabels.forEach((l, i) => {
+          const cell = head.getCell(i + 1)
+          cell.value = l
+          cell.font = { name: '맑은 고딕', size: 10, bold: true }
+          cell.fill = HEAD_FILL
+          cell.alignment = { horizontal: 'center', vertical: 'middle' }
+          cell.border = THIN
+        })
+
+        rows.forEach((r, i) => {
+          const perDate = targetDates.map(d =>
+            attendances.find(at => at.assignment_id === r.assignId && at.work_date === d)?.status || ''
+          )
+          const present = perDate.filter(s => s && s !== '결근').length
+          const values: (string | number)[] = [
+            r.no, r.name, r.job,
+            ...(includePhone ? [r.phone] : []),
+            ...perDate, present,
+          ]
+          const row = ws.getRow(4 + i)
+          row.height = 20
+          values.forEach((v, ci) => {
+            const cell = row.getCell(ci + 1)
+            cell.value = v
+            cell.border = THIN
+            cell.font = { name: '맑은 고딕', size: 10, bold: ci === 1 }
+            cell.alignment = { horizontal: ci === 1 || ci === 2 ? 'left' : 'center', vertical: 'middle', indent: ci <= 2 ? 1 : 0 }
+            if (includePhone && ci === 3) cell.numFmt = '@'
+          })
+        })
+
+        ws.pageSetup.printTitlesRow = '3:3'
+        ws.views = [{ state: 'frozen', ySplit: 3 }]
+      }
+
+      const suffix = targetDates.length > 1
+        ? `${compactDate(targetDates[0])}-${compactDate(targetDates[targetDates.length - 1])}`
+        : compactDate(targetDates[0])
+      const buf = await wb.xlsx.writeBuffer()
+      downloadBlob(
+        new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+        `출석부_${inquiry.event_name || '행사'}_${suffix}.xlsx`,
+      )
+      toast.success('엑셀 파일이 다운로드되었습니다.')
+    } catch (e) {
+      toast.error('엑셀 생성 실패: ' + (e as Error).message)
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -375,14 +571,16 @@ export default function AttendanceSheetModal({
         <p className="text-[11px] text-gray-400 bg-gray-50 rounded-lg px-3 py-2 leading-relaxed">
           인원 {rowCount}명 · A4 세로 {targetDates.length}장
           {mode === 'blank' && ' · 출근/퇴근/출결/서명란 비워서 출력'}
+          <br />
+          엑셀도 테두리·인쇄 설정이 들어가 있어 열어서 바로 인쇄하면 출석부가 됩니다.
         </p>
       </DialogContent>
 
       <DialogFooter>
-        <Button variant="outline" size="sm" onClick={handleExcel}>
-          <FileSpreadsheet className="h-3.5 w-3.5" />엑셀 다운로드
+        <Button variant="outline" size="sm" onClick={handleExcel} disabled={busy}>
+          <FileSpreadsheet className="h-3.5 w-3.5" />{busy ? '생성 중...' : '엑셀 다운로드'}
         </Button>
-        <Button size="sm" onClick={handlePrint} className="bg-blue-600 hover:bg-blue-700">
+        <Button size="sm" onClick={handlePrint} disabled={busy} className="bg-blue-600 hover:bg-blue-700">
           <Printer className="h-3.5 w-3.5" />A4 인쇄
         </Button>
       </DialogFooter>

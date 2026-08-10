@@ -21,6 +21,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.2.1",
+    "exceljs": "^4.4.0",
     "framer-motion": "^12.40.0",
     "googleapis": "^172.0.0",
     "groq-sdk": "^1.2.1",
