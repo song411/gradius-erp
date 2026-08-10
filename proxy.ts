@@ -4,9 +4,13 @@ import { NextResponse, type NextRequest } from 'next/server'
 const COOKIE_NAME = 'erp_access'
 
 // 잠금에서 제외할 경로
+// 주의: startsWith 비교이므로 접두사가 넓으면 다른 경로까지 열린다.
+// '/c/'는 슬래시까지 포함해야 /ceo, /closings, /contracts, /customers 가 열리지 않는다.
 const PUBLIC_PATHS = [
   '/lock',
   '/api/auth/verify',
+  '/c/',            // 크루 셀프 출석 체크인 페이지 (이름·직무만 노출)
+  '/api/checkin',   // 위 페이지 전용 좁은 API — 범용 /api/db 는 잠금 유지
   '/_next',
   '/favicon.ico',
   '/logo.png',

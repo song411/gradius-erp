@@ -11,7 +11,7 @@ import {
   Search, CalendarDays, MapPin, Users, CheckCircle2,
   Clock, AlertCircle, ChevronRight, ChevronLeft, Star,
   ClipboardList, Award, Save, RefreshCw, HelpCircle,
-  Smartphone, X, Check, ThumbsUp, ThumbsDown, Printer,
+  Smartphone, X, Check, ThumbsUp, ThumbsDown, Printer, Link2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import AttendanceSheetModal from './AttendanceSheetModal'
@@ -457,6 +457,19 @@ export default function AttendanceContent() {
     toast.info('전원 출석으로 설정했습니다. 저장 버튼을 눌러주세요.')
   }
 
+  // 크루 셀프 출석 링크 복사 (단톡방에 붙여넣어 사용)
+  async function handleCopyCheckinLink() {
+    if (!selectedInq) return
+    const url = `${window.location.origin}/c/${selectedInq.id}`
+    try {
+      await navigator.clipboard.writeText(url)
+      toast.success('출석 링크를 복사했습니다. 단톡방에 붙여넣어 주세요.')
+    } catch {
+      // 클립보드 권한이 없는 환경(비 HTTPS 등) — 주소를 직접 보여준다
+      toast.info(url, { duration: 15000 })
+    }
+  }
+
   // 평가 점수 변경
   function handleEvalChange(assignId: string, field: keyof EvalScores, value: number) {
     setEvalMap(prev => ({ ...prev, [assignId]: { ...prev[assignId], [field]: value, dirty: true } }))
@@ -757,6 +770,15 @@ export default function AttendanceContent() {
                       title="A4 인쇄 · 엑셀 다운로드"
                     >
                       <Printer className="h-3.5 w-3.5" />출석부 출력
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleCopyCheckinLink}
+                      className="text-xs h-7"
+                      title="크루가 직접 출석하는 링크 — 단톡방에 붙여넣기"
+                    >
+                      <Link2 className="h-3.5 w-3.5" />출석 링크
                     </Button>
                     <button
                       onClick={() => loadDetail(selectedInq)}
