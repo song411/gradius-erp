@@ -11,9 +11,10 @@ import {
   Search, CalendarDays, MapPin, Users, CheckCircle2,
   Clock, AlertCircle, ChevronRight, ChevronLeft, Star,
   ClipboardList, Award, Save, RefreshCw, HelpCircle,
-  Smartphone, X, Check, ThumbsUp, ThumbsDown,
+  Smartphone, X, Check, ThumbsUp, ThumbsDown, Printer,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import AttendanceSheetModal from './AttendanceSheetModal'
 
 // 행사 날짜 범위 생성 (start ~ end, 최대 31일)
 function getDateRange(start?: string, end?: string): string[] {
@@ -238,6 +239,8 @@ export default function AttendanceContent() {
   const [staffMap, setStaffMap] = useState<Record<string, Staff>>({})
   // 현장 평가 모드 (한 명씩 전체화면)
   const [fieldMode, setFieldMode] = useState(false)
+  // 출석부 출력 모달 (A4 인쇄 / 엑셀)
+  const [sheetModal, setSheetModal] = useState(false)
 
   // 행사 목록 로드 (배정완료/진행중/완료)
   const loadInquiries = useCallback(async () => {
@@ -746,6 +749,15 @@ export default function AttendanceContent() {
                     >
                       <Save className="h-3.5 w-3.5" />저장 ({dirtyCount}건)
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setSheetModal(true)}
+                      className="text-xs h-7"
+                      title="A4 인쇄 · 엑셀 다운로드"
+                    >
+                      <Printer className="h-3.5 w-3.5" />출석부 출력
+                    </Button>
                     <button
                       onClick={() => loadDetail(selectedInq)}
                       className="text-gray-400 hover:text-gray-600 ml-auto"
@@ -1048,6 +1060,20 @@ export default function AttendanceContent() {
           onFieldChange={handleEvalField}
           onSave={(asgn) => handleSaveEval(asgn, { reload: false })}
           onClose={() => { setFieldMode(false); if (selectedInq) loadDetail(selectedInq) }}
+        />
+      )}
+
+      {/* 출석부 출력 — A4 인쇄 / 엑셀 */}
+      {selectedInq && (
+        <AttendanceSheetModal
+          open={sheetModal}
+          onClose={() => setSheetModal(false)}
+          inquiry={selectedInq}
+          assignments={assignments}
+          attendances={attendances}
+          staffMap={staffMap}
+          dates={getDateRange(selectedInq.event_start, selectedInq.event_end)}
+          currentDate={selectedDate}
         />
       )}
     </div>
