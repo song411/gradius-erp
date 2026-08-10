@@ -677,6 +677,15 @@ export default function AttendanceContent() {
               >
                 <Award className="h-4 w-4" />평가 입력
               </button>
+              {/* 현장 평가 모드 — 탭 줄에서 가장 눈에 띄게 (크루 있을 때만) */}
+              {assignments.filter(a => a.staff_type !== '본사').length > 0 && (
+                <button
+                  onClick={() => setFieldMode(true)}
+                  className="ml-auto self-center mr-2.5 flex items-center gap-1.5 px-4 h-9 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-sm font-bold shadow-md hover:shadow-lg active:scale-95 transition-all"
+                >
+                  <Smartphone className="h-4 w-4" />현장 평가 모드
+                </button>
+              )}
             </div>
 
             {/* 날짜 탭 — 다일 행사(2일 이상)일 때만 표시 */}
@@ -826,17 +835,6 @@ export default function AttendanceContent() {
                       저장 시 크루 프로필 점수에 <strong>자동 반영</strong>됩니다.
                     </p>
                   </div>
-
-                  {/* 현장 평가 모드 진입 (폰에서 한 명씩 크게) */}
-                  {assignments.filter(a => a.staff_type !== '본사').length > 0 && (
-                    <button
-                      onClick={() => setFieldMode(true)}
-                      className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold py-3.5 rounded-2xl shadow-md active:scale-[0.99] transition-transform"
-                    >
-                      <Smartphone className="h-5 w-5" />
-                      현장 평가 모드 — 한 명씩 크게 평가
-                    </button>
-                  )}
 
                   {assignments
                     .filter(a => a.staff_type !== '본사')
