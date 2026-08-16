@@ -169,9 +169,12 @@ export default function DashboardContent() {
   // 이번달 신규 문의 수 (created_at 기준)
   const monthlyNewInquiries = inquiries.filter(i => i.created_at?.startsWith(thisMonth)).length
 
+  // 미수금 = 아직 못 받은 잔액. 입금상태가 아니라 잔액으로 판단한다 —
+  // 상태로 거르면 '부분입금'인데 상태만 '입금완료'로 바뀐 건 등을 놓친다.
+  // 초과입금(잔액 음수)은 수익이지 받을 돈이 아니라 다른 건을 상쇄하면 안 된다.
+  // CEO 경영현황·업체입금 탭도 같은 기준을 쓴다.
   const unpaidAmount = settlements
-    .filter(s => s.deposit_status !== '입금완료')
-    .reduce((s, r) => s + (r.balance || 0), 0)
+    .reduce((s, r) => s + Math.max(0, r.balance || 0), 0)
 
   const activeInquiries = inquiries.filter(i => ['접수','견적','체결','배정완료','진행중'].includes(i.status))
 
@@ -271,7 +274,7 @@ export default function DashboardContent() {
 
   // 미수금 Top5
   const unpaidTop5 = [...settlements]
-    .filter(s => s.deposit_status !== '입금완료' && (s.balance||0) > 0)
+    .filter(s => (s.balance||0) > 0)
     .sort((a, b) => (b.balance||0) - (a.balance||0)).slice(0, 5)
 
   return (

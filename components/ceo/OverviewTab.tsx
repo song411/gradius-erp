@@ -99,7 +99,11 @@ export default function OverviewTab({ data }: { data: CeoData }) {
   const yearExpense  = yearSets.reduce((s, r) => s + getExpense(r.inquiry_id), 0)
   const yearProfit   = yearRevenue - yearPayout - yearExpense
   const yearReceived = yearSets.reduce((s, r) => s + (r.received_amount || 0), 0)
-  const yearUnpaid   = yearSets.reduce((s, r) => s + (r.balance || 0), 0)
+  // 미수금은 기간 실적이 아니라 '지금 못 받은 잔액'이라 연도로 자르지 않는다.
+  // 작년 미수금도 못 받은 건 여전히 못 받은 돈이다. 대시보드와 같은 기준.
+  // 초과입금(잔액 음수)은 우리 수익이지 받을 돈이 아니므로 다른 건의 미수금을
+  // 상쇄하지 않게 양수만 합산한다.
+  const totalUnpaid  = settlements.reduce((s, r) => s + Math.max(0, r.balance || 0), 0)
   const yearProfitRate = yearRevenue > 0 ? Math.round((yearProfit / yearRevenue) * 100) : 0
   const yearContracted = yearInqs.filter(q => !['접수', '견적', '미체결', '보류', '취소'].includes(q.status)).length
   const completionRate = yearInqs.length > 0 ? Math.round((yearContracted / yearInqs.length) * 100) : 0
@@ -135,7 +139,8 @@ export default function OverviewTab({ data }: { data: CeoData }) {
         <KPIBox label="매출총이익" value={formatKRW(yearProfit)} icon="📈" color="green" />
         <KPIBox label="수익률" value={`${yearProfitRate}%`} icon="🎯" color="purple" />
         <KPIBox label="수금액" value={formatKRW(yearReceived)} icon="✅" color="cyan" />
-        <KPIBox label="미수금" value={formatKRW(yearUnpaid)} icon="⚠️" color="red" />
+        {/* 다른 KPI는 선택 연도 기준이지만 미수금만 전체 기간이라 라벨에 밝힌다 */}
+        <KPIBox label="미수금 (전체기간)" value={formatKRW(totalUnpaid)} icon="⚠️" color="red" />
         <KPIBox label="체결율" value={`${completionRate}%`} icon="🏆" color="orange" />
       </div>
 

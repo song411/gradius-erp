@@ -119,10 +119,14 @@ export default function DepositTab({ data }: { data: CeoData }) {
   const unpaid   = settlements.filter(s => s.deposit_status === '미입금')
   const partial  = settlements.filter(s => s.deposit_status === '부분입금')
   const complete = settlements.filter(s => s.deposit_status === '입금완료')
-  // 미입금: 청구금액 합계 (못 받은 총액)
-  const totalUnpaid   = unpaid.reduce((acc, r) => acc + billed(r), 0)
-  // 부분입금: 실제 받은금액 합계
+  // 미수금 = 아직 못 받은 잔액 전체. 예전엔 '미입금' 상태 건의 청구액만 더해서
+  // 부분입금 건에 남은 잔액이 통째로 빠졌다(대시보드 총 미수금과 안 맞던 원인).
+  // 초과입금(잔액 음수)은 수익이지 받을 돈이 아니라 양수만 합산 — 대시보드와 같은 기준.
+  const receivables   = settlements.filter(s => (s.balance || 0) > 0)
+  const totalUnpaid   = receivables.reduce((acc, r) => acc + (r.balance || 0), 0)
+  // 부분입금: 실제 받은금액 / 아직 남은 잔액
   const totalPartialReceived = partial.reduce((acc, r) => acc + (r.received_amount || 0), 0)
+  const totalPartialBalance  = partial.reduce((acc, r) => acc + Math.max(0, r.balance || 0), 0)
   // 입금완료: 청구금액 합계 (완납 총액)
   const totalComplete = complete.reduce((acc, r) => acc + billed(r), 0)
   // 전체 실수령액: 모든 정산 건의 received_amount 합산 (청구금액 초과 수령 케이스도 정확히 반영)
@@ -177,10 +181,12 @@ export default function DepositTab({ data }: { data: CeoData }) {
         <div className="bg-red-50 border-2 border-red-300 rounded-xl p-4 shadow-sm">
           <div className="flex items-center gap-2 text-red-700 mb-1">
             <AlertCircle className="h-4 w-4" />
-            <span className="text-xs font-bold">미입금</span>
+            <span className="text-xs font-bold">미수금</span>
           </div>
-          <p className="text-2xl font-extrabold text-red-700">{unpaid.length}<span className="text-sm font-normal ml-0.5">건</span></p>
-          <p className="text-xs text-red-600 font-semibold mt-0.5">{formatKRW(totalUnpaid)}</p>
+          <p className="text-2xl font-extrabold text-red-700">{formatKRW(totalUnpaid)}</p>
+          <p className="text-xs text-red-600 font-semibold mt-0.5">
+            {receivables.length}건 — 미입금 {unpaid.length} · 부분입금 {partial.length}
+          </p>
         </div>
         <div className="bg-yellow-50 border-2 border-yellow-300 rounded-xl p-4 shadow-sm">
           <div className="flex items-center gap-2 text-yellow-700 mb-1">
@@ -188,7 +194,9 @@ export default function DepositTab({ data }: { data: CeoData }) {
             <span className="text-xs font-bold">부분입금</span>
           </div>
           <p className="text-2xl font-extrabold text-yellow-700">{partial.length}<span className="text-sm font-normal ml-0.5">건</span></p>
-          <p className="text-xs text-yellow-600 font-semibold mt-0.5">수령 {formatKRW(totalPartialReceived)}</p>
+          <p className="text-xs text-yellow-600 font-semibold mt-0.5">
+            수령 {formatKRW(totalPartialReceived)} · <span className="text-red-600">미수 {formatKRW(totalPartialBalance)}</span>
+          </p>
         </div>
         <div className="bg-green-50 border-2 border-green-300 rounded-xl p-4 shadow-sm">
           <div className="flex items-center gap-2 text-green-700 mb-1">
