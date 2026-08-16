@@ -6,12 +6,13 @@ import { db } from '@/lib/supabase/api'
 import type { Inquiry, Assignment, Payout, Settlement } from '@/lib/supabase/types'
 import { formatKRW, formatDate } from '@/lib/utils'
 import PayoutForm from './PayoutForm'
+import BulkPayoutModal from './BulkPayoutModal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
   Search, Users, Wallet, CheckCircle2, Clock,
   AlertCircle, Plus, PencilLine, Trash2, Building2,
-  UserX, Download, ChevronRight,
+  UserX, Download, ChevronRight, Layers,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -141,6 +142,7 @@ export default function PayoutsContent() {
   const [formOpen, setFormOpen]       = useState(false)
   const [formAssignment, setFormAssignment] = useState<Assignment | null>(null)
   const [formPayout, setFormPayout]   = useState<Payout | null>(null)
+  const [bulkOpen, setBulkOpen]       = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -185,6 +187,11 @@ export default function PayoutsContent() {
   const currentPayouts = selectedGroup?.inqPayouts || []
   const unregistered   = (selectedGroup?.unregistered || 0)
 
+  // 지급 미등록 유급 인원 — 일괄 지급등록 대상
+  const unregisteredAssigns = payableLeaders.filter(
+    a => !currentPayouts.find(p => p.assignment_id === a.id)
+  )
+
   function getTeamMembers(teamCode: string | undefined) {
     if (!teamCode) return []
     return assignments.filter(a => a.team_code === teamCode && a.role_type === '팀원' && a.inquiry_id === selectedId)
@@ -212,55 +219,31 @@ export default function PayoutsContent() {
     load()
   }
 
+  // 등록된 '대기' 건을 검토완료로 올리기만 한다.
+  // 미등록 인원을 여기서 자동 생성하지 않는다 — 금액을 아무도 보지 않은 채
+  // '검토완료'가 되어버리고, 공제율도 고를 수 없기 때문. 등록은 '일괄 지급등록'이 담당.
   async function handleBulkConfirm() {
     if (!selectedGroup) return
 
-    // 1) 기존 '대기' 레코드 → '확인완료' 업데이트
     const toUpdate = currentPayouts.filter(p => p.status === '대기')
+    const unregCount = unregisteredAssigns.length
 
-    // 2) 미등록 인원 → 기본금액으로 자동 생성 + '확인완료'
-    const unregisteredAssigns = payableLeaders.filter(
-      a => !currentPayouts.find(p => p.assignment_id === a.id)
-    )
-
-    if (!toUpdate.length && !unregisteredAssigns.length) {
-      toast.info('검토할 지급 건이 없습니다.')
+    if (!toUpdate.length) {
+      if (unregCount) {
+        toast.warning(`검토할 대기 건이 없습니다. 미등록 ${unregCount}명은 '일괄 지급등록'으로 먼저 등록해 주세요.`, { duration: 6000 })
+      } else {
+        toast.info('검토할 지급 건이 없습니다.')
+      }
       return
     }
 
-    const ops: Promise<unknown>[] = []
+    await Promise.all(toUpdate.map(p => db.update('payouts', p.id, { status: '확인완료' })))
 
-    // 업데이트
-    toUpdate.forEach(p =>
-      ops.push(db.update('payouts', p.id, { status: '확인완료' }))
-    )
-
-    // 자동 생성 (기본금액, 공제 없음)
-    unregisteredAssigns.forEach(assign => {
-      const segs = parseSegments(assign.memo)
-      const base = segs ? segmentTotal(segs) : (assign.pay_rate || 0) * (assign.work_days || 1)
-      const payload = {
-        inquiry_id: assign.inquiry_id,
-        assignment_id: assign.id,
-        staff_name: assign.staff_name || '',
-        bank_name: assign.bank_name || null,
-        account_number: assign.account_number || null,
-        subtotal: base,
-        tax_deduction: 0,
-        final_pay: base,
-        status: '확인완료',
-        memo: null,
-      }
-      ops.push(db.insert('payouts', payload))
-    })
-
-    await Promise.all(ops)
-
-    const total = toUpdate.length + unregisteredAssigns.length
-    const parts = []
-    if (toUpdate.length)          parts.push(`기존 ${toUpdate.length}건 확인완료`)
-    if (unregisteredAssigns.length) parts.push(`신규 ${unregisteredAssigns.length}건 자동 등록`)
-    toast.success(`전체 검토완료 (${parts.join(', ')})`)
+    if (unregCount) {
+      toast.warning(`${toUpdate.length}건 검토완료 — 미등록 ${unregCount}명이 남아 있습니다. '일괄 지급등록'을 눌러 주세요.`, { duration: 6000 })
+    } else {
+      toast.success(`전체 검토완료 (${toUpdate.length}건)`)
+    }
     load()
   }
 
@@ -436,6 +419,12 @@ export default function PayoutsContent() {
             <div className="flex gap-2 flex-wrap justify-end">
               {!selectedGroup?.isHqOnly && (
                 <>
+                  {unregisteredAssigns.length > 0 && (
+                    <Button size="sm" onClick={() => setBulkOpen(true)}
+                      className="bg-orange-500 hover:bg-orange-600 text-xs h-7 gap-1">
+                      <Layers className="h-3.5 w-3.5" />일괄 지급등록 {unregisteredAssigns.length}
+                    </Button>
+                  )}
                   <Button variant="outline" size="sm" onClick={handleBulkConfirm}
                     className="text-blue-600 border-blue-300 text-xs h-7 gap-1">
                     <CheckCircle2 className="h-3.5 w-3.5" />전체 검토완료
@@ -619,11 +608,17 @@ export default function PayoutsContent() {
             {/* ── 2. 미등록 유급 인원 ── */}
             {unregistered > 0 && (
               <div className="bg-orange-50 border-2 border-orange-200 rounded-xl p-4 space-y-2">
-                <p className="text-xs font-bold text-orange-700 flex items-center gap-1.5">
-                  <AlertCircle className="h-4 w-4" />
-                  지급 미등록 인력 ({unregistered}명) — 지급 등록이 필요합니다
-                </p>
-                {payableLeaders.filter(a => !currentPayouts.find(p => p.assignment_id === a.id)).map(assign => {
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-bold text-orange-700 flex items-center gap-1.5">
+                    <AlertCircle className="h-4 w-4" />
+                    지급 미등록 인력 ({unregistered}명) — 지급 등록이 필요합니다
+                  </p>
+                  <Button size="sm" onClick={() => setBulkOpen(true)}
+                    className="bg-orange-500 hover:bg-orange-600 text-xs h-7 gap-1 shrink-0">
+                    <Layers className="h-3.5 w-3.5" />일괄 지급등록
+                  </Button>
+                </div>
+                {unregisteredAssigns.map(assign => {
                   const teamMembers = assign.role_type === '팀장' ? getTeamMembers(assign.team_code) : []
                   const segsAmt = parseSegments(assign.memo)
                   const baseAmt = segsAmt ? segmentTotal(segsAmt) : (assign.pay_rate || 0) * (assign.work_days || 1)
@@ -713,6 +708,17 @@ export default function PayoutsContent() {
       {formOpen && formAssignment && (
         <PayoutForm open={formOpen} onClose={() => setFormOpen(false)}
           assignment={formAssignment} payout={formPayout} onSaved={load} />
+      )}
+
+      {bulkOpen && selectedInquiry && (
+        <BulkPayoutModal
+          open={bulkOpen}
+          onClose={() => setBulkOpen(false)}
+          assignments={unregisteredAssigns}
+          eventName={selectedInquiry.event_name || ''}
+          inquiryId={selectedInquiry.id}
+          onSaved={load}
+        />
       )}
     </div>
   )
