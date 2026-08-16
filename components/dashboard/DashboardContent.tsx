@@ -15,7 +15,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell, ComposedChart, Line,
 } from 'recharts'
-import type { Inquiry, Settlement, Assignment, Payout } from '@/lib/supabase/types'
+import type { Inquiry, Settlement, Assignment, Payout, EventExpense } from '@/lib/supabase/types'
 
 // 파이프라인 전체 단계
 const ALL_PIPELINE = [
@@ -58,6 +58,7 @@ export default function DashboardContent() {
   const [settlements, setSettlements] = useState<Settlement[]>([])
   const [assignments, setAssignments] = useState<Assignment[]>([])
   const [payouts,     setPayouts]     = useState<Payout[]>([])
+  const [expenses,    setExpenses]    = useState<EventExpense[]>([])
   const [staffCount,  setStaffCount]  = useState(0)
   const [customerCount, setCustomerCount] = useState(0)
   const [loading,     setLoading]     = useState(true)
@@ -65,11 +66,13 @@ export default function DashboardContent() {
 
   useEffect(() => {
     async function load() {
-      const [inqs, setts, assigns, pays, staffIds, custIds] = await Promise.all([
+      const [inqs, setts, assigns, pays, exps, staffIds, custIds] = await Promise.all([
         db.list<Inquiry>('inquiries', { order: 'event_start', asc: false }),
         db.list<Settlement>('settlements'),
         db.list<Assignment>('assignments', { order: 'assigned_at', asc: false }),
         db.list<Payout>('payouts', { order: 'created_at', asc: false }),
+        // 010 마이그레이션 전이면 테이블이 없다 — 실패해도 빈 목록으로 넘어간다
+        db.list<EventExpense>('event_expenses', { order: 'created_at', asc: false }).catch(() => []),
         db.list('staff', { select: 'id' }),
         db.list('customers', { select: 'id' }),
       ])
@@ -77,6 +80,7 @@ export default function DashboardContent() {
       setSettlements(setts)
       setAssignments(assigns)
       setPayouts(pays)
+      setExpenses(exps)
       setStaffCount(staffIds.length)
       setCustomerCount(custIds.length)
       setLoading(false)
@@ -129,6 +133,16 @@ export default function DashboardContent() {
     return (fromPayouts !== undefined && fromPayouts > 0) ? fromPayouts : settPayout
   }
 
+  // 부대비용(실제 지출) — 인건비와 별도로 수익에서 차감
+  const expenseByInquiry = expenses.reduce<Map<string, number>>((m, e) => {
+    if (e.inquiry_id) m.set(e.inquiry_id, (m.get(e.inquiry_id) || 0) + (e.amount || 0))
+    return m
+  }, new Map())
+
+  function getExpense(inquiryId: string | undefined): number {
+    return inquiryId ? (expenseByInquiry.get(inquiryId) || 0) : 0
+  }
+
   // payouts 테이블에 실제 데이터가 있는지 여부
   const hasRealPayoutData = payouts.length > 0
 
@@ -150,7 +164,8 @@ export default function DashboardContent() {
   const monthlyInvoice = thisMonthSetts.reduce((s, r) => s + (r.invoice_amount || (r.supply_price || 0) + (r.vat || 0)), 0)
   // 이번달 수익: 공급가액 - 실제지급액(payouts 우선)
   const monthlyPayout  = thisMonthSetts.reduce((s, r) => s + getActualPayout(r.inquiry_id, r.payout_amount), 0)
-  const monthlyProfit  = monthlyRevenue - monthlyPayout
+  const monthlyExpense = thisMonthSetts.reduce((s, r) => s + getExpense(r.inquiry_id), 0)
+  const monthlyProfit  = monthlyRevenue - monthlyPayout - monthlyExpense
   // 이번달 신규 문의 수 (created_at 기준)
   const monthlyNewInquiries = inquiries.filter(i => i.created_at?.startsWith(thisMonth)).length
 
@@ -175,7 +190,8 @@ export default function DashboardContent() {
   // 실제 청구금액(invoice_amount) 합계 — 없으면 supply_price + vat fallback
   const invoiceTotal2026 = settsYear.reduce((s, r) => s + (r.invoice_amount || (r.supply_price || 0) + (r.vat || Math.floor((r.supply_price || 0) * 0.1))), 0)
   const payout2026      = settsYear.reduce((s, r) => s + getActualPayout(r.inquiry_id, r.payout_amount), 0)
-  const profit2026      = rev2026 - payout2026
+  const expense2026     = settsYear.reduce((s, r) => s + getExpense(r.inquiry_id), 0)
+  const profit2026      = rev2026 - payout2026 - expense2026
   // 체결율: 체결 이상 / 전체 문의
   const contractedStatuses = ['체결', '배정완료', '진행중', '완료', '정산완료']
   const contractRate = inquiries.length > 0
@@ -242,7 +258,8 @@ export default function DashboardContent() {
     const sInMonth  = dedupedSettlements.filter(s => s.inquiry_id && monthInqIds.has(s.inquiry_id))
     const revenue   = sInMonth.reduce((s, r) => s + (r.supply_price || 0), 0)
     const payoutAmt = sInMonth.reduce((s, r) => s + getActualPayout(r.inquiry_id, r.payout_amount), 0)
-    const profit    = revenue - payoutAmt
+    const expenseAmt = sInMonth.reduce((s, r) => s + getExpense(r.inquiry_id), 0)
+    const profit    = revenue - payoutAmt - expenseAmt
     const hasData   = payoutAmt > 0
     return { label, revenue, profit, profitRate: (revenue > 0 && hasData) ? Math.round((profit / revenue) * 100) : 0 }
   })
@@ -327,7 +344,7 @@ export default function DashboardContent() {
 
       {/* ══════════════ 탭 4: 고객사현황 ══════════════ */}
       {activeTab === 'clients' && (
-        <ClientsTab inquiries={inquiries} settlements={settlements} payoutByInquiry={payoutByInquiry} />
+        <ClientsTab inquiries={inquiries} settlements={settlements} payoutByInquiry={payoutByInquiry} expenseByInquiry={expenseByInquiry} />
       )}
     </div>
   )
@@ -948,9 +965,10 @@ function AssignmentTab({ assignments, inquiries }: { assignments: Assignment[]; 
 // ═══════════════════════════════════════════
 // 탭 4: 고객사현황
 // ═══════════════════════════════════════════
-function ClientsTab({ inquiries, settlements, payoutByInquiry }: {
+function ClientsTab({ inquiries, settlements, payoutByInquiry, expenseByInquiry }: {
   inquiries: Inquiry[]; settlements: Settlement[]
   payoutByInquiry: Map<string, number>
+  expenseByInquiry: Map<string, number>
 }) {
   // 고객사별 문의 건수
   const cntMap = inquiries.reduce<Record<string, number>>((m, i) => {
@@ -968,12 +986,13 @@ function ClientsTab({ inquiries, settlements, payoutByInquiry }: {
   const revRank = Object.entries(revMap).sort((a,b)=>b[1]-a[1]).slice(0,10)
     .map(([name, value]) => ({ name, value }))
 
-  // 고객사별 수익 (payouts 우선 사용)
+  // 고객사별 수익 (payouts 우선 사용, 부대비용 차감)
   const profitMap = settlements.reduce<Record<string, number>>((m, s) => {
     const name      = s.company_name || '(미상)'
     const actualPay = payoutByInquiry.get(s.inquiry_id || '')
     const payout    = (actualPay !== undefined && actualPay > 0) ? actualPay : s.payout_amount
-    m[name] = (m[name] || 0) + (s.supply_price - payout)
+    const expense   = expenseByInquiry.get(s.inquiry_id || '') || 0
+    m[name] = (m[name] || 0) + (s.supply_price - payout - expense)
     return m
   }, {})
 

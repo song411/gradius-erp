@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { db } from '@/lib/supabase/api'
-import type { Inquiry, Settlement, Payout, Assignment, Customer, EstimateItem, Estimate } from '@/lib/supabase/types'
+import type { Inquiry, Settlement, Payout, Assignment, Customer, EstimateItem, Estimate, EventExpense } from '@/lib/supabase/types'
 import { BarChart3, Receipt, Banknote, Building2, TrendingUp } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 
@@ -22,6 +22,7 @@ export interface CeoData {
   customers:     Customer[]
   estimateItems: EstimateItem[]   // 견적서 품목 (inquiry_id 기준)
   estimates:     Estimate[]       // 견적서 (prev_total_price 등 변경 이력용)
+  expenses:      EventExpense[]   // 행사별 부대비용 (실제 지출) — 수익에서 차감
   reload:        () => void
 }
 
@@ -42,7 +43,7 @@ export default function CeoContent() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [inquiries, settlements, payouts, assignments, customers, estimateItems, estimates] = await Promise.all([
+    const [inquiries, settlements, payouts, assignments, customers, estimateItems, estimates, expenses] = await Promise.all([
       db.list<Inquiry>('inquiries'),
       db.list<Settlement>('settlements'),
       db.list<Payout>('payouts', { order: 'created_at', asc: false }),
@@ -50,8 +51,10 @@ export default function CeoContent() {
       db.list<Customer>('customers'),
       db.list<EstimateItem>('estimate_items'),
       db.list<Estimate>('estimates'),
+      // 010 마이그레이션 전이면 테이블이 없다 — 실패해도 빈 목록으로 넘어간다
+      db.list<EventExpense>('event_expenses', { order: 'created_at', asc: false }).catch(() => []),
     ])
-    setData({ inquiries, settlements, payouts, assignments, customers, estimateItems, estimates })
+    setData({ inquiries, settlements, payouts, assignments, customers, estimateItems, estimates, expenses })
     setLoading(false)
   }, [])
 

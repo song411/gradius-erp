@@ -54,6 +54,7 @@ interface ProjectRow {
   payouts:     Payout[]        // 지급완료 건만
   supplyPrice: number
   totalPayout: number
+  totalExpense: number         // 부대비용 (실제 지출)
   profit:      number
   profitRate:  number
   payoutCase:  PayoutCase      // 케이스 구분
@@ -61,7 +62,7 @@ interface ProjectRow {
 }
 
 export default function ProfitTab({ data }: { data: CeoData }) {
-  const { inquiries, settlements, payouts, assignments } = data
+  const { inquiries, settlements, payouts, assignments, expenses } = data
   type RateFilter = '전체' | '30%이상' | '20-30%' | '10-20%' | '10%미만'
 
   const [openRows, setOpenRows]       = useState<Set<string>>(new Set())
@@ -91,7 +92,11 @@ export default function ProfitTab({ data }: { data: CeoData }) {
 
         const supplyPrice = sett?.supply_price || 0
         const totalPayout = donePaouts.reduce((s, p) => s + p.final_pay, 0)
-        const profit      = supplyPrice - totalPayout
+        // 부대비용은 지급과 달리 상태가 없다 — 등록된 즉시 실제 지출로 본다
+        const totalExpense = expenses
+          .filter(e => e.inquiry_id === q.id)
+          .reduce((s, e) => s + (e.amount || 0), 0)
+        const profit      = supplyPrice - totalPayout - totalExpense
         const profitRate  = supplyPrice > 0 ? Math.round((profit / supplyPrice) * 100) : 0
 
         // 본사 인원만 배정된 경우 판별
@@ -111,7 +116,7 @@ export default function ProfitTab({ data }: { data: CeoData }) {
           payoutCase = 'none'                  // 배정 자체 없음
         }
 
-        return { inquiry: q, settlement: sett, payouts: donePaouts, supplyPrice, totalPayout, profit, profitRate, payoutCase, hqNames }
+        return { inquiry: q, settlement: sett, payouts: donePaouts, supplyPrice, totalPayout, totalExpense, profit, profitRate, payoutCase, hqNames }
       })
       .filter(r => r.supplyPrice > 0)
       .sort((a, b) => {
@@ -120,7 +125,7 @@ export default function ProfitTab({ data }: { data: CeoData }) {
         if (sortKey === 'supply')  return b.supplyPrice - a.supplyPrice
         return 0
       })
-  }, [inquiries, settlements, payouts, assignments, sortKey])
+  }, [inquiries, settlements, payouts, assignments, expenses, sortKey])
 
   // 검색 + 기간 + 수익률 필터
   const filtered = useMemo(() => {
@@ -137,9 +142,10 @@ export default function ProfitTab({ data }: { data: CeoData }) {
   }, [projects, search, periodState, rateFilter])
 
   // 총계
-  const totalSupply = filtered.reduce((s, r) => s + r.supplyPrice, 0)
-  const totalPayout = filtered.reduce((s, r) => s + r.totalPayout, 0)
-  const totalProfit = filtered.reduce((s, r) => s + r.profit, 0)
+  const totalSupply  = filtered.reduce((s, r) => s + r.supplyPrice, 0)
+  const totalPayout  = filtered.reduce((s, r) => s + r.totalPayout, 0)
+  const totalExpense = filtered.reduce((s, r) => s + r.totalExpense, 0)
+  const totalProfit  = filtered.reduce((s, r) => s + r.profit, 0)
   const avgRate     = totalSupply > 0 ? Math.round((totalProfit / totalSupply) * 100) : 0
 
   function toggleRow(id: string) {
@@ -156,10 +162,11 @@ export default function ProfitTab({ data }: { data: CeoData }) {
       {/* 전체 요약 */}
       <div className="bg-gradient-to-br from-slate-800 to-slate-700 rounded-2xl p-5">
         <p className="text-xs font-semibold text-slate-400 mb-4 uppercase tracking-wider">프로젝트 수익 총계 ({filtered.length}건{search ? ` / 검색 중` : ''})</p>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <SummaryCard label="총 공급가액" value={formatKRW(totalSupply)} sub="(VAT 제외)" color="white" />
           <SummaryCard label="총 지급액" value={formatKRW(totalPayout)} sub="지급완료 기준" color="orange" />
-          <SummaryCard label="총 순수익" value={formatKRW(totalProfit)} sub="" color="emerald" />
+          <SummaryCard label="총 부대비용" value={formatKRW(totalExpense)} sub="실제 지출" color="rose" />
+          <SummaryCard label="총 순수익" value={formatKRW(totalProfit)} sub="공급가-지급-부대" color="emerald" />
           <SummaryCard label="평균 수익률" value={`${avgRate}%`} sub="" color="purple" />
         </div>
       </div>
@@ -214,6 +221,7 @@ export default function ProfitTab({ data }: { data: CeoData }) {
               <th className="text-left px-3 py-3 text-xs font-bold text-gray-700">행사일</th>
               <th className="text-right px-3 py-3 text-xs font-bold text-gray-700">공급가액</th>
               <th className="text-right px-3 py-3 text-xs font-bold text-gray-700">총지급</th>
+              <th className="text-right px-3 py-3 text-xs font-bold text-gray-700">부대비용</th>
               <th className="text-right px-3 py-3 text-xs font-bold text-gray-700">순수익</th>
               <th className="text-center px-3 py-3 text-xs font-bold text-gray-700">수익률</th>
               <th className="text-center px-3 py-3 text-xs font-bold text-gray-700">상태</th>
@@ -221,19 +229,21 @@ export default function ProfitTab({ data }: { data: CeoData }) {
           </thead>
           <tbody className="divide-y divide-gray-200">
             {filtered.length === 0 && (
-              <tr><td colSpan={9} className="py-10 text-center text-gray-400">{search ? `"${search}" 검색 결과가 없습니다.` : '데이터가 없습니다.'}</td></tr>
+              <tr><td colSpan={10} className="py-10 text-center text-gray-400">{search ? `"${search}" 검색 결과가 없습니다.` : '데이터가 없습니다.'}</td></tr>
             )}
             {filtered.map(r => {
               const isOpen = openRows.has(r.inquiry.id)
+              // 배정이 없어도 부대비용만 있으면 펼쳐볼 수 있어야 한다
+              const canOpen = r.payoutCase !== 'none' || r.totalExpense > 0
               return (
                 <>
                   <tr
                     key={r.inquiry.id}
-                    className={`transition-colors ${r.payoutCase !== 'none' ? 'hover:bg-gray-50 cursor-pointer' : ''}`}
-                    onClick={() => r.payoutCase !== 'none' && toggleRow(r.inquiry.id)}
+                    className={`transition-colors ${canOpen ? 'hover:bg-gray-50 cursor-pointer' : ''}`}
+                    onClick={() => canOpen && toggleRow(r.inquiry.id)}
                   >
                     <td className="px-3 py-3 text-gray-400">
-                      {r.payoutCase !== 'none' && (
+                      {canOpen && (
                         isOpen
                           ? <ChevronDown className="h-3.5 w-3.5" />
                           : <ChevronRight className="h-3.5 w-3.5 opacity-40" />
@@ -253,9 +263,15 @@ export default function ProfitTab({ data }: { data: CeoData }) {
                       {r.payoutCase === 'pending' && <span className="text-amber-500 text-xs flex items-center justify-end gap-1"><Clock className="h-3 w-3" />지급 전</span>}
                       {r.payoutCase === 'none'    && <span className="text-gray-300 text-xs">배정 없음</span>}
                     </td>
+                    <td className="px-3 py-3 text-right text-rose-600 text-xs">
+                      {r.totalExpense > 0
+                        ? `-${formatKRW(r.totalExpense)}`
+                        : <span className="text-gray-300">-</span>}
+                    </td>
                     <td className={`px-3 py-3 text-right font-bold ${r.profit >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
                       {r.payoutCase === 'normal'  && formatKRW(r.profit)}
-                      {r.payoutCase === 'hq_only' && <span className="text-emerald-600 font-bold">{formatKRW(r.supplyPrice)}</span>}
+                      {/* 본사 전원이라 지급은 0이지만 부대비용은 나갔을 수 있다 */}
+                      {r.payoutCase === 'hq_only' && <span className="text-emerald-600 font-bold">{formatKRW(r.profit)}</span>}
                       {(r.payoutCase === 'pending' || r.payoutCase === 'none') && <span className="text-gray-300">-</span>}
                     </td>
                     <td className="px-3 py-3 text-center">
@@ -277,7 +293,7 @@ export default function ProfitTab({ data }: { data: CeoData }) {
                   {/* 드릴다운: 지급 내역 or 케이스 설명 */}
                   {isOpen && (
                     <tr key={`${r.inquiry.id}-detail`}>
-                      <td colSpan={9} className="bg-slate-50 px-8 py-4 border-t border-dashed border-slate-200">
+                      <td colSpan={10} className="bg-slate-50 px-8 py-4 border-t border-dashed border-slate-200">
                         {r.payoutCase === 'normal' && (
                           <>
                             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">지급 내역</p>
@@ -305,13 +321,37 @@ export default function ProfitTab({ data }: { data: CeoData }) {
                                 <p className="text-xs font-bold text-slate-700">{r.hqNames.join(', ')}</p>
                               </div>
                             </div>
-                            <p className="text-xs text-emerald-600 font-semibold">지급비 없음 → 수익 = 공급가액 전액</p>
+                            <p className="text-xs text-emerald-600 font-semibold">
+                              {r.totalExpense > 0
+                                ? '지급비 없음 → 수익 = 공급가액 - 부대비용'
+                                : '지급비 없음 → 수익 = 공급가액 전액'}
+                            </p>
                           </div>
                         )}
                         {r.payoutCase === 'pending' && (
                           <div className="flex items-center gap-2 text-amber-600">
                             <Clock className="h-4 w-4" />
                             <p className="text-xs font-semibold">인력비 지급관리에서 검토완료 후 지급완료 처리 시 수익이 표시됩니다.</p>
+                          </div>
+                        )}
+
+                        {/* 부대비용 내역 — 수익이 낮은 이유를 여기서 바로 보게 한다 */}
+                        {r.totalExpense > 0 && (
+                          <div className="mt-3 pt-3 border-t border-dashed border-slate-200">
+                            <p className="text-[10px] font-semibold text-rose-400 uppercase tracking-wider mb-2">부대비용 (실제 지출)</p>
+                            <div className="flex flex-wrap gap-2">
+                              {expenses.filter(e => e.inquiry_id === r.inquiry.id).map(e => (
+                                <div key={e.id} className="bg-white border border-rose-200 rounded-lg px-3 py-2 text-xs">
+                                  <p className="font-semibold text-rose-700">{e.category}</p>
+                                  {e.memo && <p className="text-gray-500 max-w-[180px] truncate">{e.memo}</p>}
+                                  <p className="text-rose-700 font-bold mt-0.5">-{formatKRW(e.amount)}</p>
+                                </div>
+                              ))}
+                              <div className="bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 text-xs flex flex-col justify-center">
+                                <p className="text-rose-500">합계 지출</p>
+                                <p className="font-bold text-rose-700">-{formatKRW(r.totalExpense)}</p>
+                              </div>
+                            </div>
                           </div>
                         )}
                       </td>
@@ -327,6 +367,7 @@ export default function ProfitTab({ data }: { data: CeoData }) {
               <td colSpan={4} className="px-3 py-3 text-sm text-gray-700">합계 ({filtered.length}건)</td>
               <td className="px-3 py-3 text-right text-sm">{formatKRW(totalSupply)}</td>
               <td className="px-3 py-3 text-right text-sm text-orange-600">{formatKRW(totalPayout)}</td>
+              <td className="px-3 py-3 text-right text-sm text-rose-600">{totalExpense > 0 ? `-${formatKRW(totalExpense)}` : '-'}</td>
               <td className="px-3 py-3 text-right text-sm text-emerald-700">{formatKRW(totalProfit)}</td>
               <td className="px-3 py-3 text-center"><ProfitRateTag rate={avgRate} /></td>
               <td />
@@ -344,6 +385,7 @@ function SummaryCard({ label, value, sub, color }: {
   const styles: Record<string, string> = {
     white:   'bg-white/10 text-white',
     orange:  'bg-orange-500/20 border border-orange-500/30 text-orange-200',
+    rose:    'bg-rose-500/20 border border-rose-500/30 text-rose-200',
     emerald: 'bg-emerald-500/20 border border-emerald-500/30 text-emerald-200',
     purple:  'bg-purple-500/20 border border-purple-500/30 text-purple-200',
   }

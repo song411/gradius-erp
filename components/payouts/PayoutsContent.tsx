@@ -3,16 +3,17 @@
 import { useState, useEffect, useCallback } from 'react'
 import * as XLSX from 'xlsx'
 import { db } from '@/lib/supabase/api'
-import type { Inquiry, Assignment, Payout, Settlement } from '@/lib/supabase/types'
+import type { Inquiry, Assignment, Payout, Settlement, EventExpense } from '@/lib/supabase/types'
 import { formatKRW, formatDate } from '@/lib/utils'
 import PayoutForm from './PayoutForm'
 import BulkPayoutModal from './BulkPayoutModal'
+import ExpensesSection from './ExpensesSection'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
   Search, Users, Wallet, CheckCircle2, Clock,
   AlertCircle, Plus, PencilLine, Trash2, Building2,
-  UserX, Download, ChevronRight, Layers,
+  UserX, Download, ChevronRight, Layers, Receipt,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -135,6 +136,9 @@ export default function PayoutsContent() {
   const [inquiries, setInquiries]     = useState<Inquiry[]>([])
   const [assignments, setAssignments] = useState<Assignment[]>([])
   const [payouts, setPayouts]         = useState<Payout[]>([])
+  const [expenses, setExpenses]       = useState<EventExpense[]>([])
+  // event_expenses 테이블 존재 여부 — 010 마이그레이션 실행 전이면 false
+  const [expensesReady, setExpensesReady] = useState(true)
   const [loading, setLoading]         = useState(false)
   const [search, setSearch]           = useState('')
   const [leftTab, setLeftTab]         = useState<LeftTab>('pending')
@@ -147,11 +151,17 @@ export default function PayoutsContent() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [inqList, assignList, payoutList] = await Promise.all([
+      const [inqList, assignList, payoutList, expenseList] = await Promise.all([
         db.list<Inquiry>('inquiries', { order: 'event_start', asc: false }),
         db.list<Assignment>('assignments', { order: 'assigned_at', asc: false }),
         db.list<Payout>('payouts', { order: 'created_at', asc: false }),
+        // 010 마이그레이션 전이면 테이블이 없다 — 부대비용 때문에 지급관리가
+        // 통째로 안 열리면 안 되므로 실패해도 null 로 넘어간다.
+        // null(테이블 없음)과 []( 지출 0건)은 구분해야 안내 배너를 띄울 수 있다.
+        db.list<EventExpense>('event_expenses', { order: 'created_at', asc: true }).catch(() => null),
       ])
+      setExpenses(expenseList ?? [])
+      setExpensesReady(expenseList !== null)
       const PAYOUT_STATUSES = ['체결', '배정완료', '진행중', '완료', '정산완료']
       const filtered = inqList.filter(inq => PAYOUT_STATUSES.includes(inq.status))
       setInquiries(filtered)
@@ -196,6 +206,9 @@ export default function PayoutsContent() {
     if (!teamCode) return []
     return assignments.filter(a => a.team_code === teamCode && a.role_type === '팀원' && a.inquiry_id === selectedId)
   }
+
+  const currentExpenses  = expenses.filter(e => e.inquiry_id === selectedId)
+  const expenseTotal     = currentExpenses.reduce((s, e) => s + (e.amount || 0), 0)
 
   const payoutTotalFinal     = currentPayouts.reduce((s, p) => s + (p.final_pay || 0), 0)
   const payoutTotalBase      = currentPayouts.reduce((s, p) => s + (p.subtotal || 0), 0)
@@ -475,6 +488,13 @@ export default function PayoutsContent() {
                 <span className="text-xs">최종 지급</span>
                 <span className="font-extrabold text-base">{formatKRW(payoutTotalFinal)}</span>
               </div>
+              {expenseTotal > 0 && (
+                <div className="flex items-center gap-1.5 text-rose-600">
+                  <Receipt className="h-4 w-4" />
+                  <span className="text-xs">부대비용</span>
+                  <span className="font-bold text-sm">-{formatKRW(expenseTotal)}</span>
+                </div>
+              )}
             </div>
           )}
 
@@ -667,7 +687,15 @@ export default function PayoutsContent() {
               </div>
             )}
 
-            {/* ── 3. 본사 인원 (항상 표시) ── */}
+            {/* ── 3. 부대비용 (실제 지출) — 지급과 달리 상태 없음 ── */}
+            <ExpensesSection
+              inquiryId={selectedInquiry.id}
+              expenses={currentExpenses}
+              ready={expensesReady}
+              onChanged={load}
+            />
+
+            {/* ── 4. 본사 인원 (항상 표시) ── */}
             {hqAssigns.length > 0 && (
               <div className={`border-2 rounded-xl p-4 space-y-3 ${selectedGroup?.isHqOnly ? 'border-purple-300 bg-purple-50' : 'border-purple-200 bg-purple-50/40'}`}>
                 <p className="text-xs font-bold text-purple-700 flex items-center gap-1.5">

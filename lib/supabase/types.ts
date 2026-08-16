@@ -362,6 +362,18 @@ export interface Payout {
   updated_at: string
 }
 
+// 행사별 부대비용 (실제 지출) — 지급과 달리 상태(대기/입금완료)가 없다
+export interface EventExpense {
+  id: string
+  inquiry_id?: string
+  category: string
+  amount: number
+  memo?: string
+  spent_on?: string
+  created_at: string
+  updated_at?: string
+}
+
 export type ProjectMemoType = '인원추천' | '운영메모' | '피드백'
 
 export interface ProjectMemo {

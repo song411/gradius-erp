@@ -13,7 +13,7 @@ import { Activity } from 'lucide-react'
 import type { CeoData } from './CeoContent'
 
 export default function OverviewTab({ data }: { data: CeoData }) {
-  const { inquiries, settlements, payouts } = data
+  const { inquiries, settlements, payouts, expenses } = data
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
 
   const availableYears = [
@@ -46,6 +46,15 @@ export default function OverviewTab({ data }: { data: CeoData }) {
     return (fromPayouts !== undefined && fromPayouts > 0) ? fromPayouts : settPayout
   }
 
+  // 부대비용(실제 지출) — 인건비와 별도로 수익에서 차감
+  const expenseByInquiry = expenses.reduce<Map<string, number>>((m, e) => {
+    if (e.inquiry_id) m.set(e.inquiry_id, (m.get(e.inquiry_id) || 0) + (e.amount || 0))
+    return m
+  }, new Map())
+  function getExpense(inquiryId: string | undefined): number {
+    return inquiryId ? (expenseByInquiry.get(inquiryId) || 0) : 0
+  }
+
   // 월별 데이터: event_start 기준, 없으면 settlement.created_at 대체 — 대시보드와 동일 기준
   const monthlyData = Array.from({ length: 12 }, (_, i) => {
     const month = String(i + 1).padStart(2, '0')
@@ -61,14 +70,15 @@ export default function OverviewTab({ data }: { data: CeoData }) {
     const monthInqs   = inquiries.filter(q => monthInqIds.has(q.id))
     const revenue     = monthSets.reduce((s, r) => s + (r.supply_price || 0), 0)
     const payout      = monthSets.reduce((s, r) => s + getActualPayout(r.inquiry_id, r.payout_amount), 0)
-    const profit      = revenue - payout
+    const expense     = monthSets.reduce((s, r) => s + getExpense(r.inquiry_id), 0)
+    const profit      = revenue - payout - expense
 
     const inqCount  = monthInqs.length
     const completed = monthInqs.filter(q => ['완료', '정산완료'].includes(q.status)).length
 
     return {
       month: `${i + 1}월`,
-      revenue, payout, profit,
+      revenue, payout, expense, profit,
       inquiryCount: inqCount,
       completedCount: completed,
       profitRate: revenue > 0 ? Math.round((profit / revenue) * 100) : 0,
@@ -86,7 +96,8 @@ export default function OverviewTab({ data }: { data: CeoData }) {
   const yearInqs   = inquiries.filter(q => yearInqIds.has(q.id))
   const yearRevenue  = yearSets.reduce((s, r) => s + (r.supply_price || 0), 0)
   const yearPayout   = yearSets.reduce((s, r) => s + getActualPayout(r.inquiry_id, r.payout_amount), 0)
-  const yearProfit   = yearRevenue - yearPayout
+  const yearExpense  = yearSets.reduce((s, r) => s + getExpense(r.inquiry_id), 0)
+  const yearProfit   = yearRevenue - yearPayout - yearExpense
   const yearReceived = yearSets.reduce((s, r) => s + (r.received_amount || 0), 0)
   const yearUnpaid   = yearSets.reduce((s, r) => s + (r.balance || 0), 0)
   const yearProfitRate = yearRevenue > 0 ? Math.round((yearProfit / yearRevenue) * 100) : 0
