@@ -7,7 +7,8 @@ import { cn } from '@/lib/utils'
 import {
   LayoutDashboard, MessageSquare, FileText, Users, UserCheck,
   Calculator, CreditCard, ClipboardList, Search, TrendingUp,
-  ChevronLeft, ChevronRight, Building2, Handshake, FlaskConical, ShieldAlert, ShieldCheck
+  ChevronLeft, ChevronRight, Building2, Handshake, FlaskConical, ShieldAlert, ShieldCheck,
+  CalendarRange
 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -18,6 +19,7 @@ const navItems = [
   { href: '/estimates', label: '견적 관리', icon: FileText },
   { href: '/closings', label: '체결 관리', icon: Handshake },
   { href: '/assignments', label: '인원 배정', icon: UserCheck },
+  { href: '/schedule', label: '운영 캘린더', icon: CalendarRange },
   { href: '/payouts', label: '지급 관리', icon: Calculator },
   { href: '/settlements', label: '정산/청구', icon: CreditCard },
   { href: '/staff', label: '크루 관리', icon: Users },
