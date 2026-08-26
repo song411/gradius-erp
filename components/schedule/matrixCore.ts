@@ -37,10 +37,22 @@ export interface JobBase {
   jobType: string
   label: string
   required: number      // 필요 인원 (견적 수량 + 실무자 override)
-  billRate: number      // 청구단가 (견적 unit_price)
+  billRate: number      // 청구단가 (견적 unit_price). 묶인 경우 수량 가중평균
   planPayRate: number   // 계획 지급단가 (견적 pay_unit_price)
   days: number
   assignments: Assignment[]   // 취소 제외
+  /** 배정 job_type이 견적 직무명과 정확히 같지 않아 기본 직무명으로 묶은 경우.
+   *  장기 행사는 견적에서 직무를 날짜별로 쪼개 적는데(행사스탭(주중)/행사스탭 오전 …)
+   *  배정은 뭉뚱그린 이름을 쓰기 때문에 정확 일치만 보면 전부 '기타'로 빠진다. */
+  approx?: {
+    sources: Array<{ label: string; required: number; billRate: number }>
+    billRange: [number, number]
+  }
+  /** job_type이 비어 있던 배정을 이 직무로 귀속시킨 인원 수.
+   *  견적 직무가 하나뿐이라 추측 없이 확정할 수 있을 때만 채운다. */
+  inferred?: number
+  /** 어느 견적 직무에도 붙지 못한 배정만 모인 그룹 (job_type 미입력 / '기타') */
+  unmatched?: boolean
 }
 
 /** 특정 날짜 × 직무 셀 */
@@ -112,24 +124,47 @@ export function parseConfigs(memos: MemoRecord[]): Map<string, ScheduleConfig> {
 }
 
 // ─── 직무 목록 구성 ───────────────────────────────────────
+/** 직무명 정규화 — 괄호와 날짜·조 표기를 떼어낸 비교용 이름.
+ *  '행사스탭(주중)' '행사스탭( 1주차 월,화)' '행사스탭)' → '행사스탭' */
+export function normJob(s: string): string {
+  return s
+    .replace(/[(（[].*$/, '')
+    .replace(/[)）\]]+\s*$/, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** 배정 직무명 a 가 견적 직무명 b 와 같은 직무를 가리키는지.
+ *  한쪽이 다른 쪽의 앞부분이면(단어 경계) 같은 직무로 본다.
+ *  '행사스탭' ↔ '행사스탭 오전', '안전요원 팀장' ↔ '안전요원' */
+function sameJob(a: string, b: string): boolean {
+  if (!a || !b) return false
+  if (a === b) return true
+  const [long, short] = a.length >= b.length ? [a, b] : [b, a]
+  if (!long.startsWith(short)) return false
+  const next = long[short.length]
+  return next === ' ' || next === '(' || next === '/' || next === '-' || next === '_'
+}
+
 /** 견적 품목 + 기존 배정 + 실무자 설정을 합쳐 직무 목록을 만든다.
- *  AssignmentsContent의 슬롯 생성 + ScheduleView의 override 적용을 그대로 재현. */
+ *  AssignmentsContent의 슬롯 생성 + ScheduleView의 override 적용을 그대로 재현하되,
+ *  이름이 정확히 맞지 않는 배정은 기본 직무명으로 묶어 '기타'로 새는 걸 막는다. */
 export function buildJobs(
   items: EstimateItem[],
   assigns: Assignment[],
   cfg: ScheduleConfig,
 ): JobBase[] {
-  const map = new Map<string, JobBase>()
-
+  // ── 1. 견적 품목에서 직무 그룹 (role_name 그대로) ──
+  const est = new Map<string, JobBase>()
   items
     .filter(it => !NON_STAFF_TYPES.includes(it.item_type || '') && it.unit_price > 0)
     .forEach(it => {
       const key = it.role_name || '기타'
-      const cur = map.get(key)
+      const cur = est.get(key)
       if (cur) {
         cur.required += it.quantity
       } else {
-        map.set(key, {
+        est.set(key, {
           jobType: key,
           label: key,
           required: it.quantity,
@@ -141,38 +176,124 @@ export function buildJobs(
       }
     })
 
-  // 견적에 없는 직무로 배정된 인력도 별도 그룹으로 노출
+  // 숨김·이름·필요인원 override는 묶기 전에 적용한다 (묶은 뒤엔 키가 달라져 못 찾는다)
+  cfg.hiddenJobs.forEach(k => est.delete(k))
+  est.forEach((g, k) => {
+    g.label    = cfg.labelOverrides[k] ?? k
+    g.required = cfg.requiredOverrides[k] ?? g.required
+  })
+
+  // ── 2. 배정을 분류: 정확일치 / 기본명일치 / 미매칭 ──
+  const estKeys = [...est.keys()]
+  const exact = new Map<string, Assignment[]>()   // 견적 직무 key → 배정
+  const fuzzy = new Map<string, Assignment[]>()   // 정규화 job_type → 배정
+  const loose: Assignment[] = []                  // 어디에도 못 붙은 배정
+
+  const push = (m: Map<string, Assignment[]>, k: string, a: Assignment) => {
+    const arr = m.get(k)
+    if (arr) arr.push(a); else m.set(k, [a])
+  }
+
   assigns.forEach(a => {
-    const key = a.job_type || '기타'
-    let g = map.get(key)
+    const raw = (a.job_type ?? '').trim()
+    if (raw && est.has(raw)) { push(exact, raw, a); return }
+    const n = normJob(raw)
+    if (n && estKeys.some(k => sameJob(n, normJob(k)))) { push(fuzzy, n, a); return }
+    loose.push(a)
+  })
+
+  // ── 3. 기본명이 같은 견적 직무들을 하나로 묶는다 ──
+  const out: JobBase[] = []
+  const consumed = new Set<string>()
+  const mergedByKey = new Map<string, JobBase>()   // 원래 견적 key → 묶인 그룹
+
+  fuzzy.forEach((list, n) => {
+    const hits = estKeys.filter(k => sameJob(n, normJob(k)))
+    const groups = hits.map(k => est.get(k)!).filter(Boolean)
+    if (groups.length === 0) { loose.push(...list); return }
+
+    const total = groups.reduce((s, g) => s + g.required, 0)
+    const bills = groups.map(g => g.billRate).filter(v => v > 0).sort((x, y) => x - y)
+    const wAvg = (pick: (g: JobBase) => number) =>
+      total > 0 ? Math.round(groups.reduce((s, g) => s + pick(g) * g.required, 0) / total)
+                : Math.round(groups.reduce((s, g) => s + pick(g), 0) / groups.length)
+
+    const merged: JobBase = {
+      jobType: n,
+      label: n,
+      required: total,
+      billRate: wAvg(g => g.billRate),
+      planPayRate: wAvg(g => g.planPayRate),
+      days: Math.max(...groups.map(g => g.days)),
+      assignments: [...list],
+      approx: {
+        sources: groups.map(g => ({ label: g.label, required: g.required, billRate: g.billRate })),
+        billRange: bills.length
+          ? [bills[0], bills[bills.length - 1]]
+          : [0, 0],
+      },
+    }
+    hits.forEach(k => { consumed.add(k); mergedByKey.set(k, merged) })
+    out.push(merged)
+  })
+
+  // 묶이지 않은 견적 직무는 그대로
+  est.forEach((g, k) => { if (!consumed.has(k)) out.push(g) })
+
+  // 정확일치 배정 배치 — 묶임에 흡수된 직무면 묶인 그룹으로 보낸다
+  exact.forEach((list, k) => {
+    const target = mergedByKey.get(k) ?? out.find(g => g.jobType === k)
+    if (target) target.assignments.push(...list)
+    else loose.push(...list)
+  })
+
+  // ── 4. job_type이 비어 있는 배정 ──
+  // 견적 직무가 딱 하나뿐인 행사라면 그 직무일 수밖에 없으므로 확정 귀속한다.
+  // (직무가 여러 개면 어느 쪽인지 알 수 없으므로 추측하지 않는다)
+  const jobless = loose.filter(a => !(a.job_type ?? '').trim())
+  const named   = loose.filter(a => !!(a.job_type ?? '').trim())
+  const fromEstimate = out.filter(g => g.required > 0)
+
+  if (jobless.length > 0 && fromEstimate.length === 1) {
+    const only = fromEstimate[0]
+    only.assignments.push(...jobless)
+    only.inferred = (only.inferred ?? 0) + jobless.length
+  } else {
+    named.push(...jobless)
+  }
+
+  // ── 5. 끝내 못 붙은 배정은 별도 그룹 (직무 미지정 / 견적 외) ──
+  named.forEach(a => {
+    const key = (a.job_type ?? '').trim() || '직무 미지정'
+    if (cfg.hiddenJobs.includes(key)) return
+    let g = out.find(x => x.jobType === key)
     if (!g) {
       g = {
-        jobType: key, label: key, required: 0,
+        jobType: key,
+        label: cfg.labelOverrides[key] ?? key,
+        required: cfg.requiredOverrides[key] ?? 0,
         billRate: 0, planPayRate: a.pay_rate || 0,
         days: a.work_days || 1, assignments: [],
+        unmatched: true,
       }
-      map.set(key, g)
+      out.push(g)
     }
     g.assignments.push(a)
   })
 
-  // 실무자가 직접 추가한 직무
+  // ── 6. 실무자가 직접 추가한 직무 ──
   cfg.customJobs.forEach(cj => {
-    if (map.has(cj.jobType)) return
-    map.set(cj.jobType, {
-      jobType: cj.jobType, label: cj.jobType, required: cj.required,
+    if (cfg.hiddenJobs.includes(cj.jobType)) return
+    if (out.some(g => g.jobType === cj.jobType)) return
+    out.push({
+      jobType: cj.jobType,
+      label: cfg.labelOverrides[cj.jobType] ?? cj.jobType,
+      required: cfg.requiredOverrides[cj.jobType] ?? cj.required,
       billRate: 0, planPayRate: cj.payRate, days: 1, assignments: [],
     })
   })
 
-  return [...map.values()]
-    .filter(g => !cfg.hiddenJobs.includes(g.jobType))
-    .map(g => ({
-      ...g,
-      label:    cfg.labelOverrides[g.jobType] ?? g.jobType,
-      required: cfg.requiredOverrides[g.jobType] ?? g.required,
-    }))
-    .sort((a, b) => b.required - a.required || a.jobType.localeCompare(b.jobType))
+  return out.sort((a, b) => b.required - a.required || a.label.localeCompare(b.label))
 }
 
 // ─── 날짜 판정 ────────────────────────────────────────────

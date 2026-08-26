@@ -9,8 +9,9 @@ import type {
   Assignment, Attendance, Estimate, EstimateItem, EventExpense, Inquiry, Payout, ProjectMemo,
 } from '@/lib/supabase/types'
 import { Dialog, DialogClose, DialogHeader } from '@/components/ui/dialog'
+import ProjectMemoPanel from '@/components/memos/ProjectMemoPanel'
 import {
-  CONFIG_TAG, DOW, EMPTY_CONFIG,
+  DOW, EMPTY_CONFIG,
   type JobBase, type ScheduleConfig,
   fmt, cleanStaffName, getDateRange, parseConfigs, buildJobs, makeCell,
   cellState, STATE_STYLE, STATUS_CHIP, actualPayRate, marginRate, payRateSuspicious,
@@ -30,7 +31,6 @@ interface Loaded {
   payouts: Payout[]
   attendances: Attendance[]
   expenses: EventExpense[]
-  memos: ProjectMemo[]
   config: ScheduleConfig
 }
 
@@ -78,11 +78,14 @@ function Section({ title, note, children }: {
   )
 }
 
-/** 주민번호는 뒷자리를 가린다 */
+/** 주민번호는 뒷자리를 가린다.
+ *  주민번호 형식(숫자 13자리)이 아니면 아무것도 보여주지 않는다 —
+ *  이 칸에 비밀번호 같은 엉뚱한 값이 저장된 레코드가 실제로 있어서,
+ *  "형식이 아니면 원본 노출"로 두면 그대로 새어나간다. */
 function maskId(v?: string) {
   if (!v) return '-'
   const digits = v.replace(/\D/g, '')
-  if (digits.length < 7) return v
+  if (digits.length !== 13) return '형식 아님'
   return `${digits.slice(0, 6)}-${digits[6]}******`
 }
 
@@ -146,8 +149,6 @@ export default function EventDetailPanel({ inquiry, onClose }: Props) {
         payouts,
         attendances,
         expenses,
-        // 스케줄 설정 레코드는 메모가 아니라 설정이므로 목록에서 제외
-        memos: memoRows.filter(m => !m.content?.startsWith(CONFIG_TAG)),
         config,
       })
     } catch (e) {
@@ -632,28 +633,11 @@ export default function EventDetailPanel({ inquiry, onClose }: Props) {
               )}
             </Section>
 
-            {/* ── 8. 운영 메모 ── */}
-            {data.memos.length > 0 && (
-              <Section title="운영 메모" note={`${data.memos.length}건`}>
-                <div className="rounded-lg border border-gray-200 divide-y divide-gray-100">
-                  {data.memos.map(m => (
-                    <div key={m.id} className="px-3 py-2 text-xs">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        {m.type && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 font-semibold">
-                            {m.type}
-                          </span>
-                        )}
-                        <span className="text-[10px] text-gray-400">
-                          {m.author || '-'} · {m.created_at?.substring(0, 10)}
-                        </span>
-                      </div>
-                      <p className="text-gray-700 whitespace-pre-wrap">{m.content}</p>
-                    </div>
-                  ))}
-                </div>
-              </Section>
-            )}
+            {/* ── 8. 메모 (기존 project_memos 패널 재사용 — 작성·삭제 가능) ── */}
+            <Section title="메모" note="인원추천 · 운영메모 · 피드백">
+              <ProjectMemoPanel inquiryId={inquiry.id} />
+            </Section>
+
           </>
         )}
       </div>

@@ -10,8 +10,9 @@ import { db } from '@/lib/supabase/api'
 import type { Assignment, Estimate, EstimateItem, Inquiry } from '@/lib/supabase/types'
 import { Input } from '@/components/ui/input'
 import EventDetailPanel from './EventDetailPanel'
+import { StickyNote } from 'lucide-react'
 import {
-  CONTRACTED_STATUSES, DOW, EMPTY_CONFIG,
+  CONTRACTED_STATUSES, CONFIG_TAG, DOW, EMPTY_CONFIG,
   type JobBase, type JobCell, type MemoRecord,
   pad, fmt, todayLocal, cleanStaffName, parseConfigs, buildJobs, makeCell, splitByDate, coversDate,
   cellState, STATE_STYLE, STATUS_CHIP, actualPayRate, marginRate, payRateSuspicious,
@@ -23,6 +24,11 @@ interface EventBase {
   jobs: JobBase[]
   hasFinalEstimate: boolean
   discountLabel: string | null   // 할인이 걸려 있으면 청구단가에 주의 표시
+  memoCount: number              // 스케줄 설정 레코드를 뺀 실제 메모 수
+  latestMemo: string | null      // 가장 최근 메모 한 줄 (툴팁)
+  /** 어느 견적 직무에도 붙지 못한 배정 인원 수.
+   *  이 인원이 있으면 다른 직무의 '미배정'은 사람이 없다는 뜻이 아니다. */
+  unassignedJob: number
 }
 
 /** 행사 × 직무의 "편성이 동일한 연속 구간" 한 줄.
@@ -205,6 +211,15 @@ export default function ScheduleMatrixContent() {
 
       const cfgByInq = parseConfigs(memos)
 
+      // 메모 표시용 집계 — 스케줄 설정 레코드는 메모가 아니므로 제외
+      const memoByInq = new Map<string, { count: number; latest: string }>()
+      memos.forEach(m => {
+        if (!m.content || m.content.startsWith(CONFIG_TAG)) return
+        const cur = memoByInq.get(m.inquiry_id)
+        if (cur) cur.count += 1
+        else memoByInq.set(m.inquiry_id, { count: 1, latest: m.content })
+      })
+
       const built: EventBase[] = inqs.map(inq => {
         const est  = finalByInq.get(inq.id)
         const its  = est ? (itemsByEst.get(est.id) ?? []) : []
@@ -215,11 +230,17 @@ export default function ScheduleMatrixContent() {
                     ? `${est.discount_value}% 할인`
                     : `${fmt(est.discount_value ?? 0)}원 할인`))
           : null
+        const memo = memoByInq.get(inq.id)
+        const jobs = buildJobs(its, asgnByInq.get(inq.id) ?? [], cfg)
         return {
           inq,
-          jobs: buildJobs(its, asgnByInq.get(inq.id) ?? [], cfg),
+          jobs,
+          unassignedJob: jobs.filter(g => g.unmatched)
+            .reduce((n, g) => n + g.assignments.length, 0),
           hasFinalEstimate: !!est,
           discountLabel: disc,
+          memoCount: memo?.count ?? 0,
+          latestMemo: memo?.latest ?? null,
         }
       })
 
@@ -691,6 +712,23 @@ export default function ScheduleMatrixContent() {
                                   확정견적 없음
                                 </span>
                               )}
+                              {r.base.unassignedJob > 0 && (
+                                <span
+                                  className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-600 font-semibold"
+                                  title="배정은 돼 있으나 job_type이 입력되지 않은 인원입니다. 견적 직무가 여러 개라 어느 직무인지 자동으로 정할 수 없어 아래 '직무 미지정' 줄에 모아 두었습니다. 그래서 다른 직무의 '미배정'은 사람이 아예 없다는 뜻이 아닙니다."
+                                >
+                                  직무 미지정 {r.base.unassignedJob}명
+                                </span>
+                              )}
+                              {r.base.memoCount > 0 && (
+                                <span
+                                  className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-600 inline-flex items-center gap-0.5"
+                                  title={r.base.latestMemo ?? undefined}
+                                >
+                                  <StickyNote className="h-2.5 w-2.5" />
+                                  메모 {r.base.memoCount}
+                                </span>
+                              )}
                               {r.base.discountLabel && (
                                 <span
                                   className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700"
@@ -712,7 +750,38 @@ export default function ScheduleMatrixContent() {
 
                       {/* 직무 */}
                       <td className="px-2 py-2 align-top">
-                        <div className="font-semibold text-gray-700">{c.job.label}</div>
+                        <div className="font-semibold text-gray-700">
+                          {c.job.label}
+                          {c.job.approx && (
+                            <span
+                              className="ml-1 text-[9px] font-bold text-indigo-500 align-middle"
+                              title="배정 직무명이 견적 직무명과 정확히 같지 않아 기본 직무명으로 묶었습니다"
+                            >
+                              묶음
+                            </span>
+                          )}
+                          {c.job.inferred ? (
+                            <span
+                              className="ml-1 text-[9px] font-bold text-teal-600 align-middle"
+                              title={`직무가 입력되지 않은 ${c.job.inferred}명을 이 직무로 넣었습니다. 이 행사의 견적 직무가 하나뿐이라 다른 직무일 수 없습니다.`}
+                            >
+                              +{c.job.inferred} 자동
+                            </span>
+                          ) : null}
+                          {c.job.unmatched && (
+                            <span
+                              className="ml-1 text-[9px] font-bold text-gray-400 align-middle"
+                              title="배정에 job_type이 입력되지 않았거나 견적 직무명과 달라 어느 직무인지 알 수 없는 인원입니다"
+                            >
+                              미매칭
+                            </span>
+                          )}
+                        </div>
+                        {c.job.approx && (
+                          <div className="text-[10px] text-indigo-400 leading-tight">
+                            {c.job.approx.sources.map(x => `${x.label} ${x.required}`).join(' · ')}
+                          </div>
+                        )}
                         {c.job.days > 1 && (
                           <div className="text-[10px] text-gray-400">견적 {c.job.days}일</div>
                         )}
@@ -747,9 +816,16 @@ export default function ScheduleMatrixContent() {
 
                       {/* 청구단가 */}
                       <td className="px-2 py-2 text-right align-top tabular-nums">
-                        {c.job.billRate
-                          ? <span className="font-semibold text-gray-800">{fmt(c.job.billRate)}</span>
-                          : <span className="text-gray-300">-</span>}
+                        {c.job.billRate ? (
+                          <>
+                            <span className="font-semibold text-gray-800">{fmt(c.job.billRate)}</span>
+                            {c.job.approx && c.job.approx.billRange[0] !== c.job.approx.billRange[1] && (
+                              <div className="text-[10px] text-gray-400">
+                                {fmt(c.job.approx.billRange[0])}~{fmt(c.job.approx.billRange[1])}
+                              </div>
+                            )}
+                          </>
+                        ) : <span className="text-gray-300">-</span>}
                       </td>
 
                       {/* 지급단가 실제 / 계획 */}
