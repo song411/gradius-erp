@@ -9,6 +9,7 @@ import type {
   Assignment, Attendance, Estimate, EstimateItem, EventExpense, Inquiry, Payout, ProjectMemo,
 } from '@/lib/supabase/types'
 import { Dialog, DialogClose, DialogHeader } from '@/components/ui/dialog'
+import { qtyUnit, daysUnit } from '@/lib/estimateUnits'
 import ProjectMemoPanel from '@/components/memos/ProjectMemoPanel'
 import {
   DOW, EMPTY_CONFIG,
@@ -355,7 +356,9 @@ export default function EventDetailPanel({ inquiry, onClose }: Props) {
                         <th className="px-2 py-2 text-left font-bold text-[11px] text-gray-600">품목 / 직무</th>
                         <th className="px-2 py-2 text-left font-bold text-[11px] text-gray-600">스펙</th>
                         <th className="px-2 py-2 text-center font-bold text-[11px] text-gray-600">수량</th>
-                        <th className="px-2 py-2 text-center font-bold text-[11px] text-gray-600">일수</th>
+                        <th className="px-2 py-2 text-center font-bold text-[11px] text-gray-600">
+                          {data.items.every(it => daysUnit(it.days_unit) === '일') ? '일수' : '단위'}
+                        </th>
                         <th className="px-2 py-2 text-right font-bold text-[11px] text-gray-600">청구단가</th>
                         <th className="px-2 py-2 text-right font-bold text-[11px] text-gray-600">지급단가</th>
                         <th className="px-2 py-2 text-right font-bold text-[11px] text-gray-600">청구 소계</th>
@@ -375,8 +378,14 @@ export default function EventDetailPanel({ inquiry, onClose }: Props) {
                               {it.vat_exempt && <span className="ml-1 text-[9px] text-gray-400">면세</span>}
                             </td>
                             <td className="px-2 py-1.5 text-gray-500">{it.spec || '-'}</td>
-                            <td className="px-2 py-1.5 text-center tabular-nums">{it.quantity}</td>
-                            <td className="px-2 py-1.5 text-center tabular-nums">{it.days || 1}</td>
+                            <td className="px-2 py-1.5 text-center tabular-nums">
+                              {it.quantity}
+                              <span className="text-gray-400">{qtyUnit(it.quantity_unit)}</span>
+                            </td>
+                            <td className="px-2 py-1.5 text-center tabular-nums">
+                              {it.days || 1}
+                              <span className="text-gray-400">{daysUnit(it.days_unit)}</span>
+                            </td>
                             <td className="px-2 py-1.5 text-right tabular-nums">
                               {it.original_unit_price ? (
                                 <span className="text-gray-300 line-through mr-1">{fmt(it.original_unit_price)}</span>

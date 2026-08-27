@@ -14,6 +14,9 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Inquiry, Estimate, EstimateItem } from '@/lib/supabase/types'
+import {
+  QTY_UNIT_PRESETS, DAYS_UNIT_PRESETS, qtyUnit, daysUnit, daysColumnHeader, hasCustomDaysUnit,
+} from '@/lib/estimateUnits'
 
 // ── 공급자 정보 ──────────────────────────────────────────
 const CO = {
@@ -43,6 +46,8 @@ interface Factor { id: string; role_id: string; factor_name: string; add_price: 
 interface ItemRow {
   key: string; role_id: string; role_name: string
   quantity: number; days: number
+  // 단위 표기. 빈 문자열 = 기본값(명 / 일). 금액 계산에는 쓰이지 않는다
+  quantity_unit: string; days_unit: string
   unit_price: number; pay_unit_price: number
   work_time: string; is_leader: boolean
   item_type: ItemType; spec: string
@@ -63,9 +68,42 @@ interface Props {
 }
 
 function makeKey() { return Math.random().toString(36).slice(2) }
+
+// ── 단위 입력칸 ───────────────────────────────────────────
+// 대부분의 견적은 명/일 그대로 쓰고 일반 규격을 벗어날 때만 손댄다. 그래서
+// 별도 버튼이나 팝오버 없이, 단위 글자 자리를 그대로 작은 입력칸으로 만든다.
+// datalist를 달아 자주 쓰는 단위는 클릭으로, 없는 단위는 직접 타이핑으로 넣는다.
+// 비우면 기본값(명/일)으로 돌아간다.
+function UnitInput({ value, fallback, presets, listId, onChange }: {
+  value: string; fallback: string; presets: string[]; listId: string
+  onChange: (v: string) => void
+}) {
+  const custom = value.trim() !== '' && value.trim() !== fallback
+  return (
+    <>
+      <input
+        list={listId}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={fallback}
+        maxLength={4}
+        title={`단위 (비우면 '${fallback}'). 목록에서 고르거나 직접 입력할 수 있습니다.`}
+        className={`w-11 h-7 rounded px-1 text-xs text-center border ${
+          custom
+            ? 'border-indigo-300 bg-indigo-50 text-indigo-700 font-semibold'
+            : 'border-transparent hover:border-gray-200 text-gray-400 placeholder:text-gray-400'
+        }`}
+      />
+      <datalist id={listId}>
+        {presets.map(u => <option key={u} value={u} />)}
+      </datalist>
+    </>
+  )
+}
 function emptyRow(type: ItemType = '인력', defaultWorkTime = ''): ItemRow {
   return {
     key: makeKey(), role_id: '', role_name: '', quantity: 1, days: 1,
+    quantity_unit: '', days_unit: '',
     unit_price: 0, pay_unit_price: 0, work_time: defaultWorkTime, is_leader: false,
     item_type: type, spec: '', selectedFactors: [], _basePrice: 0, _basePayPrice: 0,
     original_unit_price: null, vat_exempt: false,
@@ -166,6 +204,7 @@ export default function EstimateBuilder({
       const rows: ItemRow[] = (editTarget.estimate_items || []).map(item => ({
         key: makeKey(), role_id: '', role_name: item.role_name || '',
         quantity: item.quantity, days: item.days,
+        quantity_unit: item.quantity_unit ?? '', days_unit: item.days_unit ?? '',
         unit_price: item.unit_price, pay_unit_price: item.pay_unit_price,
         // DB spec 필드는 "work_time / spec" 형태로 저장되므로 첫 번째 ' / ' 기준으로 분리
         work_time: item.spec?.split(' / ')[0] || '',
@@ -237,15 +276,24 @@ export default function EstimateBuilder({
       setItems(prev => prev.map(r => ({
         ...r,
         work_time: r.work_time || wt,
-        days: r.days === 1 ? days : r.days,
+        // 단위를 직접 지정한 품목(4회 등)은 행사 일수로 덮지 않는다
+        days: (r.days === 1 && !hasCustomDaysUnit(r.days_unit)) ? days : r.days,
       })))
     }
   }
 
   // 행사 일수 전역 변경 → 전체 품목 일수 일괄 적용
+  // 단위를 '일'이 아닌 것으로 바꾼 품목(예: 안전교육 4회)은 건드리지 않는다.
+  // 행사 일수를 3일로 맞추다가 4회가 3회로 덮이면 견적서가 조용히 틀린다.
   function applyGlobalDays(d: number) {
     setForm(f => ({ ...f, event_days: d, days_mode: 'manual' }))
-    setItems(prev => prev.map(r => ({ ...r, days: d })))
+    // 세는 건 setItems 콜백 밖에서 한다 — updater는 다음 렌더에 실행되므로
+    // 안에서 센 값은 여기 도달할 때 아직 0이다
+    const kept = items.filter(r => hasCustomDaysUnit(r.days_unit)).length
+    setItems(prev => prev.map(r => hasCustomDaysUnit(r.days_unit) ? r : { ...r, days: d }))
+    if (kept > 0) {
+      toast.info(`단위를 직접 지정한 품목 ${kept}건은 그대로 뒀습니다 (일수 일괄 적용 제외).`)
+    }
   }
 
   // ── 직군/팩터 ────────────────────────────────────────────
@@ -436,6 +484,10 @@ export default function EstimateBuilder({
         role_name: row.role_name,
         quantity: row.quantity,
         days: row.days,
+        // 기본값(명/일)은 NULL로 저장한다 — 값이 없으면 기본값으로 읽히므로
+        // 굳이 '명'/'일'을 채워 넣어 데이터를 늘리지 않는다
+        quantity_unit: row.quantity_unit.trim() || null,
+        days_unit: row.days_unit.trim() || null,
         unit_price: row.unit_price,
         pay_unit_price: row.pay_unit_price,
         is_leader: row.is_leader,
@@ -446,7 +498,25 @@ export default function EstimateBuilder({
         sort_order: idx,
       }))
 
-      await db.insert('estimate_items', itemsPayload)
+      // 단위 컬럼(quantity_unit / days_unit)은 마이그레이션 011로 추가된다.
+      // 아직 안 돌린 DB에서는 PostgREST가 모르는 컬럼이라며 insert 전체를 거절하므로,
+      // 그 경우에만 단위를 떼고 다시 저장한다. 단위는 표시용이라 빼도 금액은 그대로다.
+      // 견적 저장이 통째로 실패해서 작성한 내용이 날아가는 쪽이 훨씬 나쁘다.
+      try {
+        await db.insert('estimate_items', itemsPayload)
+      } catch (e) {
+        const msg = (e as Error).message || ''
+        const missingUnitColumn = /quantity_unit|days_unit/.test(msg)
+        if (!missingUnitColumn) throw e
+        await db.insert('estimate_items', itemsPayload.map(it => {
+          const { quantity_unit, days_unit, ...rest } = it
+          void quantity_unit; void days_unit
+          return rest
+        }))
+        if (items.some(r => r.quantity_unit.trim() || r.days_unit.trim())) {
+          toast.warning('단위(명/일 외)는 아직 저장되지 않았습니다. supabase/migrations/011_estimate_item_units.sql 을 실행해 주세요.')
+        }
+      }
 
       // ── 최종 견적 수정 시 settlements 자동 동기화 ──
       // is_final=true인 견적을 수정한 경우에만 실행
@@ -755,7 +825,8 @@ export default function EstimateBuilder({
                         const s = e.target.value
                         const days = calcDays(s, form.event_end)
                         setForm(f => ({ ...f, event_start: s, event_days: days, days_mode: 'auto' }))
-                        setItems(prev => prev.map(r => ({ ...r, days })))
+                        setItems(prev => prev.map(r =>
+                          hasCustomDaysUnit(r.days_unit) ? r : { ...r, days }))
                       }}
                       className="flex-1 h-8 border border-gray-200 rounded-lg px-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
                     />
@@ -767,7 +838,8 @@ export default function EstimateBuilder({
                         const end = e.target.value
                         const days = calcDays(form.event_start, end)
                         setForm(f => ({ ...f, event_end: end, event_days: days, days_mode: 'auto' }))
-                        setItems(prev => prev.map(r => ({ ...r, days })))
+                        setItems(prev => prev.map(r =>
+                          hasCustomDaysUnit(r.days_unit) ? r : { ...r, days }))
                       }}
                       className="flex-1 h-8 border border-gray-200 rounded-lg px-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
                     />
@@ -1257,9 +1329,16 @@ function ItemRowCard({ row, roles, factors, expandedFactor, defaultWorkTime, onR
         {!isSupport && (
           <div className="flex items-center gap-1.5 flex-wrap">
             <input type="number" min={1} value={row.quantity} onChange={e => onUpdate('quantity', Number(e.target.value))} className="w-12 h-7 border border-gray-200 rounded px-1.5 text-xs text-center" />
-            <span className="text-gray-400">명 ×</span>
+            <UnitInput
+              value={row.quantity_unit} fallback="명" presets={QTY_UNIT_PRESETS}
+              listId={`qtyu-${row.key}`} onChange={v => onUpdate('quantity_unit', v)}
+            />
+            <span className="text-gray-400">×</span>
             <input type="number" min={1} value={row.days} onChange={e => onUpdate('days', Number(e.target.value))} className="w-10 h-7 border border-gray-200 rounded px-1.5 text-xs text-center" />
-            <span className="text-gray-400">일</span>
+            <UnitInput
+              value={row.days_unit} fallback="일" presets={DAYS_UNIT_PRESETS}
+              listId={`dayu-${row.key}`} onChange={v => onUpdate('days_unit', v)}
+            />
             {row.original_unit_price != null && (
               <div className="flex items-center gap-0.5">
                 <span className="text-gray-400">정상가</span>
@@ -1355,7 +1434,7 @@ function ItemRowCard({ row, roles, factors, expandedFactor, defaultWorkTime, onR
 }
 
 // ── 수익 리포트 컴포넌트 ──────────────────────────────────
-interface ItemRow2 { key: string; role_name: string; quantity: number; days: number; unit_price: number; pay_unit_price: number; is_leader: boolean; item_type: ItemType; spec: string; selectedFactors: string[]; _basePrice: number; _basePayPrice: number; work_time: string; role_id: string }
+interface ItemRow2 { key: string; role_name: string; quantity: number; days: number; quantity_unit: string; days_unit: string; unit_price: number; pay_unit_price: number; is_leader: boolean; item_type: ItemType; spec: string; selectedFactors: string[]; _basePrice: number; _basePayPrice: number; work_time: string; role_id: string }
 function ProfitReport({
   reportRef,
   staffItems, staffBilling, staffCost, staffProfit, staffRate,
@@ -1428,8 +1507,8 @@ function ProfitReport({
                   return (
                     <tr key={row.key} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                       <td className="px-3 py-2 font-medium">{row.is_leader ? '[팀장] ' : ''}{row.role_name}{row.work_time ? <span className="ml-1 text-gray-400">({row.work_time})</span> : null}</td>
-                      <td className="px-3 py-2 text-right">{row.days}일</td>
-                      <td className="px-3 py-2 text-right">{row.quantity}명</td>
+                      <td className="px-3 py-2 text-right">{row.days}{daysUnit(row.days_unit)}</td>
+                      <td className="px-3 py-2 text-right">{row.quantity}{qtyUnit(row.quantity_unit)}</td>
                       <td className="px-3 py-2 text-right">{row.unit_price.toLocaleString()}</td>
                       <td className="px-3 py-2 text-right">{row.pay_unit_price.toLocaleString()}</td>
                       <td className={`px-3 py-2 text-right font-semibold ${margin > 0 ? 'text-blue-600' : 'text-red-600'}`}>{margin.toLocaleString()}</td>
@@ -1492,7 +1571,7 @@ function KpiCard({ label, value, sub, color, highlight }: { label: string; value
 }
 
 // ── A4 미리보기 (별도 컴포넌트로 분리) ──────────────────
-type ItemRowSimple = { key: string; role_name: string; quantity: number; days: number; unit_price: number; pay_unit_price: number; is_leader: boolean; item_type: ItemType; spec: string; work_time: string; original_unit_price?: number | null; vat_exempt?: boolean }
+type ItemRowSimple = { key: string; role_name: string; quantity: number; days: number; quantity_unit?: string; days_unit?: string; unit_price: number; pay_unit_price: number; is_leader: boolean; item_type: ItemType; spec: string; work_time: string; original_unit_price?: number | null; vat_exempt?: boolean }
 function UnitPriceCell({ row }: { row: { unit_price: number; original_unit_price?: number | null } }) {
   const discounted = row.original_unit_price != null && row.original_unit_price > row.unit_price
   if (!discounted) return <>{row.unit_price.toLocaleString()}</>
@@ -1515,6 +1594,12 @@ function A4Preview({
   hasDiscount: boolean; discountType: 'none' | 'amount' | 'percentage'; discountValue: number; discountAmount: number; discountLabel: string
   eventPeriod: string; today: string
 }) {
+  // 모든 품목이 '일'이면 열 제목을 '일수' 그대로 둔다 (기존 견적서와 동일).
+  // 회·시간 같은 단위가 섞이면 '단위'로 바꿔 제목과 칸이 어긋나지 않게 한다.
+  const daysHeader = daysColumnHeader(
+    [...staffItems, ...extraItems, ...supportItems]
+      .filter(r => r.role_name).map(r => r.days_unit),
+  )
   return (
     <>
       {/* 제목 */}
@@ -1586,7 +1671,7 @@ function A4Preview({
       <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '14px', fontSize: '11px' }}>
         <thead>
           <tr style={{ backgroundColor: '#1e3a5f', color: '#fff' }}>
-            {['품명', '시간/규격', '수량', '일수', '단가', '금액', '비고'].map((h) => (
+            {['품명', '시간/규격', '수량', daysHeader, '단가', '금액', '비고'].map((h) => (
               <th key={h} style={{ padding: '9px 8px', textAlign: 'center', verticalAlign: 'middle', fontWeight: '700', fontSize: '11px', border: '1px solid #2d4a7a', lineHeight: '1.2' }}>{h}</th>
             ))}
           </tr>
@@ -1598,8 +1683,8 @@ function A4Preview({
               <tr key={row.key} style={{ backgroundColor: idx % 2 === 0 ? '#fff' : '#f8fafc', borderBottom: '1px solid #e5e7eb' }}>
                 <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', fontWeight: row.is_leader ? '700' : '500', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.is_leader ? '★ ' : ''}{row.role_name}</td>
                 <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', color: '#4b5563', fontSize: '10px', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.work_time}</td>
-                <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.quantity}명</td>
-                <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.days}일</td>
+                <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.quantity}{qtyUnit(row.quantity_unit)}</td>
+                <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.days}{daysUnit(row.days_unit)}</td>
                 <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}><UnitPriceCell row={row} /></td>
                 <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'center', fontWeight: '700', color: '#1e3a5f', verticalAlign: 'middle', lineHeight: '1.2' }}>{amt.toLocaleString()}</td>
                 <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', fontSize: '10px', color: '#6b7280', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{[row.spec, (row.original_unit_price != null && row.original_unit_price > row.unit_price) ? '(할인가 적용)' : '', row.vat_exempt ? '(부가세 제외)' : ''].filter(Boolean).join(' ')}</td>
@@ -1619,8 +1704,8 @@ function A4Preview({
               <tr key={row.key} style={{ backgroundColor: '#fef9c3', borderBottom: '1px solid #fde68a' }}>
                 <td style={{ padding: '8px 8px', border: '1px solid #fde68a', fontWeight: '600', color: '#92400e', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.role_name || row.item_type}</td>
                 <td style={{ padding: '8px 8px', border: '1px solid #fde68a', color: '#92400e', fontSize: '10px', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.work_time}</td>
-                <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.quantity}명</td>
-                <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.days}일</td>
+                <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.quantity}{qtyUnit(row.quantity_unit)}</td>
+                <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.days}{daysUnit(row.days_unit)}</td>
                 <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.unit_price > 0 ? <UnitPriceCell row={row} /> : '-'}</td>
                 <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'center', fontWeight: '700', verticalAlign: 'middle', lineHeight: '1.2' }}>{amt > 0 ? amt.toLocaleString() : '-'}</td>
                 <td style={{ padding: '8px 8px', border: '1px solid #fde68a', fontSize: '10px', color: '#92400e', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{[row.spec, (row.original_unit_price != null && row.original_unit_price > row.unit_price) ? '(할인가 적용)' : '', row.vat_exempt ? '(부가세 제외)' : ''].filter(Boolean).join(' ')}</td>
@@ -1641,8 +1726,8 @@ function A4Preview({
                 {row.role_name}
               </td>
               <td style={{ padding: '8px 8px', border: '1px solid #bae6fd', fontSize: '10px', color: '#0369a1', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.work_time}</td>
-              <td style={{ padding: '8px 8px', border: '1px solid #bae6fd', textAlign: 'center', color: '#0369a1', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.quantity}명</td>
-              <td style={{ padding: '8px 8px', border: '1px solid #bae6fd', textAlign: 'center', color: '#0369a1', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.days}일</td>
+              <td style={{ padding: '8px 8px', border: '1px solid #bae6fd', textAlign: 'center', color: '#0369a1', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.quantity}{qtyUnit(row.quantity_unit)}</td>
+              <td style={{ padding: '8px 8px', border: '1px solid #bae6fd', textAlign: 'center', color: '#0369a1', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.days}{daysUnit(row.days_unit)}</td>
               <td style={{ padding: '8px 8px', border: '1px solid #bae6fd', textAlign: 'center', color: '#0369a1', verticalAlign: 'middle', lineHeight: '1.2' }}>-</td>
               <td style={{ padding: '8px 8px', border: '1px solid #bae6fd', textAlign: 'center', fontWeight: '600', color: '#0369a1', verticalAlign: 'middle', lineHeight: '1.2' }}>-</td>
               <td style={{ padding: '8px 8px', border: '1px solid #bae6fd', fontSize: '10px', color: '#0369a1', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.spec || '본사 지원'}</td>

@@ -7,6 +7,7 @@ import { Dialog, DialogHeader, DialogTitle, DialogContent, DialogClose } from '@
 import { Download, Printer, CheckCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Estimate, EstimateItem, Inquiry } from '@/lib/supabase/types'
+import { qtyUnit, daysUnit, daysColumnHeader } from '@/lib/estimateUnits'
 import { db } from '@/lib/supabase/api'
 
 // ── 공급자 정보 (EstimateBuilder와 동일) ─────────────────
@@ -42,6 +43,8 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
     role_name:  item.role_name || '',
     quantity:   item.quantity,
     days:       item.days,
+    quantity_unit: item.quantity_unit ?? '',
+    days_unit:     item.days_unit ?? '',
     unit_price: item.unit_price,
     is_leader:  item.is_leader,
     item_type:  item.item_type || '인력',
@@ -62,6 +65,10 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
   const staffSubtotal = staffItems.reduce((s, i) => s + i.quantity * i.days * i.unit_price, 0)
   const extraSubtotal = extraItems.reduce((s, i) => s + i.quantity * i.days * i.unit_price, 0)
   const vatExemptSubtotal = [...staffItems, ...extraItems].filter(i => i.vat_exempt).reduce((s, i) => s + i.quantity * i.days * i.unit_price, 0)
+  // 모든 품목이 '일'이면 열 제목을 '일수' 그대로 둔다 (기존 견적서와 동일).
+  // 회·시간 같은 단위가 섞이면 '단위'로 바꿔 제목과 칸이 어긋나지 않게 한다.
+  const daysHeader = daysColumnHeader(allItems.filter(i => i.role_name).map(i => i.days_unit))
+
   const discountType  = estimate.discount_type || 'none'
   const discountValue = estimate.discount_value || 0
   const discountLabel = estimate.discount_label || '총액 에누리 (할인)'
@@ -250,7 +257,7 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
             <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '14px', fontSize: '11px' }}>
               <thead>
                 <tr style={{ backgroundColor: '#1e3a5f', color: '#fff' }}>
-                  {['품명', '시간/규격', '수량', '일수', '단가', '금액', '비고'].map((h) => (
+                  {['품명', '시간/규격', '수량', daysHeader, '단가', '금액', '비고'].map((h) => (
                     <th key={h} style={{ padding: '9px 8px', textAlign: 'center', verticalAlign: 'middle', fontWeight: '700', fontSize: '11px', border: '1px solid #2d4a7a', lineHeight: '1.2' }}>{h}</th>
                   ))}
                 </tr>
@@ -262,8 +269,8 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
                     <tr key={row.id} style={{ backgroundColor: idx % 2 === 0 ? '#fff' : '#f8fafc', borderBottom: '1px solid #e5e7eb' }}>
                       <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', fontWeight: row.is_leader ? '700' : '500', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.is_leader ? '★ ' : ''}{row.role_name}</td>
                       <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', color: '#4b5563', fontSize: '10px', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.work_time}</td>
-                      <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.quantity}명</td>
-                      <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.days}일</td>
+                      <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.quantity}{qtyUnit(row.quantity_unit)}</td>
+                      <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.days}{daysUnit(row.days_unit)}</td>
                       <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}><UnitPriceCell row={row} /></td>
                       <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', textAlign: 'center', fontWeight: '700', color: '#1e3a5f', verticalAlign: 'middle', lineHeight: '1.2' }}>{amt.toLocaleString()}</td>
                       <td style={{ padding: '8px 8px', border: '1px solid #e5e7eb', fontSize: '10px', color: '#6b7280', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{[row.spec, (row.original_unit_price != null && row.original_unit_price > row.unit_price) ? '(할인가 적용)' : '', row.vat_exempt ? '(부가세 제외)' : ''].filter(Boolean).join(' ')}</td>
@@ -283,8 +290,8 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
                     <tr key={row.id} style={{ backgroundColor: '#fef9c3', borderBottom: '1px solid #fde68a' }}>
                       <td style={{ padding: '8px 8px', border: '1px solid #fde68a', fontWeight: '600', color: '#92400e', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.role_name || row.item_type}</td>
                       <td style={{ padding: '8px 8px', border: '1px solid #fde68a', color: '#92400e', fontSize: '10px', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.work_time}</td>
-                      <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.quantity}명</td>
-                      <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.days}일</td>
+                      <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.quantity}{qtyUnit(row.quantity_unit)}</td>
+                      <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.days}{daysUnit(row.days_unit)}</td>
                       <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.unit_price > 0 ? <UnitPriceCell row={row} /> : '-'}</td>
                       <td style={{ padding: '8px 8px', border: '1px solid #fde68a', textAlign: 'center', fontWeight: '700', verticalAlign: 'middle', lineHeight: '1.2' }}>{amt > 0 ? amt.toLocaleString() : '-'}</td>
                       <td style={{ padding: '8px 8px', border: '1px solid #fde68a', fontSize: '10px', color: '#92400e', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{[row.spec, (row.original_unit_price != null && row.original_unit_price > row.unit_price) ? '(할인가 적용)' : '', row.vat_exempt ? '(부가세 제외)' : ''].filter(Boolean).join(' ')}</td>
@@ -305,8 +312,8 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
                       {row.role_name}
                     </td>
                     <td style={{ padding: '8px 8px', border: '1px solid #bae6fd', fontSize: '10px', color: '#0369a1', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.work_time}</td>
-                    <td style={{ padding: '8px 8px', border: '1px solid #bae6fd', textAlign: 'center', color: '#0369a1', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.quantity}명</td>
-                    <td style={{ padding: '8px 8px', border: '1px solid #bae6fd', textAlign: 'center', color: '#0369a1', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.days}일</td>
+                    <td style={{ padding: '8px 8px', border: '1px solid #bae6fd', textAlign: 'center', color: '#0369a1', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.quantity}{qtyUnit(row.quantity_unit)}</td>
+                    <td style={{ padding: '8px 8px', border: '1px solid #bae6fd', textAlign: 'center', color: '#0369a1', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.days}{daysUnit(row.days_unit)}</td>
                     <td style={{ padding: '8px 8px', border: '1px solid #bae6fd', textAlign: 'center', color: '#0369a1', verticalAlign: 'middle', lineHeight: '1.2' }}>-</td>
                     <td style={{ padding: '8px 8px', border: '1px solid #bae6fd', textAlign: 'center', fontWeight: '600', color: '#0369a1', verticalAlign: 'middle', lineHeight: '1.2' }}>-</td>
                     <td style={{ padding: '8px 8px', border: '1px solid #bae6fd', fontSize: '10px', color: '#0369a1', textAlign: 'center', verticalAlign: 'middle', lineHeight: '1.2' }}>{row.spec || '본사 지원'}</td>

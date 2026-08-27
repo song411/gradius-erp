@@ -204,6 +204,10 @@ export interface EstimateItem {
   role_name?: string
   quantity: number
   days: number
+  // 단위 표기 (표시 전용 — 금액 계산은 quantity × days × unit_price 그대로).
+  // 비어 있으면 기본값 명 / 일. lib/estimateUnits.ts 참고
+  quantity_unit?: string | null
+  days_unit?: string | null
   unit_price: number
   pay_unit_price: number
   spec?: string

@@ -11,6 +11,7 @@ import type { Settlement, Inquiry } from '@/lib/supabase/types'
 import { toast } from 'sonner'
 import * as XLSX from 'xlsx'
 import { PeriodFilter, isInPeriodFn, type PeriodState } from './PeriodFilter'
+import { qtyUnit, daysUnit } from '@/lib/estimateUnits'
 
 type DepositStatus = '입금완료' | '부분입금' | '미입금'
 type SortKey = '입금상태순' | '경과일순' | '최신순'
@@ -437,8 +438,8 @@ export default function DepositTab({ data }: { data: CeoData }) {
                                         {it.is_leader && <span className="text-[10px] text-amber-600 font-bold mr-1">[팀장]</span>}
                                         {it.role_name || '-'}
                                       </td>
-                                      <td className="px-3 py-1.5 text-right text-gray-600">{it.days}일</td>
-                                      <td className="px-3 py-1.5 text-right text-gray-600">{it.quantity}명</td>
+                                      <td className="px-3 py-1.5 text-right text-gray-600">{it.days}{daysUnit(it.days_unit)}</td>
+                                      <td className="px-3 py-1.5 text-right text-gray-600">{it.quantity}{qtyUnit(it.quantity_unit)}</td>
                                       <td className="px-3 py-1.5 text-right text-gray-700">{it.unit_price.toLocaleString()}</td>
                                       <td className="px-3 py-1.5 text-right text-gray-500">{it.pay_unit_price.toLocaleString()}</td>
                                       <td className="px-3 py-1.5 text-right font-bold text-blue-700">

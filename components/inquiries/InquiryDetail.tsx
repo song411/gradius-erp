@@ -22,6 +22,7 @@ import {
 import Link from 'next/link'
 import type { Inquiry, Estimate, EstimateItem, Assignment, Settlement, InquiryStatus } from '@/lib/supabase/types'
 import ProjectMemoPanel from '@/components/memos/ProjectMemoPanel'
+import { qtyUnit, daysUnit } from '@/lib/estimateUnits'
 
 // ── 페이 텍스트 추출 (notes에서 [페이: xxx] 파싱) ───────────────
 function extractPayDetail(notes: string | null | undefined): string {
@@ -473,7 +474,7 @@ export default function InquiryDetail({ id }: { id: string }) {
                       <div className="mt-3 border-t border-gray-200 pt-2 space-y-1">
                         {est.estimate_items.map(item => (
                           <div key={item.id} className="flex justify-between text-xs text-gray-600">
-                            <span>{item.is_leader ? '👑 ' : ''}{item.role_name} {item.quantity}명 × {item.days}일</span>
+                            <span>{item.is_leader ? '👑 ' : ''}{item.role_name} {item.quantity}{qtyUnit(item.quantity_unit)} × {item.days}{daysUnit(item.days_unit)}</span>
                             <span>{formatKRW(item.quantity * item.days * item.unit_price)}</span>
                           </div>
                         ))}
