@@ -4,11 +4,14 @@ import { useRef, useState } from 'react'
 import { calcVAT, toKoreanAmount } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogHeader, DialogTitle, DialogContent, DialogClose } from '@/components/ui/dialog'
-import { Download, Printer, CheckCircle } from 'lucide-react'
+import { Download, Printer, CheckCircle, MessageSquare } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Estimate, EstimateItem, Inquiry } from '@/lib/supabase/types'
 import { qtyUnit, daysUnit, daysColumnHeader } from '@/lib/estimateUnits'
 import { db } from '@/lib/supabase/api'
+import SmsEstimateDoc, {
+  captureSmsImage, SMS_DOC_WIDTH, type SmsItem, type SmsDocData,
+} from './SmsEstimateDoc'
 
 // ── 공급자 정보 (EstimateBuilder와 동일) ─────────────────
 const CO = {
@@ -17,6 +20,12 @@ const CO = {
   phone: '1600-2944', bank: '기업은행',
   bankAccount: '132-119648-04-019', bankHolder: '주식회사 가디어스',
 }
+
+const SMS_TIP = [
+  '문자(MMS) 전송용 — 폭 640px, 큰 글씨, JPEG.',
+  '통신사가 이미지를 다시 압축해도 읽히도록 좁은 폭에 맞춘 별도 출력입니다.',
+  '카톡·인쇄에는 「이미지 저장」을 쓰세요 (고화질 A4).',
+].join(String.fromCharCode(10))
 
 const EXTRA_TYPES = ['교통비', '숙박비', '식비', '연장수당', '기타']
 const SUPPORT_TYPES = ['지원품목']
@@ -30,6 +39,7 @@ interface Props {
 
 export default function EstimatePreview({ open, onClose, estimate, onStatusChange }: Props) {
   const docRef      = useRef<HTMLDivElement>(null)
+  const smsRef      = useRef<HTMLDivElement>(null)
   const [exporting, setExporting]     = useState(false)
   const [markingSent, setMarkingSent] = useState(false)
 
@@ -86,6 +96,36 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
     ? (eventEnd && eventEnd !== eventStart ? `${eventStart} ~ ${eventEnd}` : eventStart)
     : '-'
 
+  // ── 문자용 문서 데이터 ─────────────────────────────────
+  const toSmsItem = (i: ReturnType<typeof toRow>, kind: SmsItem['kind']): SmsItem => ({
+    key: i.id, name: i.role_name || i.item_type,
+    quantity: i.quantity, quantityUnit: i.quantity_unit,
+    days: i.days, daysUnit: i.days_unit,
+    unitPrice: i.unit_price, isLeader: i.is_leader,
+    free: kind === 'support',
+    kind,
+  })
+
+  const smsDocData: SmsDocData = {
+    companyName: estimate.company_name || '',
+    eventName:   estimate.event_name || inq?.event_name || '',
+    eventPeriod,
+    estimateCode: estimate.estimate_code || undefined,
+    today,
+    items: [
+      ...staffItems.map(i => toSmsItem(i, 'staff')),
+      ...extraItems.map(i => toSmsItem(i, 'extra')),
+      ...supportItems.map(i => toSmsItem(i, 'support')),
+    ],
+    staffSubtotal, extraSubtotal, supplyPrice, vat,
+    includeVat: hasVat, finalTotal: total,
+    hasDiscount, discountLabel,
+    discountAmount: discountType === 'percentage'
+      ? Math.round((supplyPrice * discountValue) / 100)
+      : discountValue,
+    notes: estimate.notes || undefined,
+  }
+
   // ── 이미지 저장 ────────────────────────────────────────
   async function handleSaveImage() {
     if (!docRef.current) return
@@ -115,6 +155,27 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
       if (wrap && document.body.contains(wrap)) document.body.removeChild(wrap)
       setExporting(false)
     }
+  }
+
+  // ── 문자용 이미지 저장 ─────────────────────────────────
+  // A4 이미지 저장과 별개의 출력이다. 견적틀은 건드리지 않는다.
+  async function handleSaveSmsImage() {
+    if (!smsRef.current) return
+    setExporting(true)
+    try {
+      const { dataUrl, bytes, width, height, quality } = await captureSmsImage(smsRef.current)
+      const link = document.createElement('a')
+      link.download = `견적서_문자용_${estimate?.company_name || ''}_${estimate?.estimate_code || ''}.jpg`
+      link.href = dataUrl; link.click()
+      toast.success(
+        `문자용 이미지 저장 (${width}×${height}, ${Math.round(bytes / 1024)}KB`
+        + `${quality < 0.9 ? `, 품질 ${Math.round(quality * 100)}%` : ''})`,
+        { duration: 4000 },
+      )
+    } catch (err) {
+      console.error('문자용 이미지 저장 오류:', err)
+      toast.error('문자용 이미지 저장에 실패했습니다.')
+    } finally { setExporting(false) }
   }
 
   // ── 인쇄 ───────────────────────────────────────────────
@@ -172,9 +233,26 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
             <Download className="h-3.5 w-3.5" />
             {exporting ? '저장 중...' : '이미지 저장'}
           </Button>
+          <Button
+            variant="outline" size="sm" onClick={handleSaveSmsImage} disabled={exporting}
+            className="gap-1" title={SMS_TIP}
+          >
+            <MessageSquare className="h-3.5 w-3.5" />
+            {exporting ? '저장 중...' : '문자용'}
+          </Button>
         </div>
         <DialogClose onClose={onClose} />
       </DialogHeader>
+
+      {/* 문자용 문서 — 화면 밖이지만 레이아웃이 잡혀 있어야 캡처된다 */}
+      <div
+        aria-hidden
+        style={{ position: 'fixed', left: '-99999px', top: 0, width: `${SMS_DOC_WIDTH}px` }}
+      >
+        <div ref={smsRef}>
+          <SmsEstimateDoc data={smsDocData} />
+        </div>
+      </div>
 
       <DialogContent className="p-0 bg-gray-300">
         <div className="overflow-y-auto max-h-[85vh] py-6 px-4">

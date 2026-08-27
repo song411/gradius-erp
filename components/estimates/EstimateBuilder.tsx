@@ -10,13 +10,16 @@ import { Select } from '@/components/ui/select'
 import {
   Trash2, ChevronDown, ChevronUp, Zap, X,
   Download, Printer, Package, FileText, BarChart3,
-  Clock, Calendar,
+  Clock, Calendar, MessageSquare,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Inquiry, Estimate, EstimateItem } from '@/lib/supabase/types'
 import {
   QTY_UNIT_PRESETS, DAYS_UNIT_PRESETS, qtyUnit, daysUnit, daysColumnHeader, hasCustomDaysUnit,
 } from '@/lib/estimateUnits'
+import SmsEstimateDoc, {
+  captureSmsImage, SMS_DOC_WIDTH, type SmsItem, type SmsDocData,
+} from './SmsEstimateDoc'
 
 // ── 공급자 정보 ──────────────────────────────────────────
 const CO = {
@@ -66,6 +69,13 @@ interface Props {
   // 복수 견적 지원: 기본 버전 라벨 (A안 / B안 ...)
   defaultVersionLabel?: string
 }
+
+const SMS_BTN_TIP = [
+  '문자(MMS) 전송용 — 폭 640px, 큰 글씨, JPEG.',
+  '통신사가 이미지를 다시 압축해도 읽히도록 좁은 폭에 맞춘 별도 출력입니다.',
+  '카톡·인쇄에는 왼쪽 「견적서 이미지」를 쓰세요 (고화질 A4).',
+].join(`
+`)
 
 function makeKey() { return Math.random().toString(36).slice(2) }
 
@@ -145,6 +155,7 @@ export default function EstimateBuilder({
   const [reportMemo, setReportMemo] = useState<ReportMemo>({ strategy: '', staff: '', special: '', conclusion: '' })
   const previewRef  = useRef<HTMLDivElement>(null)
   const reportRef   = useRef<HTMLDivElement>(null)
+  const smsRef      = useRef<HTMLDivElement>(null)
 
   const [form, setForm] = useState({
     inquiry_id: '', company_name: '', site_name: '', manager: '', contact_phone: '',
@@ -659,6 +670,25 @@ export default function EstimateBuilder({
     } finally { setExporting(false) }
   }
 
+  async function handleDownloadSms() {
+    if (!smsRef.current) return
+    setExporting(true)
+    try {
+      const { dataUrl, bytes, width, height, quality } = await captureSmsImage(smsRef.current)
+      const link = document.createElement('a')
+      link.download = `견적서_문자용_${selectedInq?.company_name || ''}_${new Date().toISOString().slice(0, 10)}.jpg`
+      link.href = dataUrl; link.click()
+      toast.success(
+        `문자용 이미지 저장 (${width}×${height}, ${Math.round(bytes / 1024)}KB`
+        + `${quality < 0.9 ? `, 품질 ${Math.round(quality * 100)}%` : ''})`,
+        { duration: 4000 },
+      )
+    } catch (err) {
+      console.error('문자용 이미지 저장 오류:', err)
+      toast.error('문자용 이미지 저장에 실패했습니다.')
+    } finally { setExporting(false) }
+  }
+
   async function handleDownloadReport() {
     if (!reportRef.current) return
     setExporting(true)
@@ -694,6 +724,31 @@ export default function EstimateBuilder({
       : (form.date_memo || '-')
   const autoDays = calcDays(selectedInq?.event_start, selectedInq?.event_end)
 
+  // 문자용 문서 데이터 — A4와 같은 값에서 뽑되 좁은 폭에 들어갈 항목만 고른다
+  const toSmsItem = (r: ItemRowSimple, kind: SmsItem['kind']): SmsItem => ({
+    key: r.key, name: r.role_name || r.item_type,
+    quantity: r.quantity, quantityUnit: r.quantity_unit,
+    days: r.days, daysUnit: r.days_unit,
+    unitPrice: r.unit_price, isLeader: r.is_leader,
+    free: kind === 'support',
+    kind,
+  })
+  const smsData: SmsDocData = {
+    companyName: form.company_name || selectedInq?.company_name || '',
+    eventName:   selectedInq?.event_name || '',
+    eventPeriod,
+    today,
+    items: [
+      ...staffItems.map(r => toSmsItem(r, 'staff')),
+      ...extraItems.map(r => toSmsItem(r, 'extra')),
+      ...supportItems.map(r => toSmsItem(r, 'support')),
+    ],
+    staffSubtotal, extraSubtotal, supplyPrice, vat,
+    includeVat: form.include_vat, finalTotal,
+    hasDiscount, discountLabel: form.discount_label, discountAmount,
+    notes: form.notes,
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-gray-100">
       {/* ── 헤더 바 ── */}
@@ -711,6 +766,13 @@ export default function EstimateBuilder({
             <Button variant="outline" size="sm" onClick={handlePrint} className="gap-1.5"><Printer className="h-3.5 w-3.5" />인쇄</Button>
             <Button variant="outline" size="sm" onClick={handleDownloadImage} disabled={exporting} className="gap-1.5">
               <Download className="h-3.5 w-3.5" />{exporting ? '처리 중...' : '견적서 이미지'}
+            </Button>
+            <Button
+              variant="outline" size="sm" onClick={handleDownloadSms} disabled={exporting}
+              className="gap-1.5"
+              title={SMS_BTN_TIP}
+            >
+              <MessageSquare className="h-3.5 w-3.5" />{exporting ? '처리 중...' : '문자용 이미지'}
             </Button>
           </>}
           {rightTab === 'report' && (
@@ -1118,6 +1180,17 @@ export default function EstimateBuilder({
               </div>
             </div>
           )}
+
+          {/* 문자용 문서 — 화면에는 안 보이지만 레이아웃이 잡혀 있어야 캡처된다.
+              display:none이면 크기를 못 재서 흰 이미지가 나온다. */}
+          <div
+            aria-hidden
+            style={{ position: 'fixed', left: '-99999px', top: 0, width: `${SMS_DOC_WIDTH}px` }}
+          >
+            <div ref={smsRef}>
+              <SmsEstimateDoc data={smsData} />
+            </div>
+          </div>
 
           {/* 수익 리포트 */}
           {rightTab === 'report' && (
