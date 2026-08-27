@@ -40,6 +40,12 @@ export interface JobBase {
   billRate: number      // 청구단가 (견적 unit_price). 묶인 경우 수량 가중평균
   planPayRate: number   // 계획 지급단가 (견적 pay_unit_price)
   days: number
+  /** 견적 청구 금액 = Σ(unit_price × quantity × days).
+   *  필요인원 override(현장 배치 계획)가 아니라 견적 수량으로 계산한다.
+   *  청구액의 근거는 견적이고, override는 사람 배치 계획일 뿐이다. */
+  billTotal: number
+  /** 견적 원가 = Σ(pay_unit_price × quantity × days) — 계획 지급 합계 */
+  planPayTotal: number
   assignments: Assignment[]   // 취소 제외
   /** 배정 job_type이 견적 직무명과 정확히 같지 않아 기본 직무명으로 묶은 경우.
    *  장기 행사는 견적에서 직무를 날짜별로 쪼개 적는데(행사스탭(주중)/행사스탭 오전 …)
@@ -160,9 +166,15 @@ export function buildJobs(
     .filter(it => !NON_STAFF_TYPES.includes(it.item_type || '') && it.unit_price > 0)
     .forEach(it => {
       const key = it.role_name || '기타'
+      // 견적 라인 금액 — 앱 전체와 같은 공식 (EstimateBuilder / InquiryDetail)
+      const lineDays = it.days || 1
+      const lineBill = it.unit_price * it.quantity * lineDays
+      const linePlan = (it.pay_unit_price || 0) * it.quantity * lineDays
       const cur = est.get(key)
       if (cur) {
-        cur.required += it.quantity
+        cur.required     += it.quantity
+        cur.billTotal    += lineBill
+        cur.planPayTotal += linePlan
       } else {
         est.set(key, {
           jobType: key,
@@ -170,7 +182,9 @@ export function buildJobs(
           required: it.quantity,
           billRate: it.unit_price,
           planPayRate: it.pay_unit_price || 0,
-          days: it.days || 1,
+          days: lineDays,
+          billTotal: lineBill,
+          planPayTotal: linePlan,
           assignments: [],
         })
       }
@@ -225,6 +239,9 @@ export function buildJobs(
       billRate: wAvg(g => g.billRate),
       planPayRate: wAvg(g => g.planPayRate),
       days: Math.max(...groups.map(g => g.days)),
+      // 금액은 가중평균 단가 × 인원으로 되짚지 않고 원본 견적 라인 금액을 그대로 더한다
+      billTotal:    groups.reduce((t, g) => t + g.billTotal, 0),
+      planPayTotal: groups.reduce((t, g) => t + g.planPayTotal, 0),
       assignments: [...list],
       approx: {
         sources: groups.map(g => ({ label: g.label, required: g.required, billRate: g.billRate })),
@@ -274,6 +291,7 @@ export function buildJobs(
         required: cfg.requiredOverrides[key] ?? 0,
         billRate: 0, planPayRate: a.pay_rate || 0,
         days: a.work_days || 1, assignments: [],
+        billTotal: 0, planPayTotal: 0,   // 견적에 없는 인원 — 청구 근거가 없다
         unmatched: true,
       }
       out.push(g)
@@ -290,6 +308,7 @@ export function buildJobs(
       label: cfg.labelOverrides[cj.jobType] ?? cj.jobType,
       required: cfg.requiredOverrides[cj.jobType] ?? cj.required,
       billRate: 0, planPayRate: cj.payRate, days: 1, assignments: [],
+      billTotal: 0, planPayTotal: 0,   // 견적 외 직무 — 청구 근거가 없다
     })
   })
 
@@ -385,4 +404,117 @@ export function payRateSuspicious(
   if (!billRate) return false
   if (act.mixed) return act.list.some(v => v > billRate)
   return act.value > billRate
+}
+
+// ─── 금액 합계 ────────────────────────────────────────────
+// 단가만 보여주면 실무자가 "이 줄에 얼마 나가나"를 매번 손으로 곱해야 한다.
+// 합계는 반드시 다른 화면과 같은 공식으로 뽑는다 — 견적 화면과 지급관리에서
+// 이미 쓰는 공식을 그대로 가져온다. 여기서 새로 계산하면 숫자가 갈린다.
+
+interface PaySegment { rate: number; days: number }
+
+/** 구간별 단가 JSON (assignments.memo) 파싱 — 지급관리와 동일 */
+function parseSegments(memo?: string | null): PaySegment[] | null {
+  if (!memo) return null
+  try {
+    const p = JSON.parse(memo)
+    if (Array.isArray(p.segments) && p.segments.length > 0) return p.segments
+  } catch { /* 구간 정보가 없는 일반 메모 */ }
+  return null
+}
+
+function segmentTotal(segs: PaySegment[]) {
+  return segs.reduce((s, seg) => s + (seg.rate || 0) * (seg.days || 1), 0)
+}
+
+/** 배정 1건의 총 지급액.
+ *  지급관리(PayoutForm / BulkPayoutModal / PayoutsContent)와 같은 공식이다.
+ *  구간별 단가와 팀 일괄지급은 pay_rate에 총액이 들어가고 work_days=1로 저장되므로
+ *  pay_rate × work_days 하나로 두 경우가 모두 덮인다. */
+export function assignmentPayTotal(a: Assignment): number {
+  const segs = parseSegments(a.memo)
+  return segs ? segmentTotal(segs) : (a.pay_rate || 0) * (a.work_days || 1)
+}
+
+export interface JobMoney {
+  billTotal: number        // 청구 합계 (견적 기준)
+  payTotal: number         // 실지급 합계 (배정 기준, 무급 제외)
+  planPayTotal: number     // 계획 지급 합계 (견적 원가)
+  payableCount: number     // 지급 대상 인원
+  freeCount: number        // 무급 인원 (본사 인원 / 팀 일괄지급 팀원)
+  zeroRateCount: number    // 지급 대상인데 단가가 0원인 배정
+  margin: number | null    // 합계 기준 마진율
+  /** 마진을 그대로 읽어도 되는지.
+   *  ok = 그대로 / check = 지급이 청구보다 큼 / rough = 지급액이 아직 덜 잡힘 / none = 청구 근거 없음 */
+  trust: 'ok' | 'check' | 'rough' | 'none'
+  reason: string           // trust가 ok가 아닐 때 이유 (툴팁)
+}
+
+/** 직무 1건의 금액 합계.
+ *
+ *  ▸ 청구 합계는 견적 기준(행사 전체)이다. 구간별로 쪼개지 않는다.
+ *    배정에 근무일이 없으면 전체기간 투입으로 계산되는 탓에 구간 일수가 견적 일수와
+ *    다르게 나오는 행사가 많고, 그 일수로 단가를 곱하면 견적에도 없는 금액이 찍힌다.
+ *  ▸ 실지급 합계는 배정 기준이다. 무급은 반드시 빼야 한다 — 팀 일괄지급은 팀장 배정에
+ *    팀 전체 금액이 들어가 있고 팀원은 is_payable=false로 저장되므로, 무급을 세면
+ *    같은 돈이 두 번 잡힌다. (인원배정 화면 하단 '예상 지급'과 같은 기준) */
+export function jobMoney(job: JobBase): JobMoney {
+  const live    = job.assignments
+  const payable = live.filter(a => a.is_payable !== false)
+  const payTotal = payable.reduce((s, a) => s + assignmentPayTotal(a), 0)
+  const zeroRateCount = payable.filter(a => assignmentPayTotal(a) === 0).length
+
+  const base: Omit<JobMoney, 'margin' | 'trust' | 'reason'> = {
+    billTotal: job.billTotal,
+    payTotal,
+    planPayTotal: job.planPayTotal,
+    payableCount: payable.length,
+    freeCount: live.length - payable.length,
+    zeroRateCount,
+  }
+
+  // 청구 근거(견적)가 없으면 마진을 낼 수 없다
+  if (!job.billTotal) {
+    return { ...base, margin: null, trust: 'none',
+      reason: job.unmatched
+        ? '견적에 없는 인원이라 청구 금액이 없습니다. 지급액만 발생합니다.'
+        : '확정 견적에서 청구 금액을 찾을 수 없어 마진을 낼 수 없습니다.' }
+  }
+
+  // 배정이 아예 없으면 마진을 찍지 않는다.
+  // 지급액 0으로 100%가 찍히면 "이 행사 마진 100%"로 읽힌다.
+  if (live.length === 0) {
+    return { ...base, margin: null, trust: 'none',
+      reason: `아직 배정된 인원이 없어 지급액이 0입니다. 사람이 붙으면 마진이 내려갑니다. `
+        + `견적 원가는 ${fmt(job.planPayTotal)}원입니다.` }
+  }
+
+  const margin = ((job.billTotal - payTotal) / job.billTotal) * 100
+
+  // 지급이 청구를 넘는 경우 — 적자로 단정하지 않는다 (총액 입력 / 견적 일수 누락)
+  if (payTotal > job.billTotal) {
+    return { ...base, margin, trust: 'check',
+      reason: `지급 합계(${fmt(payTotal)}원)가 청구 합계(${fmt(job.billTotal)}원)보다 큽니다. `
+        + '여러 날 근무분이 총액으로 들어가고 근무일수가 1로 남았거나, 견적 일수가 실제보다 짧게 잡힌 경우일 수 있습니다. 적자라는 뜻은 아닙니다.' }
+  }
+
+  // 지급 대상인데 단가가 안 들어간 인원 — 지급 합계가 확실히 실제보다 작다
+  if (zeroRateCount > 0) {
+    return { ...base, margin, trust: 'rough',
+      reason: `지급단가가 0원인 배정이 ${zeroRateCount}명 있어 지급 합계가 실제보다 작습니다. `
+        + '인원배정 화면에서 단가를 넣으면 마진이 내려갑니다.' }
+  }
+
+  // 필요 인원보다 배정이 적으면 사람이 더 붙을 자리가 남아 있다.
+  // (필요보다 많은 경우는 날짜별로 쪼개 배정한 정상 케이스가 많아 따지지 않는다)
+  if (job.required > 0 && live.length < job.required) {
+    return { ...base, margin, trust: 'rough',
+      reason: `배정 ${live.length}명 / 필요 ${job.required}명 — 남은 ${job.required - live.length}명분 지급액이 `
+        + '아직 안 잡혀 있어 마진이 실제보다 높게 나옵니다.' }
+  }
+
+  // 여기까지 오면 지급액은 붙은 사람 기준으로 다 들어가 있다.
+  // 무급(본사 인원 / 팀 일괄지급 팀원)이 섞여 마진이 높게 나오는 건 데이터 누락이 아니라
+  // 실제로 인건비가 안 나가는 것이므로 그대로 믿어도 된다.
+  return { ...base, margin, trust: 'ok', reason: '' }
 }

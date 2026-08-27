@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
   ChevronLeft, ChevronRight, AlertTriangle, Download, Search, X, CalendarDays,
+  ExternalLink,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { db } from '@/lib/supabase/api'
@@ -15,7 +16,7 @@ import {
   CONTRACTED_STATUSES, CONFIG_TAG, DOW, EMPTY_CONFIG,
   type JobBase, type JobCell, type MemoRecord,
   pad, fmt, todayLocal, cleanStaffName, parseConfigs, buildJobs, makeCell, splitByDate, coversDate,
-  cellState, STATE_STYLE, STATUS_CHIP, actualPayRate, marginRate, payRateSuspicious,
+  cellState, STATE_STYLE, STATUS_CHIP, actualPayRate, jobMoney, type JobMoney,
 } from './matrixCore'
 
 // ─── 화면 전용 타입 ───────────────────────────────────────
@@ -104,13 +105,45 @@ function StaffChip({ asgn, whole }: { asgn: Assignment; whole: boolean }) {
   )
 }
 
+/** 인원배정 화면 딥링크 — 행사를 자동 선택하고 해당 직무로 스크롤한다 */
+function asgnHref(inqId: string, jobType: string) {
+  const q = new URLSearchParams({ inq: inqId })
+  if (jobType) q.set('job', jobType)
+  return `/assignments?${q}`
+}
+
+/** 청구 합계의 내역(단가 × 필요 × 일수)이 합계와 정확히 맞는지.
+ *  견적 라인이 여러 개거나 실무자가 필요인원을 고친 직무는 맞지 않으므로,
+ *  틀린 곱셈식을 보여주지 않고 단가만 표시한다. */
+function breakdownExact(job: JobBase) {
+  return job.billRate * job.required * (job.days || 1) === job.billTotal
+}
+
+function billTip(job: JobBase, m: JobMoney) {
+  const parts = [
+    `청구 합계 ${fmt(m.billTotal)}원 — 확정 견적의 '${job.label}' 라인 금액 합계입니다.`,
+    '행사 전체 기준이며 구간별로 나눈 금액이 아닙니다.',
+  ]
+  if (!breakdownExact(job)) {
+    parts.push(`화면의 단가 ${fmt(job.billRate)}원 · 필요 ${job.required}명과 곱해도 이 값이 나오지 않습니다`
+      + ' (견적 라인이 여러 개이거나 필요인원을 손으로 고친 직무).')
+  }
+  return parts.join(' ')
+}
+
 function Th({
-  width, align = 'left', children,
-}: { width: string; align?: 'left' | 'center' | 'right'; children: React.ReactNode }) {
+  width, align = 'left', tip, children,
+}: {
+  width: string; align?: 'left' | 'center' | 'right'
+  tip?: string; children: React.ReactNode
+}) {
   const at = align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : 'text-left'
   return (
-    <th className={`bg-gray-100 px-2 py-2 font-bold text-[11px] text-gray-600 tracking-wide
-      border-b-2 border-gray-300 whitespace-nowrap ${width} ${at}`}>
+    <th
+      title={tip}
+      className={`bg-gray-100 px-2 py-2 font-bold text-[11px] text-gray-600 tracking-wide
+        border-b-2 border-gray-300 whitespace-nowrap ${width} ${at}`}
+    >
       {children}
     </th>
   )
@@ -370,10 +403,33 @@ export default function ScheduleMatrixContent() {
       const st = cellState(r.cell.total, r.cell.job.required)
       if (st === 'none' || st === 'short') gaps += 1
     })
+
+    // 금액은 직무 단위(행사 전체 기준)라서 같은 직무가 여러 구간으로 쪼개져 있다.
+    // 구간마다 더하면 같은 금액이 몇 번씩 잡히므로 (행사 × 직무)로 한 번만 센다.
+    const seen = new Set<string>()
+    let billTotal = 0, payTotal = 0
+    // 마진은 지급액이 다 들어간 직무만 모아서 낸다. 미배정·단가미입력 직무를 섞으면
+    // 지급 0원이 그대로 더해져 "이 달 마진 76%" 같은 헛수치가 나온다.
+    let billOk = 0, payOk = 0, okCount = 0, untrusted = 0
+    visibleRuns.forEach(r => {
+      const k = `${r.base.inq.id}|${r.cell.job.jobType}`
+      if (seen.has(k)) return
+      seen.add(k)
+      const m = jobMoney(r.cell.job)
+      billTotal += m.billTotal
+      payTotal  += m.payTotal
+      if (m.trust === 'ok') { billOk += m.billTotal; payOk += m.payTotal; okCount += 1 }
+      else if (m.billTotal > 0) untrusted += 1
+    })
+
     return {
       eventCount: new Set(visibleRuns.map(r => r.base.inq.id)).size,
       runCount: visibleRuns.length,
       required, filled, gaps,
+      billTotal, payTotal, untrusted,
+      okCount,
+      marginOk: billOk > 0 ? ((billOk - payOk) / billOk) * 100 : null,
+      jobCount: seen.size,
     }
   }, [visibleRuns])
 
@@ -399,7 +455,9 @@ export default function ScheduleMatrixContent() {
 
       ws.addRow([
         '시작일', '종료일', '일수', '요일', '고객사', '행사명', '직무', '필요', '배정', '상태',
-        '배정 인원', '청구단가', '지급단가(실제)', '지급단가(계획)', '마진율', '비고',
+        '배정 인원',
+        '청구 합계', '청구단가', '지급 합계', '지급 합계(계획)', '지급단가(실제)',
+        '마진율', '비고',
       ])
       ws.getRow(1).font = { bold: true }
       ws.getRow(1).eachCell(c => {
@@ -415,8 +473,11 @@ export default function ScheduleMatrixContent() {
         ].join(', ')
         const st  = cellState(c.total, c.job.required)
         const act = actualPayRate(c)
-        const mr  = marginRate(c.job.billRate, act.avg)
-        const sus = payRateSuspicious(c.job.billRate, act)
+        const mny = jobMoney(c.job)
+        const note = [
+          mny.trust !== 'ok' ? mny.reason : '',
+          mny.freeCount > 0 ? `무급 ${mny.freeCount}명 지급합계 제외` : '',
+        ].filter(Boolean).join(' / ')
         ws.addRow([
           r.start, r.end, r.days,
           r.days === 1 ? dowOf(r.start) : `${dowOf(r.start)}~${dowOf(r.end)}`,
@@ -424,11 +485,13 @@ export default function ScheduleMatrixContent() {
           c.job.label, c.job.required, c.total,
           STATE_STYLE[st].label(c.total, c.job.required),
           names,
+          mny.billTotal || null,
           c.job.billRate || null,
+          mny.payTotal || null,
+          mny.planPayTotal || null,
           act.mixed ? '혼재' : (act.value || null),
-          c.job.planPayRate || null,
-          mr === null ? null : Number(mr.toFixed(1)),
-          sus ? '지급단가 확인필요 (팀 일괄지급 또는 총액 입력)' : '',
+          mny.margin === null ? null : Number(mny.margin.toFixed(1)),
+          note,
         ])
       })
 
@@ -441,10 +504,10 @@ export default function ScheduleMatrixContent() {
         })
       }
 
-      const widths = [12, 12, 6, 10, 20, 28, 14, 6, 6, 16, 46, 12, 14, 14, 8, 28]
+      const widths = [12, 12, 6, 10, 20, 28, 14, 6, 6, 16, 46, 14, 12, 14, 14, 12, 8, 44]
       widths.forEach((w, i) => { ws.getColumn(i + 1).width = w })
-      ;[12, 13, 14].forEach(i => { ws.getColumn(i).numFmt = '#,##0' })
-      ws.getColumn(15).numFmt = '0.0"%"'
+      ;[12, 13, 14, 15, 16].forEach(i => { ws.getColumn(i).numFmt = '#,##0' })
+      ws.getColumn(17).numFmt = '0.0"%"'
       ws.views = [{ state: 'frozen', ySplit: 1 }]
       ws.pageSetup.printTitlesRow = '1:1'
 
@@ -500,6 +563,29 @@ export default function ScheduleMatrixContent() {
             <span className="px-2 py-1 rounded-full bg-blue-50 text-blue-700 font-medium">
               배정 {summary.filled} / 필요 {summary.required}명
             </span>
+            {summary.billTotal > 0 && (
+              <span
+                className="px-2 py-1 rounded-full bg-gray-100 text-gray-700 font-medium tabular-nums"
+                title={`표에 보이는 직무 ${summary.jobCount}건의 금액 합계입니다. `
+                  + '금액은 직무 단위(행사 전체 기준)이므로 같은 직무가 여러 구간으로 나뉘어도 한 번만 셉니다. '
+                  + '이 달에 발생하는 금액이 아니라, 표에 나온 직무들의 행사 전체 금액입니다. '
+                  + `마진은 지급액이 다 들어간 ${summary.okCount}건만 모아서 낸 값입니다`
+                  + (summary.untrusted > 0
+                      ? ` — 미배정이거나 단가가 덜 들어간 ${summary.untrusted}건은 빠져 있습니다.`
+                      : '.')}
+              >
+                청구 {fmt(summary.billTotal)} · 지급 {fmt(summary.payTotal)}
+                {summary.marginOk !== null && (
+                  <span className="ml-1 text-gray-500">
+                    · 마진 {summary.marginOk.toFixed(1)}%
+                    <span className="text-gray-400"> ({summary.okCount}건)</span>
+                  </span>
+                )}
+                {summary.untrusted > 0 && (
+                  <span className="ml-1 text-amber-600 font-semibold">참고 {summary.untrusted}건</span>
+                )}
+              </span>
+            )}
             {summary.gaps > 0 && (
               <span className="px-2 py-1 rounded-full bg-yellow-100 text-yellow-800 font-semibold">
                 미충족 {summary.gaps}건
@@ -606,7 +692,7 @@ export default function ScheduleMatrixContent() {
             </p>
           </div>
         ) : (
-          <div className="rounded-xl border-2 border-gray-200 overflow-hidden bg-white">
+          <div className="rounded-xl border-2 border-gray-200 overflow-x-auto bg-white">
             <table className="w-full border-collapse text-xs">
               <thead className="sticky top-0 z-10">
                 <tr>
@@ -616,12 +702,33 @@ export default function ScheduleMatrixContent() {
                   <Th width="w-[54px]" align="center">필요</Th>
                   <Th width="w-[54px]" align="center">배정</Th>
                   <Th width="w-[112px]">상태</Th>
-                  <Th width="min-w-[280px]">배정 인원</Th>
-                  <Th width="w-[104px]" align="right">청구단가</Th>
-                  <Th width="w-[132px]" align="right">
-                    지급단가<span className="font-normal text-gray-400"> 실제/계획</span>
+                  <Th width="min-w-[240px]">
+                    배정 인원<span className="font-normal text-gray-400"> (클릭 → 인원배정)</span>
                   </Th>
-                  <Th width="w-[70px]" align="right">마진</Th>
+                  <Th
+                    width="w-[118px]" align="right"
+                    tip={'확정 견적의 이 직무 라인 금액 합계입니다 (단가 × 견적 수량 × 견적 일수). '
+                      + '행사 전체 기준이며, 왼쪽 기간 칸의 구간에만 해당하는 금액이 아닙니다. '
+                      + '필요인원을 손으로 고친 직무는 합계가 견적 그대로이고 화면의 필요 인원과 곱해도 맞지 않습니다(≠ 표시).'}
+                  >
+                    청구 합계<span className="block font-normal text-gray-400">견적 기준</span>
+                  </Th>
+                  <Th
+                    width="w-[152px]" align="right"
+                    tip={'이 직무에 배정된 인원에게 실제로 나갈 금액 합계입니다. '
+                      + '지급관리와 같은 공식(구간별 단가가 있으면 그 합계, 없으면 단가 × 근무일수)이고, '
+                      + '무급(본사 인원 / 팀 일괄지급 팀원)은 같은 돈이 두 번 잡히지 않도록 뺐습니다. '
+                      + '아래 회색 줄은 견적 원가(계획)와의 차이입니다.'}
+                  >
+                    지급 합계<span className="block font-normal text-gray-400">배정 기준</span>
+                  </Th>
+                  <Th
+                    width="w-[74px]" align="right"
+                    tip={'(청구 합계 − 지급 합계) ÷ 청구 합계. 왼쪽 두 칸에서 바로 나온 값입니다. '
+                      + '지급액이 아직 덜 잡힌 직무는 참고용으로만 표시하고, 배정이 없는 직무는 마진을 찍지 않습니다.'}
+                  >
+                    마진
+                  </Th>
                 </tr>
               </thead>
               <tbody>
@@ -630,8 +737,7 @@ export default function ScheduleMatrixContent() {
                   const st  = cellState(c.total, c.job.required)
                   const sty = STATE_STYLE[st]
                   const act = actualPayRate(c)
-                  const mr  = marginRate(c.job.billRate, act.avg)
-                  const sus = payRateSuspicious(c.job.billRate, act)
+                  const mny = jobMoney(c.job)
 
                   // 같은 기간 · 같은 행사의 연속 행에서 행사 셀을 한 번만 그린다
                   const key  = `${r.start}|${r.end}|${r.base.inq.id}`
@@ -802,86 +908,129 @@ export default function ScheduleMatrixContent() {
                         </span>
                       </td>
 
-                      {/* 배정 인원 — 이름 전부 노출 */}
-                      <td className="px-2 py-2 align-top">
-                        {c.total === 0 ? (
-                          <span className="text-[11px] text-gray-300">배정된 인원이 없습니다</span>
-                        ) : (
-                          <div className="flex flex-wrap gap-1">
-                            {c.pinned.map(a => <StaffChip key={a.id} asgn={a} whole={false} />)}
-                            {c.allPeriod.map(a => <StaffChip key={a.id} asgn={a} whole />)}
-                          </div>
-                        )}
+                      {/* 배정 인원 — 이름 전부 노출. 칸 전체가 인원배정 화면 링크 */}
+                      <td className="px-0 py-0 align-top">
+                        <Link
+                          href={asgnHref(r.base.inq.id, c.job.jobType)}
+                          className="group block px-2 py-2 h-full hover:bg-blue-50"
+                          title={`인원배정 화면에서 '${c.job.label}' 배정을 열어 수정합니다`}
+                        >
+                          {c.total === 0 ? (
+                            <span className="text-[11px] text-gray-300 group-hover:text-blue-500">
+                              배정된 인원이 없습니다 — 배정하러 가기 →
+                            </span>
+                          ) : (
+                            <div className="flex flex-wrap items-center gap-1">
+                              {c.pinned.map(a => <StaffChip key={a.id} asgn={a} whole={false} />)}
+                              {c.allPeriod.map(a => <StaffChip key={a.id} asgn={a} whole />)}
+                              <ExternalLink className="h-3 w-3 text-gray-300 group-hover:text-blue-500 shrink-0" />
+                            </div>
+                          )}
+                        </Link>
                       </td>
 
-                      {/* 청구단가 */}
-                      <td className="px-2 py-2 text-right align-top tabular-nums">
-                        {c.job.billRate ? (
+                      {/* 청구 합계 (견적 기준) */}
+                      <td className="px-2 py-2 text-right align-top tabular-nums break-keep">
+                        {mny.billTotal ? (
                           <>
-                            <span className="font-semibold text-gray-800">{fmt(c.job.billRate)}</span>
-                            {c.job.approx && c.job.approx.billRange[0] !== c.job.approx.billRange[1] && (
+                            <div className="font-bold text-gray-900" title={billTip(c.job, mny)}>
+                              {fmt(mny.billTotal)}
+                            </div>
+                            {breakdownExact(c.job) ? (
                               <div className="text-[10px] text-gray-400">
-                                {fmt(c.job.approx.billRange[0])}~{fmt(c.job.approx.billRange[1])}
+                                {fmt(c.job.billRate)} × {c.job.required}명
+                                {c.job.days > 1 ? ` × ${c.job.days}일` : ''}
+                              </div>
+                            ) : (
+                              <div className="text-[10px] text-gray-400"
+                                title="견적 라인이 여러 개이거나 필요인원을 손으로 고쳐서, 합계가 (단가 × 필요 × 일수)와 맞지 않습니다. 합계는 견적 라인 금액을 그대로 더한 값입니다.">
+                                단가 {fmt(c.job.billRate)}
+                                {c.job.approx && c.job.approx.billRange[0] !== c.job.approx.billRange[1]
+                                  ? `~${fmt(c.job.approx.billRange[1])}` : ''}
+                                <span className="ml-0.5 text-gray-300">≠</span>
                               </div>
                             )}
                           </>
-                        ) : <span className="text-gray-300">-</span>}
+                        ) : (
+                          <span className="text-gray-300" title={mny.reason}>-</span>
+                        )}
                       </td>
 
-                      {/* 지급단가 실제 / 계획 */}
-                      <td className="px-2 py-2 text-right align-top tabular-nums">
-                        {sus && (
-                          <span
-                            className="inline-block mr-1 text-amber-500 align-middle"
-                            title="지급단가가 청구단가보다 큽니다. 팀 단위 일괄지급(팀장에게 팀 전체 금액)이거나, 여러 날 근무분이 총액으로 들어가고 근무일수가 1로 남은 경우일 수 있습니다. 적자라는 뜻은 아닙니다."
-                          >
-                            <AlertTriangle className="h-3 w-3 inline" />
-                          </span>
-                        )}
-                        {act.mixed ? (
-                          <span
-                            className="font-semibold text-orange-600"
-                            title={`인원별 지급단가가 다릅니다: ${act.list.map(v => fmt(v)).join(' / ')}원`}
-                          >
-                            혼재
-                          </span>
-                        ) : act.value ? (
-                          <span className={`font-semibold ${
-                            c.job.planPayRate && act.value !== c.job.planPayRate
-                              ? 'text-orange-600' : 'text-gray-800'
+                      {/* 지급 합계 (배정 기준) */}
+                      <td className="px-2 py-2 text-right align-top tabular-nums break-keep">
+                        <div className="flex items-center justify-end gap-1">
+                          {mny.trust === 'check' && (
+                            <span className="shrink-0 text-amber-500" title={mny.reason}>
+                              <AlertTriangle className="h-3 w-3" />
+                            </span>
+                          )}
+                          <span className={`font-bold ${
+                            mny.trust === 'check' ? 'text-amber-600'
+                              : mny.payTotal ? 'text-gray-900' : 'text-gray-300'
                           }`}>
-                            {fmt(act.value)}
+                            {mny.payTotal ? fmt(mny.payTotal) : '-'}
                           </span>
-                        ) : <span className="text-gray-300">-</span>}
+                        </div>
                         <div className="text-[10px] text-gray-400">
-                          계획 {c.job.planPayRate ? fmt(c.job.planPayRate) : '-'}
-                          {!act.mixed && act.value > 0 && c.job.planPayRate > 0
-                            && act.value !== c.job.planPayRate && (
-                            <span className={act.value > c.job.planPayRate ? ' text-red-500' : ' text-green-600'}>
-                              {' '}{act.value > c.job.planPayRate ? '▲' : '▼'}
-                              {fmt(Math.abs(act.value - c.job.planPayRate))}
+                          계획 {mny.planPayTotal ? fmt(mny.planPayTotal) : '-'}
+                          {mny.planPayTotal > 0 && mny.payTotal > 0
+                            && mny.payTotal !== mny.planPayTotal && (
+                            <span className={mny.payTotal > mny.planPayTotal ? ' text-red-500' : ' text-green-600'}>
+                              {' '}{mny.payTotal > mny.planPayTotal ? '▲' : '▼'}
+                              {fmt(Math.abs(mny.payTotal - mny.planPayTotal))}
                             </span>
                           )}
                         </div>
+                        {(() => {
+                          // 구분점(·)을 항목 앞에 붙이면 앞이 비었을 때 점만 남는다.
+                          // 그려질 항목만 모아서 사이에 끼운다.
+                          const notes: React.ReactNode[] = []
+                          if (act.mixed) notes.push(
+                            <span key="mix" className="text-orange-500"
+                              title={`인원별 지급단가가 다릅니다: ${act.list.map(v => fmt(v)).join(' / ')}원`}>
+                              단가 혼재
+                            </span>)
+                          else if (act.value) notes.push(<span key="rate">단가 {fmt(act.value)}</span>)
+                          if (mny.freeCount > 0) notes.push(
+                            <span key="free" className="text-purple-400"
+                              title="본사 인원이거나 팀 일괄지급 팀원입니다. 팀 금액은 팀장 배정에 합산돼 있으므로 여기서 빼야 같은 돈이 두 번 잡히지 않습니다.">
+                              무급 {mny.freeCount}명 제외
+                            </span>)
+                          if (mny.zeroRateCount > 0) notes.push(
+                            <span key="zero" className="text-red-400" title={mny.reason}>
+                              단가 미입력 {mny.zeroRateCount}명
+                            </span>)
+                          if (notes.length === 0) return null
+                          return (
+                            <div className="text-[10px] text-gray-400 leading-tight">
+                              {notes.map((n, k) => (
+                                <span key={k}>{k > 0 ? ' · ' : ''}{n}</span>
+                              ))}
+                            </div>
+                          )
+                        })()}
                       </td>
 
-                      {/* 마진 */}
+                      {/* 마진 — 위 두 합계에서 바로 나온 값 (청구합계-지급합계)/청구합계 */}
                       <td className="px-2 py-2 text-right align-top tabular-nums">
-                        {mr === null ? (
-                          <span className="text-gray-300">-</span>
-                        ) : sus ? (
-                          // 단가 데이터가 의심스러울 때 붉은 적자로 단정하지 않는다
-                          <span
-                            className="font-bold text-amber-600"
-                            title={`계산값 ${mr.toFixed(1)}% — 팀 일괄지급이거나 총액이 한 건에 잡힌 경우일 수 있어 마진으로 읽지 마세요`}
-                          >
+                        {mny.margin === null ? (
+                          <span className="text-gray-300" title={mny.reason}>-</span>
+                        ) : mny.trust === 'check' ? (
+                          // 지급이 청구보다 크다 — 붉은 적자로 단정하지 않는다
+                          <span className="font-bold text-amber-600"
+                            title={`계산값 ${mny.margin.toFixed(1)}% — ${mny.reason}`}>
                             확인필요
+                          </span>
+                        ) : mny.trust === 'rough' ? (
+                          <span className="font-bold text-gray-400" title={mny.reason}>
+                            {mny.margin.toFixed(1)}%
+                            <span className="block text-[9px] font-normal text-amber-600">참고용</span>
                           </span>
                         ) : (
                           <span className={`font-bold ${
-                            mr < 0 ? 'text-red-600' : mr < 20 ? 'text-orange-600' : 'text-gray-800'
+                            mny.margin < 0 ? 'text-red-600' : mny.margin < 20 ? 'text-orange-600' : 'text-gray-800'
                           }`}>
-                            {mr.toFixed(1)}%
+                            {mny.margin.toFixed(1)}%
                           </span>
                         )}
                       </td>

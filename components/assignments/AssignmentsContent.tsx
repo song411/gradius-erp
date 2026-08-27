@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { db } from '@/lib/supabase/api'
 import type { Inquiry, Assignment, EstimateItem, Estimate, Staff } from '@/lib/supabase/types'
 import { formatKRW, formatDate } from '@/lib/utils'
@@ -20,6 +21,10 @@ import AnnounceModal from './AnnounceModal'
 import ProjectMemoPanel from '@/components/memos/ProjectMemoPanel'
 import CrewProfileCard from '@/components/staff/CrewProfileCard'
 import ScheduleView from './ScheduleView'
+// 직무명 정규화 규칙은 운영 캘린더와 같은 것을 쓴다. 캘린더는 '행사스탭(주중)'처럼
+// 쪼개진 견적 직무를 '행사스탭'으로 묶어 보여주므로, 그 이름으로 링크를 타고 들어오면
+// 여기 슬롯 키(견적 role_name 원본)와 정확히 맞지 않는다.
+import { normJob } from '@/components/schedule/matrixCore'
 import { toast } from 'sonner'
 import { DndContext, DragEndEvent, useDraggable, useDroppable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
@@ -245,12 +250,20 @@ function DraggableStaffCard({ staff }: { staff: Staff }) {
 }
 
 // ── 드롭 가능한 슬롯 영역 ─────────────────────────────
-function DroppableSlot({ jobType, children }: { jobType: string; children: React.ReactNode }) {
+function DroppableSlot({ jobType, highlight, children }: {
+  jobType: string; highlight?: boolean; children: React.ReactNode
+}) {
   const { setNodeRef, isOver } = useDroppable({ id: `slot-${jobType}` })
   return (
     <div
       ref={setNodeRef}
-      className={`rounded-xl border-2 transition-colors ${isOver ? 'border-blue-400 bg-blue-50/40' : 'border-transparent'}`}
+      // 운영 캘린더에서 직무를 지정해 들어왔을 때 스크롤 대상 (getElementById)
+      id={`slot-${jobType}`}
+      className={`rounded-xl border-2 transition-colors ${
+        isOver     ? 'border-blue-400 bg-blue-50/40'
+        : highlight ? 'border-blue-500 bg-blue-50/50 ring-2 ring-blue-200'
+        : 'border-transparent'
+      }`}
     >
       {children}
     </div>
@@ -258,6 +271,14 @@ function DroppableSlot({ jobType, children }: { jobType: string; children: React
 }
 
 export default function AssignmentsContent() {
+  // 운영 캘린더(/schedule)의 '배정 인원' 칸에서 넘어올 때 쓰는 딥링크
+  const searchParams = useSearchParams()
+  const deepInq = searchParams.get('inq')
+  const deepJob = searchParams.get('job')
+  const deepInqDone = useRef<string | null>(null)
+  const deepJobDone = useRef<string | null>(null)
+  const [flashJob, setFlashJob] = useState<string | null>(null)
+
   const [inquiries, setInquiries]     = useState<Inquiry[]>([])
   const [selectedInq, setSelectedInq] = useState<Inquiry | null>(null)
   const [showRecommend, setShowRecommend] = useState(false)
@@ -348,6 +369,50 @@ export default function AssignmentsContent() {
 
   useEffect(() => { loadInquiries() }, [loadInquiries])
   useEffect(() => { loadCompanyStaff() }, [loadCompanyStaff])
+
+  // ?inq=<행사id> 로 들어오면 그 행사를 자동 선택한다.
+  // 좌측 목록은 체결/배정완료/진행중만 불러오므로 완료·정산완료 행사로 들어오면
+  // 목록에 없다. 그때는 단건 조회해서 목록 앞에 끼워 넣는다 — 링크를 타고 왔는데
+  // 빈 화면이 뜨면 실무자는 배정이 사라진 줄로 읽는다.
+  useEffect(() => {
+    if (!deepInq || loading) return
+    if (deepInqDone.current === deepInq) return
+    deepInqDone.current = deepInq
+
+    const hit = inquiries.find(i => i.id === deepInq)
+    if (hit) { Promise.resolve().then(() => setSelectedInq(hit)); return }
+
+    db.single<Inquiry>('inquiries', deepInq)
+      .then(one => {
+        if (!one) { toast.error('링크의 행사를 찾을 수 없습니다.'); return }
+        setInquiries(prev => prev.some(i => i.id === one.id) ? prev : [one, ...prev])
+        setSelectedInq(one)
+        toast.info(`${one.event_name || '행사'} — ${one.status} 상태라 목록 기본 조건에는 없는 행사입니다.`)
+      })
+      .catch(e => toast.error('행사 조회 실패: ' + (e as Error).message))
+  }, [deepInq, loading, inquiries])
+
+  // ?job=<직무명> 이면 그 슬롯으로 스크롤하고 잠깐 테두리를 준다.
+  // 캘린더가 묶어 보여준 이름(행사스탭)은 여기 슬롯 키(행사스탭(주중))와
+  // 정확히 맞지 않으므로 정규화 이름으로 한 번 더 찾는다.
+  useEffect(() => {
+    if (!deepJob || loadingDetail || slots.length === 0) return
+    const key = `${deepInq}|${deepJob}`
+    if (deepJobDone.current === key) return
+    deepJobDone.current = key
+
+    const target = slots.find(g => g.jobType === deepJob)
+      ?? slots.find(g => normJob(g.jobType) === normJob(deepJob))
+    if (!target) return
+
+    const raf = requestAnimationFrame(() => {
+      setFlashJob(target.jobType)
+      document.getElementById(`slot-${target.jobType}`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+    const timer = setTimeout(() => setFlashJob(null), 2600)
+    return () => { cancelAnimationFrame(raf); clearTimeout(timer) }
+  }, [deepJob, deepInq, loadingDetail, slots])
 
   // 문의 선택 → 상세 로드 (견적 품목 + 기존 배정)
   const loadDetail = useCallback(async (inq: Inquiry) => {
@@ -1138,7 +1203,11 @@ export default function AssignmentsContent() {
                   const isFull = group.required > 0 && activeCount >= group.required
                   const isOver = group.required > 0 && activeCount > group.required
                   return (
-                    <DroppableSlot key={group.jobType} jobType={group.jobType}>
+                    <DroppableSlot
+                      key={group.jobType}
+                      jobType={group.jobType}
+                      highlight={flashJob === group.jobType}
+                    >
                     <Card className="overflow-hidden">
                       {/* 그룹 헤더 */}
                       <div className={`flex items-center gap-3 px-4 py-2.5 border-b border-gray-100 ${isFull ? 'bg-green-50' : 'bg-gray-50'}`}>
