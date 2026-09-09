@@ -68,7 +68,8 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
     },
   ])
   const [input, setInput] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(false)      // 요청 시작 ~ 종료 (입력 잠금)
+  const [streaming, setStreaming] = useState(false)  // 첫 글자가 도착한 뒤
   const [error, setError] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -86,6 +87,7 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
     const newMessages: Message[] = [...messages, { role: 'user', content: userText }]
     setMessages(newMessages)
     setLoading(true)
+    setStreaming(false)
 
     try {
       const res = await fetch('/api/ai', {
@@ -93,9 +95,56 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: newMessages }),
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'AI 응답 오류')
-      setMessages(prev => [...prev, { role: 'assistant', content: data.reply }])
+
+      if (!res.ok || !res.body) {
+        const data = await res.json().catch(() => null)
+        throw new Error(data?.error || 'AI 응답 오류')
+      }
+
+      // NDJSON 스트림 — 한 줄에 이벤트 하나 ({type:'text'|'error'|'done'})
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let answer = ''
+      let started = false
+
+      const paint = () => {
+        if (!started) {
+          started = true
+          setStreaming(true)
+          setMessages(prev => [...prev, { role: 'assistant', content: answer }])
+        } else {
+          setMessages(prev => {
+            const next = [...prev]
+            next[next.length - 1] = { role: 'assistant', content: answer }
+            return next
+          })
+        }
+      }
+
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''   // 마지막 조각은 다음 청크와 이어붙인다
+
+        for (const line of lines) {
+          if (!line.trim()) continue
+          let evt: { type: string; text?: string; error?: string }
+          try { evt = JSON.parse(line) } catch { continue }
+
+          if (evt.type === 'text' && evt.text) {
+            answer += evt.text
+            paint()
+          } else if (evt.type === 'error') {
+            throw new Error(evt.error || 'AI 응답 오류')
+          }
+        }
+      }
+
+      if (!started) throw new Error('응답을 받지 못했습니다.')
     } catch (err) {
       const msg = err instanceof Error ? err.message : '알 수 없는 오류'
       setError(msg)
@@ -105,6 +154,7 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
       }])
     } finally {
       setLoading(false)
+      setStreaming(false)
       setTimeout(() => inputRef.current?.focus(), 100)
     }
   }
@@ -142,7 +192,7 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
           </div>
           <div className="flex-1 min-w-0">
             <h2 className="text-white font-bold text-base leading-tight">가디어스 AI 업무 도우미</h2>
-            <p className="text-violet-200 text-xs mt-0.5">LLaMA 3.3 70B (Groq) · 실시간 ERP 데이터 연동</p>
+            <p className="text-violet-200 text-xs mt-0.5">Claude Opus 5 · 실시간 ERP 데이터 연동</p>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -169,7 +219,7 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
             ))}
           </AnimatePresence>
 
-          {loading && (
+          {loading && !streaming && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
