@@ -1,5 +1,5 @@
 import Header from '@/components/layout/Header'
-import ScheduleMatrixContent from '@/components/schedule/ScheduleMatrixContent'
+import ScheduleWorkspace from '@/components/schedule/ScheduleWorkspace'
 
 export default function SchedulePage() {
   return (
@@ -9,7 +9,7 @@ export default function SchedulePage() {
         subtitle="날짜별 청구·지급 단가와 배정 인원을 한 화면에서 확인합니다"
       />
       <div className="flex-1 overflow-hidden">
-        <ScheduleMatrixContent />
+        <ScheduleWorkspace />
       </div>
     </div>
   )

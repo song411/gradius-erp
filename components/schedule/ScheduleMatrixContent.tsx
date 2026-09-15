@@ -1,36 +1,18 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import {
-  ChevronLeft, ChevronRight, AlertTriangle, Download, Search, X, CalendarDays,
-  ExternalLink,
-} from 'lucide-react'
+import { AlertTriangle, Download, CalendarDays, ExternalLink } from 'lucide-react'
 import { toast } from 'sonner'
-import { db } from '@/lib/supabase/api'
-import type { Assignment, Estimate, EstimateItem, Inquiry } from '@/lib/supabase/types'
-import { Input } from '@/components/ui/input'
-import EventDetailPanel from './EventDetailPanel'
+import type { Assignment, Inquiry } from '@/lib/supabase/types'
 import { StickyNote } from 'lucide-react'
 import {
-  CONTRACTED_STATUSES, CONFIG_TAG, DOW, EMPTY_CONFIG,
-  type JobBase, type JobCell, type MemoRecord,
-  pad, fmt, todayLocal, cleanStaffName, parseConfigs, buildJobs, makeCell, splitByDate, coversDate,
+  type JobBase, type JobCell,
+  pad, fmt, cleanStaffName, makeCell, coversDate,
   cellState, STATE_STYLE, STATUS_CHIP, actualPayRate, jobMoney, type JobMoney,
 } from './matrixCore'
-
-// ─── 화면 전용 타입 ───────────────────────────────────────
-interface EventBase {
-  inq: Inquiry
-  jobs: JobBase[]
-  hasFinalEstimate: boolean
-  discountLabel: string | null   // 할인이 걸려 있으면 청구단가에 주의 표시
-  memoCount: number              // 스케줄 설정 레코드를 뺀 실제 메모 수
-  latestMemo: string | null      // 가장 최근 메모 한 줄 (툴팁)
-  /** 어느 견적 직무에도 붙지 못한 배정 인원 수.
-   *  이 인원이 있으면 다른 직무의 '미배정'은 사람이 없다는 뜻이 아니다. */
-  unassignedJob: number
-}
+import { md, dowOf, isWeekend, dayDiff, compressDates } from './dateUtils'
+import type { EventBase, ScheduleData } from './useScheduleData'
 
 /** 행사 × 직무의 "편성이 동일한 연속 구간" 한 줄.
  *  배정에 work_dates를 지정하지 않으면 전체기간 투입으로 처리되므로,
@@ -45,36 +27,6 @@ interface Run {
   days: number
   hasToday: boolean
   allWeekend: boolean
-}
-
-interface Conflict {
-  name: string
-  events: string[]
-  dates: string[]
-}
-
-// ─── 날짜 표기 ────────────────────────────────────────────
-const md = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`
-const dowOf = (d: string) => DOW[new Date(d + 'T00:00:00').getDay()]
-const isWeekend = (d: string) => {
-  const g = new Date(d + 'T00:00:00').getDay()
-  return g === 0 || g === 6
-}
-const dayDiff = (a: string, b: string) =>
-  (new Date(b + 'T00:00:00').getTime() - new Date(a + 'T00:00:00').getTime()) / 86400000
-
-/** ['2026-08-01','2026-08-02','2026-08-05'] → '8/1–8/2, 8/5' */
-function compressDates(dates: string[]): string {
-  const sorted = [...dates].sort()
-  const out: string[] = []
-  let i = 0
-  while (i < sorted.length) {
-    let j = i
-    while (j + 1 < sorted.length && dayDiff(sorted[j], sorted[j + 1]) === 1) j++
-    out.push(i === j ? md(sorted[i]) : `${md(sorted[i])}–${md(sorted[j])}`)
-    i = j + 1
-  }
-  return out.join(', ')
 }
 
 // ─── 인력 칩 ─────────────────────────────────────────────
@@ -150,149 +102,27 @@ function Th({
 }
 
 // ═════════════════════════════════════════════════════════
-export default function ScheduleMatrixContent() {
-  const now = new Date()
-  const [year,  setYear]  = useState(now.getFullYear())
-  const [month, setMonth] = useState(now.getMonth())   // 0-indexed
+interface Props {
+  year: number
+  month: number
+  today: string
+  data: ScheduleData
+  query: string
+  onlyProblem: boolean
+  onOpenDetail: (inq: Inquiry) => void
+}
 
-  const [inquiries, setInquiries] = useState<Inquiry[]>([])
-  const [events,    setEvents]    = useState<EventBase[]>([])
-  const [loadingInq,   setLoadingInq]   = useState(true)
-  const [loadingMonth, setLoadingMonth] = useState(false)
+/** 운영 캘린더 '표' 뷰.
+ *  조회·검색·월이동은 상위(ScheduleWorkspace)가 맡고, 여기서는 받은 데이터를
+ *  구간(Run) 단위로 펼쳐 그리는 일만 한다. */
+export default function ScheduleMatrixContent({
+  year, month, today, data, query, onlyProblem, onOpenDetail,
+}: Props) {
+  const { events, monthInqs, monthDates, conflicts, busy } = data
 
-  const [query,       setQuery]       = useState('')
-  const [onlyProblem, setOnlyProblem] = useState(false)
-  const [expandDays,  setExpandDays]  = useState(false)
-  const [detailInq,   setDetailInq]   = useState<Inquiry | null>(null)
-  const [exporting,   setExporting]   = useState(false)
-
-  const monthKey = `${year}-${pad(month + 1)}`
-  const today    = todayLocal()
-
-  const monthDates = useMemo(() => {
-    const lastDay = new Date(year, month + 1, 0).getDate()
-    return Array.from({ length: lastDay }, (_, i) => `${monthKey}-${pad(i + 1)}`)
-  }, [year, month, monthKey])
-
-  // ── 행사 전체 1회 조회 (월 이동 시 재조회 불필요) ──────
-  useEffect(() => {
-    let alive = true
-    ;(async () => {
-      try {
-        const rows = await db.list<Inquiry>('inquiries', { order: 'event_start', asc: false })
-        if (alive) setInquiries(rows)
-      } catch (e) {
-        toast.error('행사 조회 실패: ' + (e as Error).message)
-      } finally {
-        if (alive) setLoadingInq(false)
-      }
-    })()
-    return () => { alive = false }
-  }, [])
-
-  // ── 이 달에 걸쳐 있는 체결 이상 행사 ────────────────────
-  const monthInqs = useMemo(() => inquiries.filter(inq => {
-    if (!CONTRACTED_STATUSES.includes(inq.status)) return false
-    if (!inq.event_start) return false
-    const s = inq.event_start.substring(0, 7)
-    const e = inq.event_end ? inq.event_end.substring(0, 7) : s
-    return s <= monthKey && monthKey <= e
-  }), [inquiries, monthKey])
-
-  // ── 월 단위 상세 조회 (견적 / 배정 / 스케줄설정) ────────
-  // 대상 행사 id로 in 필터를 걸어 4개 쿼리로 끝낸다 (행사별 개별 조회 = N+1 금지)
-  const loadMonth = useCallback(async (inqs: Inquiry[]) => {
-    if (inqs.length === 0) { setEvents([]); return }
-    setLoadingMonth(true)
-    try {
-      const ids = inqs.map(i => i.id)
-
-      const [ests, assigns, memos] = await Promise.all([
-        db.list<Estimate>('estimates',       { inFilter: { inquiry_id: ids }, order: 'created_at', asc: false }),
-        db.list<Assignment>('assignments',   { inFilter: { inquiry_id: ids }, order: 'assigned_at', asc: true }),
-        db.list<MemoRecord>('project_memos', { inFilter: { inquiry_id: ids }, order: 'created_at', asc: true })
-          .catch(() => [] as MemoRecord[]),
-      ])
-
-      // 행사별 최종 확정 견적 (is_final, created_at desc 정렬이므로 첫 건이 최신)
-      const finalByInq = new Map<string, Estimate>()
-      ests.forEach(e => {
-        if (!e.is_final || !e.inquiry_id) return
-        if (!finalByInq.has(e.inquiry_id)) finalByInq.set(e.inquiry_id, e)
-      })
-
-      const finalIds = [...finalByInq.values()].map(e => e.id)
-      const items = finalIds.length
-        ? await db.list<EstimateItem>('estimate_items', {
-            inFilter: { estimate_id: finalIds }, order: 'sort_order', asc: true,
-          })
-        : []
-
-      const itemsByEst = new Map<string, EstimateItem[]>()
-      items.forEach(it => {
-        if (!it.estimate_id) return
-        const arr = itemsByEst.get(it.estimate_id)
-        if (arr) arr.push(it); else itemsByEst.set(it.estimate_id, [it])
-      })
-
-      const asgnByInq = new Map<string, Assignment[]>()
-      assigns.filter(a => a.status !== '취소').forEach(a => {
-        if (!a.inquiry_id) return
-        const arr = asgnByInq.get(a.inquiry_id)
-        if (arr) arr.push(a); else asgnByInq.set(a.inquiry_id, [a])
-      })
-
-      const cfgByInq = parseConfigs(memos)
-
-      // 메모 표시용 집계 — 스케줄 설정 레코드는 메모가 아니므로 제외
-      const memoByInq = new Map<string, { count: number; latest: string }>()
-      memos.forEach(m => {
-        if (!m.content || m.content.startsWith(CONFIG_TAG)) return
-        const cur = memoByInq.get(m.inquiry_id)
-        if (cur) cur.count += 1
-        else memoByInq.set(m.inquiry_id, { count: 1, latest: m.content })
-      })
-
-      const built: EventBase[] = inqs.map(inq => {
-        const est  = finalByInq.get(inq.id)
-        const its  = est ? (itemsByEst.get(est.id) ?? []) : []
-        const cfg  = cfgByInq.get(inq.id) ?? EMPTY_CONFIG
-        const disc = est && est.discount_type && est.discount_type !== 'none' && (est.discount_value ?? 0) > 0
-          ? (est.discount_label
-              || (est.discount_type === 'percentage'
-                    ? `${est.discount_value}% 할인`
-                    : `${fmt(est.discount_value ?? 0)}원 할인`))
-          : null
-        const memo = memoByInq.get(inq.id)
-        const jobs = buildJobs(its, asgnByInq.get(inq.id) ?? [], cfg)
-        return {
-          inq,
-          jobs,
-          unassignedJob: jobs.filter(g => g.unmatched)
-            .reduce((n, g) => n + g.assignments.length, 0),
-          hasFinalEstimate: !!est,
-          discountLabel: disc,
-          memoCount: memo?.count ?? 0,
-          latestMemo: memo?.latest ?? null,
-        }
-      })
-
-      setEvents(built)
-    } catch (e) {
-      toast.error('상세 조회 실패: ' + (e as Error).message)
-      setEvents([])
-    } finally {
-      setLoadingMonth(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (loadingInq) return
-    let alive = true
-    // 마이크로태스크로 미뤄 effect 동기 구간에서 setState하지 않는다
-    Promise.resolve().then(() => { if (alive) loadMonth(monthInqs) })
-    return () => { alive = false }
-  }, [monthInqs, loadingInq, loadMonth])
+  // 표에만 있는 설정 — 달력에는 '구간' 개념이 없으므로 여기 둔다
+  const [expandDays, setExpandDays] = useState(false)
+  const [exporting,  setExporting]  = useState(false)
 
   // ── 구간(Run) 생성 ──────────────────────────────────────
   const runs = useMemo<Run[]>(() => {
@@ -361,82 +191,6 @@ export default function ScheduleMatrixContent() {
       return hay.includes(q)
     })
   }, [runs, query, onlyProblem])
-
-  // ── 중복배정 (날짜 단위로만 판정 가능하므로 별도 집계) ──
-  const conflicts = useMemo<Conflict[]>(() => {
-    // (크루, 행사조합) → 날짜 목록
-    const acc = new Map<string, Conflict>()
-    monthDates.forEach(date => {
-      const where = new Map<string, Set<string>>()
-      events.forEach(ev => {
-        if (!coversDate(ev.inq.event_start, ev.inq.event_end, date)) return
-        const title = ev.inq.event_name || ev.inq.company_name || '(무제)'
-        ev.jobs.forEach(job => {
-          const { pinned, allPeriod } = splitByDate(job.assignments, date)
-          for (const a of [...pinned, ...allPeriod]) {
-            const name = cleanStaffName(a.staff_name)
-            if (name === '(미상)') continue
-            const set = where.get(name) ?? new Set<string>()
-            set.add(title)
-            where.set(name, set)
-          }
-        })
-      })
-      where.forEach((set, name) => {
-        if (set.size < 2) return
-        const evs = [...set].sort()
-        const key = `${name}|${evs.join('|')}`
-        const cur = acc.get(key)
-        if (cur) cur.dates.push(date)
-        else acc.set(key, { name, events: evs, dates: [date] })
-      })
-    })
-    return [...acc.values()].sort((a, b) => a.dates[0].localeCompare(b.dates[0]))
-  }, [events, monthDates])
-
-  // ── 월 요약 ─────────────────────────────────────────────
-  const summary = useMemo(() => {
-    let required = 0, filled = 0, gaps = 0
-    visibleRuns.forEach(r => {
-      required += r.cell.job.required
-      filled   += r.cell.total
-      const st = cellState(r.cell.total, r.cell.job.required)
-      if (st === 'none' || st === 'short') gaps += 1
-    })
-
-    // 금액은 직무 단위(행사 전체 기준)라서 같은 직무가 여러 구간으로 쪼개져 있다.
-    // 구간마다 더하면 같은 금액이 몇 번씩 잡히므로 (행사 × 직무)로 한 번만 센다.
-    const seen = new Set<string>()
-    let billTotal = 0, payTotal = 0
-    // 마진은 지급액이 다 들어간 직무만 모아서 낸다. 미배정·단가미입력 직무를 섞으면
-    // 지급 0원이 그대로 더해져 "이 달 마진 76%" 같은 헛수치가 나온다.
-    let billOk = 0, payOk = 0, okCount = 0, untrusted = 0
-    visibleRuns.forEach(r => {
-      const k = `${r.base.inq.id}|${r.cell.job.jobType}`
-      if (seen.has(k)) return
-      seen.add(k)
-      const m = jobMoney(r.cell.job)
-      billTotal += m.billTotal
-      payTotal  += m.payTotal
-      if (m.trust === 'ok') { billOk += m.billTotal; payOk += m.payTotal; okCount += 1 }
-      else if (m.billTotal > 0) untrusted += 1
-    })
-
-    return {
-      eventCount: new Set(visibleRuns.map(r => r.base.inq.id)).size,
-      runCount: visibleRuns.length,
-      required, filled, gaps,
-      billTotal, payTotal, untrusted,
-      okCount,
-      marginOk: billOk > 0 ? ((billOk - payOk) / billOk) * 100 : null,
-      jobCount: seen.size,
-    }
-  }, [visibleRuns])
-
-  // ── 월 이동 ─────────────────────────────────────────────
-  const prevMonth = () => { if (month === 0) { setMonth(11); setYear(y => y - 1) } else setMonth(m => m - 1) }
-  const nextMonth = () => { if (month === 11) { setMonth(0); setYear(y => y + 1) } else setMonth(m => m + 1) }
-  const goToday   = () => { const d = new Date(); setYear(d.getFullYear()); setMonth(d.getMonth()) }
 
   // ── 엑셀 내보내기 ───────────────────────────────────────
   async function exportExcel() {
@@ -531,155 +285,37 @@ export default function ScheduleMatrixContent() {
     }
   }
 
-  const busy = loadingInq || loadingMonth
-
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* ── 툴바 ── */}
-      <div className="shrink-0 px-4 py-3 border-b border-gray-200 bg-white">
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex items-center gap-1">
-            <button onClick={prevMonth} className="p-1.5 rounded hover:bg-gray-100 text-gray-500" title="이전 달">
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <span className="text-base font-bold text-gray-900 tabular-nums min-w-[110px] text-center">
-              {year}년 {month + 1}월
-            </span>
-            <button onClick={nextMonth} className="p-1.5 rounded hover:bg-gray-100 text-gray-500" title="다음 달">
-              <ChevronRight className="h-4 w-4" />
-            </button>
-            <button
-              onClick={goToday}
-              className="ml-1 text-xs px-2 py-1 rounded border border-gray-200 text-gray-500 hover:border-gray-400"
-            >
-              오늘
-            </button>
-          </div>
-
-          <div className="flex items-center gap-2 text-xs flex-wrap">
-            <span className="px-2 py-1 rounded-full bg-gray-100 text-gray-600 font-medium">
-              행사 {summary.eventCount}건 · {summary.runCount}개 구간
-            </span>
-            <span className="px-2 py-1 rounded-full bg-blue-50 text-blue-700 font-medium">
-              배정 {summary.filled} / 필요 {summary.required}명
-            </span>
-            {summary.billTotal > 0 && (
-              <span
-                className="px-2 py-1 rounded-full bg-gray-100 text-gray-700 font-medium tabular-nums"
-                title={`표에 보이는 직무 ${summary.jobCount}건의 금액 합계입니다. `
-                  + '금액은 직무 단위(행사 전체 기준)이므로 같은 직무가 여러 구간으로 나뉘어도 한 번만 셉니다. '
-                  + '이 달에 발생하는 금액이 아니라, 표에 나온 직무들의 행사 전체 금액입니다. '
-                  + `마진은 지급액이 다 들어간 ${summary.okCount}건만 모아서 낸 값입니다`
-                  + (summary.untrusted > 0
-                      ? ` — 미배정이거나 단가가 덜 들어간 ${summary.untrusted}건은 빠져 있습니다.`
-                      : '.')}
-              >
-                청구 {fmt(summary.billTotal)} · 지급 {fmt(summary.payTotal)}
-                {summary.marginOk !== null && (
-                  <span className="ml-1 text-gray-500">
-                    · 마진 {summary.marginOk.toFixed(1)}%
-                    <span className="text-gray-400"> ({summary.okCount}건)</span>
-                  </span>
-                )}
-                {summary.untrusted > 0 && (
-                  <span className="ml-1 text-amber-600 font-semibold">참고 {summary.untrusted}건</span>
-                )}
-              </span>
-            )}
-            {summary.gaps > 0 && (
-              <span className="px-2 py-1 rounded-full bg-yellow-100 text-yellow-800 font-semibold">
-                미충족 {summary.gaps}건
-              </span>
-            )}
-            {conflicts.length > 0 && (
-              <span className="px-2 py-1 rounded-full bg-red-100 text-red-700 font-semibold inline-flex items-center gap-1">
-                <AlertTriangle className="h-3 w-3" /> 중복배정 {conflicts.length}건
-              </span>
-            )}
-          </div>
-
-          <div className="ml-auto flex items-center gap-2">
-            <div className="relative">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
-              <Input
-                value={query}
-                onChange={e => setQuery(e.target.value)}
-                placeholder="행사 · 고객사 · 크루 이름"
-                className="h-8 pl-7 pr-7 text-xs w-56"
-              />
-              {query && (
-                <button
-                  onClick={() => setQuery('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-            <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none whitespace-nowrap">
-              <input
-                type="checkbox"
-                checked={onlyProblem}
-                onChange={e => setOnlyProblem(e.target.checked)}
-                className="accent-blue-600"
-              />
-              미충족만
-            </label>
-            <label
-              className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none whitespace-nowrap"
-              title="끄면 편성이 같은 연속 날짜를 한 줄로 묶습니다. 켜면 하루씩 모두 펼칩니다."
-            >
-              <input
-                type="checkbox"
-                checked={expandDays}
-                onChange={e => setExpandDays(e.target.checked)}
-                className="accent-blue-600"
-              />
-              하루씩 펼치기
-            </label>
-            <button
-              onClick={exportExcel}
-              disabled={exporting || busy}
-              className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:border-gray-400 disabled:opacity-40"
-            >
-              <Download className="h-3.5 w-3.5" />
-              {exporting ? '생성 중…' : '엑셀'}
-            </button>
-          </div>
-        </div>
+      {/* ── 표 전용 툴바 ── (월 이동·검색·필터는 상위 워크스페이스에 있다) */}
+      <div className="shrink-0 px-4 py-2 border-b border-gray-200 bg-white flex items-center gap-2 flex-wrap">
+        <span className="text-[11px] text-gray-400">
+          행사 {new Set(visibleRuns.map(r => r.base.inq.id)).size}건 · {visibleRuns.length}개 구간
+        </span>
+        <label
+          className="ml-auto flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none whitespace-nowrap"
+          title="끄면 편성이 같은 연속 날짜를 한 줄로 묶습니다. 켜면 하루씩 모두 펼칩니다."
+        >
+          <input
+            type="checkbox"
+            checked={expandDays}
+            onChange={e => setExpandDays(e.target.checked)}
+            className="accent-blue-600"
+          />
+          하루씩 펼치기
+        </label>
+        <button
+          onClick={exportExcel}
+          disabled={exporting || busy}
+          className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:border-gray-400 disabled:opacity-40"
+        >
+          <Download className="h-3.5 w-3.5" />
+          {exporting ? '생성 중…' : '엑셀'}
+        </button>
       </div>
 
       {/* ── 본문 ── */}
       <div className="flex-1 min-h-0 overflow-auto p-4 space-y-3">
-        {/* 중복배정 경고 — 날짜 단위 판정이므로 표와 별도로 항상 보여준다 */}
-        {!busy && conflicts.length > 0 && (
-          <div className="rounded-xl border-2 border-red-200 bg-red-50 p-3">
-            <div className="flex items-center gap-1.5 text-xs font-extrabold text-red-700 mb-2">
-              <AlertTriangle className="h-4 w-4" />
-              같은 날 두 곳에 배정된 크루 {conflicts.length}건
-            </div>
-            <div className="grid gap-x-3 gap-y-1 text-[11px]"
-              style={{ gridTemplateColumns: 'minmax(0,max-content) minmax(0,max-content) minmax(0,1fr)' }}
-            >
-              {conflicts.map(cf => (
-                <div key={`${cf.name}|${cf.events.join('|')}`} className="contents">
-                  <span className="font-bold text-red-800 truncate max-w-[160px]" title={cf.name}>
-                    {cf.name}
-                  </span>
-                  <span className="text-red-700 tabular-nums whitespace-nowrap">
-                    {compressDates(cf.dates)}
-                  </span>
-                  <span className="text-red-600 min-w-0">{cf.events.join('  ↔  ')}</span>
-                </div>
-              ))}
-            </div>
-            <p className="text-[10px] text-red-500 mt-2">
-              배정에 근무일(work_dates)이 지정되지 않은 인력은 행사 전체 기간에 투입된 것으로 계산됩니다.
-              실제로는 날짜가 갈리는 경우라면 인원배정 화면에서 날짜를 지정해 주세요.
-            </p>
-          </div>
-        )}
-
         {busy ? (
           <div className="flex items-center justify-center h-40 text-sm text-gray-400">불러오는 중…</div>
         ) : visibleRuns.length === 0 ? (
@@ -792,7 +428,7 @@ export default function ScheduleMatrixContent() {
                             className="align-top px-2 py-2 border-r border-gray-200 bg-gray-50/60"
                           >
                             <button
-                              onClick={() => setDetailInq(r.base.inq)}
+                              onClick={() => onOpenDetail(r.base.inq)}
                               className="text-left font-semibold text-gray-800 hover:text-blue-600 hover:underline leading-tight"
                               title="클릭하면 이 행사의 모든 정보를 봅니다"
                             >
@@ -1060,10 +696,6 @@ export default function ScheduleMatrixContent() {
         )}
       </div>
 
-      {/* ── 상세 패널 ── */}
-      {detailInq && (
-        <EventDetailPanel inquiry={detailInq} onClose={() => setDetailInq(null)} />
-      )}
     </div>
   )
 }
