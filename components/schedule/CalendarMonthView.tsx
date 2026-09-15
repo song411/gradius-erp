@@ -136,9 +136,10 @@ export default function CalendarMonthView({
   const maxLanes = MAX_LANES[prefs.density]
 
   return (
-    <div className="rounded-xl border-2 border-gray-200 bg-white overflow-hidden">
+    /* overflow-hidden 을 쓰지 않는다 — 막대 호버 요약이 칸 밖으로 나가므로 잘린다 */
+    <div className="rounded-xl border-2 border-gray-200 bg-white">
       {/* ── 요일 머리 ── */}
-      <div className="grid grid-cols-7 border-b-2 border-gray-300 bg-gray-100">
+      <div className="grid grid-cols-7 border-b-2 border-gray-300 bg-gray-100 rounded-t-[10px]">
         {['일', '월', '화', '수', '목', '금', '토'].map((d, i) => (
           <div
             key={d}
@@ -361,12 +362,72 @@ function EventBar({
   return (
     <div
       style={{ gridColumn: `${seg.c0 + 1} / ${seg.c1 + 2}` , gridRow: row }}
-      className="relative z-10 px-1 pb-0.5 min-w-0"
+      className="relative z-10 hover:z-30 px-1 pb-0.5 min-w-0 group/bar"
     >
+      {/* 호버 요약 — 클릭(상세 패널)은 무거우므로, 훑어볼 때는 올리기만 해도 읽히게 한다.
+          간략 밀도에서 특히 중요하다: 막대에 행사명밖에 없기 때문이다. */}
+      <div
+        className="pointer-events-none absolute z-30 left-1 top-full mt-1 w-64 hidden group-hover/bar:block"
+        role="tooltip"
+      >
+        <div className="rounded-lg border border-gray-300 bg-white shadow-lg p-2 space-y-1">
+          <div className="text-[11px] font-bold text-gray-900 leading-tight">
+            {inq.event_name || inq.company_name || '(무제)'}
+          </div>
+          <div className="text-[10px] text-gray-500 tabular-nums">
+            {inq.event_start?.substring(5, 10)}
+            {inq.event_end && inq.event_end !== inq.event_start
+              ? ` ~ ${inq.event_end.substring(5, 10)}` : ''}
+            <span className="ml-1 px-1 rounded bg-gray-100 text-gray-600">{inq.status}</span>
+          </div>
+          {inq.company_name && (
+            <div className="text-[10px] text-gray-600">{inq.company_name}</div>
+          )}
+          {st.reqMax > 0 && (
+            <div className={`text-[10px] font-semibold ${short ? 'text-red-600' : 'text-gray-600'}`}>
+              배정 {range(st.filMin, st.filMax)} / 필요 {range(st.reqMin, st.reqMax)}명
+              {short && ` · 부족한 날 ${st.gapDays}일`}
+            </div>
+          )}
+          {clash && (
+            <div className="text-[10px] font-semibold text-red-600">
+              중복배정 있는 날 {st.conflictDays}일
+            </div>
+          )}
+          {(inq.location || inq.event_time) && (
+            <div className="text-[10px] text-gray-500">
+              {[inq.event_time, inq.location].filter(Boolean).join(' · ')}
+            </div>
+          )}
+          {!!money && (
+            <div className="text-[10px] text-gray-600 tabular-nums">
+              청구 {fmt(money)}원 <span className="text-gray-400">(행사 전체)</span>
+            </div>
+          )}
+          {st.crewCount > 0 && (
+            <div className="text-[10px] text-gray-500">
+              크루 {st.crewCount}명{st.crewVaries ? ' · 날짜별 다름' : ''}
+              {!st.crewVaries && st.crew.length > 0 && (
+                <span className="text-gray-400"> · {st.crew.slice(0, 5).join(', ')}
+                  {st.crew.length > 5 ? ` 외 ${st.crew.length - 5}` : ''}</span>
+              )}
+            </div>
+          )}
+          {ev.memoCount > 0 && ev.latestMemo && (
+            <div className="text-[10px] text-amber-700 bg-amber-50 rounded px-1 py-0.5 line-clamp-2">
+              {ev.latestMemo}
+            </div>
+          )}
+          <div className="text-[9px] text-gray-400 pt-0.5 border-t border-gray-100">
+            클릭하면 전체 정보가 열립니다
+          </div>
+        </div>
+      </div>
+
       <button
         type="button"
         onClick={() => onOpenDetail(inq)}
-        title={title}
+        aria-label={title}
         className={`w-full text-left border px-1.5 py-1 min-w-0 transition
           hover:brightness-95 hover:shadow-sm cursor-pointer
           ${tone.bar}

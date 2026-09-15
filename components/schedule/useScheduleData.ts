@@ -13,9 +13,8 @@ import type { Assignment, Estimate, EstimateItem, Inquiry } from '@/lib/supabase
 import {
   CONTRACTED_STATUSES, CONFIG_TAG, EMPTY_CONFIG,
   type JobBase, type MemoRecord,
-  pad, fmt, cleanStaffName, parseConfigs, buildJobs, splitByDate, coversDate,
+  fmt, cleanStaffName, parseConfigs, buildJobs, splitByDate, coversDate, getDateRange,
 } from './matrixCore'
-import { monthDatesOf } from './dateUtils'
 
 // ─── 타입 ─────────────────────────────────────────────────
 export interface EventBase {
@@ -39,24 +38,29 @@ export interface Conflict {
 export interface ScheduleData {
   inquiries: Inquiry[]
   events: EventBase[]
-  monthInqs: Inquiry[]
-  monthDates: string[]
+  /** 이 범위에 걸친 체결 이상 행사 */
+  rangeInqs: Inquiry[]
+  /** 조회한 날짜 전체 (from ~ to) */
+  rangeDates: string[]
   conflicts: Conflict[]
   /** 중복배정이 발생한 날짜 집합. 달력 칸에 경고를 찍는 데 쓴다. */
   conflictDates: Set<string>
   busy: boolean
-  monthKey: string
 }
 
 // ═════════════════════════════════════════════════════════
-export function useScheduleData(year: number, month: number): ScheduleData {
+/** 날짜 범위로 조회한다 (월이 아니라).
+ *
+ *  월 단위로 조회하면 달력 격자의 앞뒤 칸(9월 격자의 8/30·8/31)에 걸친 행사가
+ *  빠지고, 주가 달을 넘나드는 주간 뷰는 아예 성립하지 않는다.
+ *  화면에 보이는 날짜를 그대로 넘겨받아 그 범위만 조회한다. */
+export function useScheduleData(from: string, to: string): ScheduleData {
   const [inquiries, setInquiries] = useState<Inquiry[]>([])
   const [events,    setEvents]    = useState<EventBase[]>([])
   const [loadingInq,   setLoadingInq]   = useState(true)
   const [loadingMonth, setLoadingMonth] = useState(false)
 
-  const monthKey   = `${year}-${pad(month + 1)}`
-  const monthDates = useMemo(() => monthDatesOf(year, month), [year, month])
+  const rangeDates = useMemo(() => getDateRange(from, to), [from, to])
 
   // ── 행사 전체 1회 조회 (월 이동 시 재조회 불필요) ──────
   useEffect(() => {
@@ -74,14 +78,15 @@ export function useScheduleData(year: number, month: number): ScheduleData {
     return () => { alive = false }
   }, [])
 
-  // ── 이 달에 걸쳐 있는 체결 이상 행사 ────────────────────
-  const monthInqs = useMemo(() => inquiries.filter(inq => {
+  // ── 이 범위에 걸쳐 있는 체결 이상 행사 ──────────────────
+  // 월 문자열이 아니라 실제 날짜로 겹침을 본다 (행사기간과 조회범위가 겹치면 포함)
+  const rangeInqs = useMemo(() => inquiries.filter(inq => {
     if (!CONTRACTED_STATUSES.includes(inq.status)) return false
-    if (!inq.event_start) return false
-    const s = inq.event_start.substring(0, 7)
-    const e = inq.event_end ? inq.event_end.substring(0, 7) : s
-    return s <= monthKey && monthKey <= e
-  }), [inquiries, monthKey])
+    const s = inq.event_start?.substring(0, 10)
+    if (!s) return false
+    const e = inq.event_end?.substring(0, 10) || s
+    return s <= to && from <= e
+  }), [inquiries, from, to])
 
   // ── 월 단위 상세 조회 (견적 / 배정 / 스케줄설정) ────────
   // 대상 행사 id로 in 필터를 걸어 4개 쿼리로 끝낸다 (행사별 개별 조회 = N+1 금지)
@@ -174,16 +179,16 @@ export function useScheduleData(year: number, month: number): ScheduleData {
     if (loadingInq) return
     let alive = true
     // 마이크로태스크로 미뤄 effect 동기 구간에서 setState하지 않는다
-    Promise.resolve().then(() => { if (alive) loadMonth(monthInqs) })
+    Promise.resolve().then(() => { if (alive) loadMonth(rangeInqs) })
     return () => { alive = false }
-  }, [monthInqs, loadingInq, loadMonth])
+  }, [rangeInqs, loadingInq, loadMonth])
 
   // ── 중복배정 (날짜 단위로만 판정 가능하므로 별도 집계) ──
   const { conflicts, conflictDates } = useMemo(() => {
     // (크루, 행사조합) → 날짜 목록
     const acc = new Map<string, Conflict>()
     const hot = new Set<string>()
-    monthDates.forEach(date => {
+    rangeDates.forEach(date => {
       const where = new Map<string, Set<string>>()
       events.forEach(ev => {
         if (!coversDate(ev.inq.event_start, ev.inq.event_end, date)) return
@@ -213,12 +218,11 @@ export function useScheduleData(year: number, month: number): ScheduleData {
       conflicts: [...acc.values()].sort((a, b) => a.dates[0].localeCompare(b.dates[0])),
       conflictDates: hot,
     }
-  }, [events, monthDates])
+  }, [events, rangeDates])
 
   return {
-    inquiries, events, monthInqs, monthDates,
+    inquiries, events, rangeInqs, rangeDates,
     conflicts, conflictDates,
     busy: loadingInq || loadingMonth,
-    monthKey,
   }
 }

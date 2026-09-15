@@ -105,6 +105,9 @@ function Th({
 interface Props {
   year: number
   month: number
+  /** 이 표가 다룰 날짜 (그 달의 1일~말일).
+   *  달력 격자는 앞뒤로 인접 월 며칠을 더 불러오지만, 표의 단위는 '그 달'이다. */
+  dates: string[]
   today: string
   data: ScheduleData
   query: string
@@ -116,9 +119,9 @@ interface Props {
  *  조회·검색·월이동은 상위(ScheduleWorkspace)가 맡고, 여기서는 받은 데이터를
  *  구간(Run) 단위로 펼쳐 그리는 일만 한다. */
 export default function ScheduleMatrixContent({
-  year, month, today, data, query, onlyProblem, onOpenDetail,
+  year, month, dates, today, data, query, onlyProblem, onOpenDetail,
 }: Props) {
-  const { events, monthInqs, monthDates, conflicts, busy } = data
+  const { events, rangeInqs, conflicts, busy } = data
 
   // 표에만 있는 설정 — 달력에는 '구간' 개념이 없으므로 여기 둔다
   const [expandDays, setExpandDays] = useState(false)
@@ -129,7 +132,7 @@ export default function ScheduleMatrixContent({
     const out: Run[] = []
 
     events.forEach(base => {
-      const active = monthDates.filter(d => coversDate(base.inq.event_start, base.inq.event_end, d))
+      const active = dates.filter(d => coversDate(base.inq.event_start, base.inq.event_end, d))
       if (active.length === 0) return
 
       base.jobs.forEach(job => {
@@ -173,7 +176,7 @@ export default function ScheduleMatrixContent({
       a.cell.job.label.localeCompare(b.cell.job.label),
     )
     return out
-  }, [events, monthDates, expandDays, today])
+  }, [events, dates, expandDays, today])
 
   // ── 필터 적용 ───────────────────────────────────────────
   const visibleRuns = useMemo(() => {
@@ -322,7 +325,7 @@ export default function ScheduleMatrixContent({
           <div className="flex flex-col items-center justify-center h-40 text-gray-400 gap-2">
             <CalendarDays className="h-8 w-8" />
             <p className="text-sm">
-              {monthInqs.length === 0
+              {rangeInqs.length === 0
                 ? `${month + 1}월에 체결된 행사가 없습니다.`
                 : '조건에 맞는 항목이 없습니다.'}
             </p>

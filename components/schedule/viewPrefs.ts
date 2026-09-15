@@ -9,12 +9,16 @@
 import { useCallback, useEffect, useState } from 'react'
 
 // ─── 뷰 ───────────────────────────────────────────────────
-export type ViewMode = 'month' | 'table'
+export type ViewMode = 'month' | 'week' | 'table'
 
 export const VIEW_LABEL: Record<ViewMode, string> = {
-  month: '달력',
+  month: '월',
+  week:  '주',
   table: '표',
 }
+
+/** 레이어 설정이 의미 있는 뷰 (표는 컬럼이 고정이라 해당 없음) */
+export const LAYERED_VIEWS: ViewMode[] = ['month', 'week']
 
 // ─── 레이어 ───────────────────────────────────────────────
 /** 달력 칸에 얹을 수 있는 정보 조각.
@@ -116,7 +120,8 @@ function sanitize(raw: unknown): ViewPrefs {
     ? (p.layers.filter(k => typeof k === 'string' && VALID_LAYERS.has(k)) as LayerKey[])
     : DEFAULT_PREFS.layers
   return {
-    view:    p.view === 'table' || p.view === 'month' ? p.view : DEFAULT_PREFS.view,
+    view:    p.view === 'table' || p.view === 'month' || p.view === 'week'
+      ? p.view : DEFAULT_PREFS.view,
     layers,
     density: p.density === 'compact' || p.density === 'normal' || p.density === 'detail'
       ? p.density : DEFAULT_PREFS.density,

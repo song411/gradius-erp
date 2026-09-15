@@ -8,45 +8,71 @@
 import { useMemo, useState } from 'react'
 import {
   ChevronLeft, ChevronRight, AlertTriangle, Search, X,
-  CalendarDays, Table2, SlidersHorizontal, Check,
+  CalendarDays, CalendarRange, Table2, SlidersHorizontal, Check,
 } from 'lucide-react'
 import type { Inquiry } from '@/lib/supabase/types'
 import { Input } from '@/components/ui/input'
 import EventDetailPanel from './EventDetailPanel'
 import ScheduleMatrixContent from './ScheduleMatrixContent'
 import CalendarMonthView, { filterEventsForCalendar } from './CalendarMonthView'
+import CalendarWeekView from './CalendarWeekView'
 import { useScheduleData } from './useScheduleData'
 import { fmt, todayLocal, jobMoney } from './matrixCore'
-import { compressDates } from './dateUtils'
 import {
-  useViewPrefs, LAYERS, PRESETS, DENSITY_LABEL, VIEW_LABEL,
+  compressDates, monthGrid, monthDatesOf, weekOf, addDays, weekStartOf, md,
+} from './dateUtils'
+import {
+  useViewPrefs, LAYERS, PRESETS, DENSITY_LABEL, VIEW_LABEL, LAYERED_VIEWS,
   type Density, type ViewMode,
 } from './viewPrefs'
 
 export default function ScheduleWorkspace() {
-  const now = new Date()
-  const [year,  setYear]  = useState(now.getFullYear())
-  const [month, setMonth] = useState(now.getMonth())   // 0-indexed
+  const today = todayLocal()
 
+  // 뷰가 달라도 "지금 보고 있는 지점"은 하나다. 날짜 하나를 커서로 두고
+  // 월 뷰는 그 달을, 주 뷰는 그 주를 그린다. 뷰를 바꿔도 보던 시점이 유지된다.
+  const [cursor,      setCursor]      = useState(today)
   const [query,       setQuery]       = useState('')
   const [onlyProblem, setOnlyProblem] = useState(false)
   const [detailInq,   setDetailInq]   = useState<Inquiry | null>(null)
   const [tuning,      setTuning]      = useState(false)
 
-  const data  = useScheduleData(year, month)
-  const today = todayLocal()
   const { prefs, setView, setDensity, toggleLayer, applyPreset } = useViewPrefs()
+
+  const year  = Number(cursor.slice(0, 4))
+  const month = Number(cursor.slice(5, 7)) - 1   // 0-indexed
+  const isWeek     = prefs.view === 'week'
+  const isTable    = prefs.view === 'table'
+  const isCalendar = !isTable
+
+  // 화면에 실제로 보이는 날짜 범위. 조회도 이 범위로 한다.
+  // 월 뷰의 격자는 앞뒤로 인접 월 며칠을 포함하므로 그 칸에 걸친 행사도 같이 불러온다.
+  const { from, to } = useMemo(() => {
+    if (isWeek) {
+      const w = weekOf(cursor)
+      return { from: w[0].date, to: w[6].date }
+    }
+    const grid = monthGrid(year, month)
+    return { from: grid[0][0].date, to: grid[grid.length - 1][6].date }
+  }, [isWeek, cursor, year, month])
+
+  const data = useScheduleData(from, to)
+
+  // 표는 '그 달'이 단위다 — 격자 앞뒤의 인접 월 날짜까지 행으로 뿌리면 안 된다
+  const tableDates = useMemo(() => monthDatesOf(year, month), [year, month])
 
   // 달력에 그릴 행사 — 표와 같은 검색어·미충족 필터를 적용한다
   const calEvents = useMemo(
-    () => filterEventsForCalendar(data.events, data.monthDates, query, onlyProblem),
-    [data.events, data.monthDates, query, onlyProblem],
+    () => filterEventsForCalendar(data.events, data.rangeDates, query, onlyProblem),
+    [data.events, data.rangeDates, query, onlyProblem],
   )
 
-  // ── 월 요약 ─────────────────────────────────────────────
-  // 뷰와 무관하게 (행사 × 직무)를 한 번씩만 세는 월 단위 집계다.
+  // ── 요약 ────────────────────────────────────────────────
+  // 화면에 보이는 기간에 걸친 (행사 × 직무)를 한 번씩만 센다.
   // 표의 '구간'은 보기 방식일 뿐이므로, 구간 수로 세면 '하루씩 펼치기'만 켜도
-  // 같은 달의 필요 인원이 몇 배로 뛴다. 그래서 직무 기준으로 고정했다.
+  // 같은 기간의 필요 인원이 몇 배로 뛴다. 그래서 직무 기준으로 고정했다.
+  // 월 뷰의 격자는 앞뒤로 인접 월 며칠을 포함하므로 그 칸에 보이는 행사도 들어간다
+  // (화면에 있는 것은 세는 편이 "왜 안 세지?"보다 헷갈리지 않는다).
   const summary = useMemo(() => {
     let required = 0, filled = 0, gaps = 0, jobCount = 0
     let billTotal = 0, payTotal = 0
@@ -74,12 +100,22 @@ export default function ScheduleWorkspace() {
     }
   }, [calEvents])
 
-  // ── 월 이동 ─────────────────────────────────────────────
-  const prevMonth = () => { if (month === 0) { setMonth(11); setYear(y => y - 1) } else setMonth(m => m - 1) }
-  const nextMonth = () => { if (month === 11) { setMonth(0); setYear(y => y + 1) } else setMonth(m => m + 1) }
-  const goToday   = () => { const d = new Date(); setYear(d.getFullYear()); setMonth(d.getMonth()) }
+  // ── 이동 ────────────────────────────────────────────────
+  // 주 뷰에서는 한 달씩 건너뛰면 쓸 수 없다. 보고 있는 단위만큼 움직인다.
+  const step = (dir: -1 | 1) => {
+    if (isWeek) { setCursor(c => addDays(c, dir * 7)); return }
+    setCursor(c => {
+      const y = Number(c.slice(0, 4))
+      const m = Number(c.slice(5, 7)) - 1 + dir
+      const d = new Date(y, m, 1)
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+    })
+  }
+  const goToday = () => setCursor(today)
 
-  const isCalendar = prefs.view === 'month'
+  const periodLabel = isWeek
+    ? `${md(weekStartOf(cursor))} – ${md(addDays(weekStartOf(cursor), 6))}`
+    : `${year}년 ${month + 1}월`
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -88,13 +124,15 @@ export default function ScheduleWorkspace() {
         <div className="flex items-center gap-3 flex-wrap">
           {/* 월 이동 */}
           <div className="flex items-center gap-1">
-            <button onClick={prevMonth} className="p-1.5 rounded hover:bg-gray-100 text-gray-500" title="이전 달">
+            <button onClick={() => step(-1)} className="p-1.5 rounded hover:bg-gray-100 text-gray-500"
+              title={isWeek ? '이전 주' : '이전 달'}>
               <ChevronLeft className="h-4 w-4" />
             </button>
-            <span className="text-base font-bold text-gray-900 tabular-nums min-w-[110px] text-center">
-              {year}년 {month + 1}월
+            <span className="text-base font-bold text-gray-900 tabular-nums min-w-[130px] text-center">
+              {periodLabel}
             </span>
-            <button onClick={nextMonth} className="p-1.5 rounded hover:bg-gray-100 text-gray-500" title="다음 달">
+            <button onClick={() => step(1)} className="p-1.5 rounded hover:bg-gray-100 text-gray-500"
+              title={isWeek ? '다음 주' : '다음 달'}>
               <ChevronRight className="h-4 w-4" />
             </button>
             <button
@@ -107,16 +145,21 @@ export default function ScheduleWorkspace() {
 
           {/* 뷰 전환 */}
           <div className="flex items-center rounded-lg border border-gray-200 overflow-hidden">
-            {(['month', 'table'] as ViewMode[]).map(v => (
+            {(['month', 'week', 'table'] as ViewMode[]).map(v => (
               <button
                 key={v}
                 onClick={() => setView(v)}
+                title={v === 'month' ? '한 달 전체를 막대로'
+                  : v === 'week' ? '한 주를 날짜별로 — 그 날 어느 직무에 누가 들어가는지'
+                  : '기존 표 — 구간별 금액·마진·엑셀'}
                 className={`inline-flex items-center gap-1 text-xs px-2.5 py-1.5 font-medium transition
                   ${prefs.view === v
                     ? 'bg-blue-600 text-white'
                     : 'bg-white text-gray-500 hover:bg-gray-50'}`}
               >
-                {v === 'month' ? <CalendarDays className="h-3.5 w-3.5" /> : <Table2 className="h-3.5 w-3.5" />}
+                {v === 'month' ? <CalendarDays className="h-3.5 w-3.5" />
+                  : v === 'week' ? <CalendarRange className="h-3.5 w-3.5" />
+                  : <Table2 className="h-3.5 w-3.5" />}
                 {VIEW_LABEL[v]}
               </button>
             ))}
@@ -129,16 +172,17 @@ export default function ScheduleWorkspace() {
             </span>
             <span
               className="px-2 py-1 rounded-full bg-blue-50 text-blue-700 font-medium"
-              title={'이 달 행사들의 직무를 한 번씩만 센 값입니다. '
-                + '표의 구간 수와 달리 보기 방식(하루씩 펼치기 등)에 따라 바뀌지 않습니다.'}
+              title={`화면에 보이는 기간(${from} ~ ${to})에 걸친 행사들의 직무를 한 번씩만 센 값입니다. `
+                + '표의 구간 수와 달리 보기 방식(하루씩 펼치기 등)에 따라 바뀌지 않습니다. '
+                + '월 달력은 격자 앞뒤에 인접 월 며칠이 함께 보이므로 그 칸의 행사도 포함됩니다.'}
             >
               배정 {summary.filled} / 필요 {summary.required}명
             </span>
             {summary.billTotal > 0 && (
               <span
                 className="px-2 py-1 rounded-full bg-gray-100 text-gray-700 font-medium tabular-nums"
-                title={`이 달에 걸친 행사들의 직무 ${summary.jobCount}건 금액 합계입니다. `
-                  + '금액은 직무 단위(행사 전체 기준)이므로 이 달에만 발생하는 금액이 아닙니다. '
+                title={`화면에 보이는 기간에 걸친 행사들의 직무 ${summary.jobCount}건 금액 합계입니다. `
+                  + '금액은 직무 단위(행사 전체 기준)이므로 이 기간에만 발생하는 금액이 아닙니다. '
                   + `마진은 지급액이 다 들어간 ${summary.okCount}건만 모아서 낸 값입니다`
                   + (summary.untrusted > 0
                       ? ` — 미배정이거나 단가가 덜 들어간 ${summary.untrusted}건은 빠져 있습니다.`
@@ -200,7 +244,7 @@ export default function ScheduleWorkspace() {
         </div>
 
         {/* ══ 달력 보기 설정 ══ */}
-        {isCalendar && (
+        {LAYERED_VIEWS.includes(prefs.view) && (
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[11px] font-semibold text-gray-400">보기</span>
 
@@ -224,8 +268,9 @@ export default function ScheduleWorkspace() {
               </span>
             )}
 
-            {/* 밀도 */}
-            <div className="flex items-center rounded-lg border border-gray-200 overflow-hidden ml-1">
+            {/* 밀도 — 월 뷰에서만 의미가 있다 (주간은 칸이 넓어 늘 상세로 그린다) */}
+            <div className={`flex items-center rounded-lg border border-gray-200 overflow-hidden ml-1
+              ${isWeek ? 'opacity-40 pointer-events-none' : ''}`}>
               {(['compact', 'normal', 'detail'] as Density[]).map(d => (
                 <button
                   key={d}
@@ -259,7 +304,7 @@ export default function ScheduleWorkspace() {
         )}
 
         {/* 레이어 체크박스 */}
-        {isCalendar && tuning && (
+        {LAYERED_VIEWS.includes(prefs.view) && tuning && (
           <div className="flex flex-wrap gap-1.5 pt-1">
             {LAYERS.map(l => {
               const on = prefs.layers.includes(l.key)
@@ -293,11 +338,20 @@ export default function ScheduleWorkspace() {
             <div className="flex flex-col items-center justify-center h-40 text-gray-400 gap-2">
               <CalendarDays className="h-8 w-8" />
               <p className="text-sm">
-                {data.monthInqs.length === 0
-                  ? `${month + 1}월에 체결된 행사가 없습니다.`
+                {data.rangeInqs.length === 0
+                  ? `${isWeek ? '이 주' : `${month + 1}월`}에 체결된 행사가 없습니다.`
                   : '조건에 맞는 항목이 없습니다.'}
               </p>
             </div>
+          ) : isWeek ? (
+            <CalendarWeekView
+              anchor={cursor}
+              data={data}
+              prefs={prefs}
+              events={calEvents}
+              today={today}
+              onOpenDetail={setDetailInq}
+            />
           ) : (
             <CalendarMonthView
               year={year}
@@ -312,7 +366,11 @@ export default function ScheduleWorkspace() {
 
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-gray-400">
             <span className="font-semibold text-gray-500">범례</span>
-            <span>막대 하나 = 행사 한 건 (기간만큼 이어집니다)</span>
+            <span>
+              {isWeek
+                ? '카드 하나 = 그 날의 행사 한 건 · 직무별 인원은 그 날짜 기준입니다'
+                : '막대 하나 = 행사 한 건 (기간만큼 이어집니다)'}
+            </span>
             <span><span className="inline-block w-2 h-2 rounded-sm bg-indigo-400 mr-1" />체결</span>
             <span><span className="inline-block w-2 h-2 rounded-sm bg-cyan-400 mr-1" />배정완료</span>
             <span><span className="inline-block w-2 h-2 rounded-sm bg-amber-400 mr-1" />진행중</span>
@@ -330,6 +388,7 @@ export default function ScheduleWorkspace() {
             <ScheduleMatrixContent
               year={year}
               month={month}
+              dates={tableDates}
               today={today}
               data={data}
               query={query}

@@ -51,6 +51,29 @@ export interface GridDay {
   inMonth: boolean
 }
 
+/** 'YYYY-MM-DD' 에 n일을 더한 날짜 */
+export function addDays(date: string, n: number): string {
+  const d = new Date(date + 'T00:00:00')
+  d.setDate(d.getDate() + n)
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+/** 그 날짜가 속한 주의 일요일 */
+export function weekStartOf(date: string): string {
+  const d = new Date(date + 'T00:00:00')
+  return addDays(date, -d.getDay())
+}
+
+/** 그 날짜가 속한 주의 7일 (일~토) */
+export function weekOf(date: string): GridDay[] {
+  const start = weekStartOf(date)
+  const anchorMonth = date.substring(0, 7)
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = addDays(start, i)
+    return { date: d, day: Number(d.slice(8, 10)), inMonth: d.substring(0, 7) === anchorMonth }
+  })
+}
+
 export function monthGrid(year: number, month: number): GridDay[][] {
   const first = new Date(year, month, 1)
   const start = new Date(year, month, 1 - first.getDay())   // 그 주의 일요일
