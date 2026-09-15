@@ -31,4 +31,4 @@ CREATE TABLE IF NOT EXISTS calendar_notes (
 );
 
 -- 달력은 항상 "이 범위의 날짜" 로 조회한다 (월 격자 / 주간 뷰)
-CREATE INDEX IF NOT EXISTS idx_calendar_notes_date ON calendar_notes(org_id, note_date);
+CREATE INDEX IF NOT EXISTS idx_cal_notes ON calendar_notes(org_id, note_date);
