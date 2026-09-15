@@ -151,8 +151,13 @@ export default function StaffContent() {
     const appearance    = Number(form.appearance_score)    || 0
     const teamwork      = Number(form.teamwork_score)      || 0
     const adaptability  = Number(form.adaptability_score)  || 0
-    // total_score = 5개 평균 (0~5점, AttendanceContent 기준과 동일)
-    const totalScore = Math.round(((attendance + performance + appearance + teamwork + adaptability) / 5) * 100) / 100
+    // total_score = 평가된 항목만의 평균 (0~5점)
+    // 항목 수로 나누지 않고 5로 고정하면, 아직 안 매긴 항목 때문에 점수가 깎인다.
+    // (상황대응이 나중에 추가된 항목이라 예전 크루는 4개만 평가되어 있음)
+    const rated = [attendance, performance, appearance, teamwork, adaptability].filter(v => v > 0)
+    const totalScore = rated.length
+      ? Math.round((rated.reduce((s, v) => s + v, 0) / rated.length) * 100) / 100
+      : 0
 
     const payload = {
       name: form.name.trim(),

@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# 데이터 보정 백업 (크루 개인정보 포함 — 커밋 금지)
+/scripts/backups/

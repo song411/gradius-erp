@@ -55,7 +55,8 @@ function calcScore(
   // 3. 종합 평점 (+최대 20)
   const totalScore = staff.total_score || 0
   if (totalScore > 0) {
-    const pts = Math.round(totalScore * 4)
+    // total_score 는 0~5 척도 → 최대 20점. 상한을 걸어 이상치가 랭킹을 뒤집지 못하게 한다.
+    const pts = Math.min(Math.round(totalScore * 4), 20)
     score += pts
     reasons.push(`평점 ${totalScore.toFixed(1)}점`)
   }
