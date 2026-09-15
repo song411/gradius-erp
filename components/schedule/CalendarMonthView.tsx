@@ -189,7 +189,10 @@ function WeekRow({
   const from = week[0].date
   const to   = week[6].date
 
-  // 이 주에 걸친 행사를 막대 구간으로 바꾼다
+  // 이 주에 걸친 행사를 막대 구간으로 바꾼다.
+  // 사람이 '휴무'로 찍어둔 날에서는 막대를 끊는다 — 금토 5주 연속 같은 행사가
+  // 30일짜리 통막대로 보이면 실제 운영 모습이 전혀 읽히지 않기 때문이다.
+  // (계산이 아니라 그리는 것만 바뀐다)
   const segments = useMemo<Segment[]>(() => {
     const out: Segment[] = []
     events.forEach(ev => {
@@ -200,12 +203,22 @@ function WeekRow({
       const c0 = week.findIndex(d => d.date >= s)
       const c1 = week.reduce((acc, d, i) => (d.date <= e ? i : acc), -1)
       if (c0 < 0 || c1 < 0 || c1 < c0) return
-      out.push({
-        ev, c0, c1,
-        dates: week.slice(c0, c1 + 1).map(d => d.date),
-        openLeft:  s < from,
-        openRight: e > to,
-      })
+
+      // 운영일이 이어지는 구간마다 막대를 하나씩
+      let i = c0
+      while (i <= c1) {
+        if (ev.dayNotes[week[i].date]?.off) { i++; continue }
+        let j = i
+        while (j + 1 <= c1 && !ev.dayNotes[week[j + 1].date]?.off) j++
+        out.push({
+          ev, c0: i, c1: j,
+          dates: week.slice(i, j + 1).map(d => d.date),
+          // 끊긴 자리에서는 '이어짐' 표시를 달지 않는다 (거기서 진짜로 끝나므로)
+          openLeft:  i === c0 && s < from,
+          openRight: j === c1 && e > to,
+        })
+        i = j + 1
+      }
     })
     return out
   }, [events, week, from, to])
@@ -251,6 +264,13 @@ function WeekRow({
       {week.map((d, i) => {
         const isToday = d.date === today
         const conflict = has('warn') && conflictDates.has(d.date)
+        // 그 날에 사람이 적어둔 메모 (여러 행사면 모아서 보여준다)
+        const dayMemos = has('memo')
+          ? events.flatMap(ev => {
+              const t = ev.dayNotes[d.date]?.text
+              return t ? [`${ev.inq.event_name || ev.inq.company_name || '행사'}: ${t}`] : []
+            })
+          : []
         return (
           <div
             key={`num-${d.date}`}
@@ -271,6 +291,14 @@ function WeekRow({
                 className="h-3 w-3 text-red-500 shrink-0"
                 aria-label="중복배정"
               />
+            )}
+            {dayMemos.length > 0 && (
+              <span
+                className="text-[9px] text-amber-700 bg-amber-100 rounded px-1 leading-tight truncate min-w-0"
+                title={dayMemos.join(' / ')}
+              >
+                {dayMemos[0].length > 10 ? dayMemos[0].slice(0, 10) + '…' : dayMemos[0]}
+              </span>
             )}
           </div>
         )

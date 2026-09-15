@@ -55,7 +55,9 @@ export default function ProjectMemoPanel({ inquiryId, compact = false }: Props) 
         order: 'created_at',
         asc: false,
       })
-      setMemos(data)
+      // 스케줄 설정('[스케줄_설정]' JSON)은 같은 테이블에 살지만 사람이 쓴 메모가 아니다.
+      // 걸러내지 않으면 운영메모 탭에 JSON 덩어리가 그대로 노출된다.
+      setMemos(data.filter(m => !m.content?.startsWith('[스케줄_설정]')))
     } catch {
       // 테이블 미생성 등 에러 시 빈 목록 유지
     } finally {

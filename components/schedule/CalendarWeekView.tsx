@@ -184,9 +184,12 @@ function DayColumn({
 }) {
   const date = day.date
   // 이 날에 걸친 행사만. 시작일이 빠른 순으로 둬야 여러 날 행사가 위에 온다.
+  // 사람이 '휴무'로 찍어둔 행사는 그 날 카드에서 뺀다 — 안 하는 날에 카드가 뜨면
+  // 그게 바로 대표님이 말씀하신 "금토만 표시하기가 쉽지 않다"는 그 문제다.
   const todays = useMemo(
     () => events
       .filter(ev => coversDate(ev.inq.event_start, ev.inq.event_end, date))
+      .filter(ev => !ev.dayNotes[date]?.off)
       .sort((a, b) =>
         (a.inq.event_start ?? '').localeCompare(b.inq.event_start ?? '') ||
         (a.inq.event_name ?? '').localeCompare(b.inq.event_name ?? '')),
@@ -288,6 +291,13 @@ function DayEventCard({
             <StickyNote className="h-3 w-3 text-amber-500 shrink-0 mt-px" />
           )}
         </div>
+
+        {/* 그 날에 직접 적어둔 메모 */}
+        {ev.dayNotes[date]?.text && (
+          <div className="mt-0.5 text-[10px] text-amber-800 bg-amber-100 rounded px-1 py-0.5">
+            {ev.dayNotes[date].text}
+          </div>
+        )}
 
         {/* 여러 날 행사는 전체 기간을 적어준다 — 주간 뷰는 기간이 안 보이므로 */}
         {multi && (

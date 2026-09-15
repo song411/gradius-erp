@@ -301,7 +301,11 @@ export default function ScheduleView({
       if (configId) {
         await db.update('project_memos', configId, { content })
       } else {
-        const recs = await db.insert<MemoRecord>('project_memos', { inquiry_id: inquiry.id, content })
+        // type 은 NOT NULL 이다. 빼면 insert 가 실패해 설정이 한 번도 저장되지 않는다
+        // (직무 추가·숨김·필요인원 변경이 첫 저장에서 통째로 날아가던 원인)
+        const recs = await db.insert<MemoRecord>('project_memos', {
+          inquiry_id: inquiry.id, content, type: '운영메모',
+        })
         if (recs?.[0]?.id) setConfigId(recs[0].id)
       }
     } catch { toast.error('설정 저장 실패') }

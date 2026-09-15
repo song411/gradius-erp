@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { AlertTriangle, ExternalLink } from 'lucide-react'
 import { toast } from 'sonner'
 import { db } from '@/lib/supabase/api'
+import { saveDayNotes, summarizeDayNotes } from './dayNotes'
+import type { DayNote } from './matrixCore'
 import type {
   Assignment, Attendance, Estimate, EstimateItem, EventExpense, Inquiry, Payout, ProjectMemo,
 } from '@/lib/supabase/types'
@@ -111,6 +113,11 @@ export default function EventDetailPanel({ inquiry, onClose }: Props) {
   const [data, setData]       = useState<Loaded | null>(null)
   const [loading, setLoading] = useState(true)
 
+  // 날짜별 표시 메모 — 계산에 쓰지 않는 값이므로 화면 상태로만 들고 있다가 저장한다
+  const [notes,    setNotes]    = useState<Record<string, DayNote>>({})
+  const [noteEdit, setNoteEdit] = useState(false)
+  const [savingNotes, setSavingNotes] = useState(false)
+
   const load = useCallback(async () => {
     setLoading(true)
     try {
@@ -152,6 +159,7 @@ export default function EventDetailPanel({ inquiry, onClose }: Props) {
         expenses,
         config,
       })
+      setNotes(config.dayNotes ?? {})
     } catch (e) {
       toast.error('상세 조회 실패: ' + (e as Error).message)
       onClose()
@@ -412,6 +420,33 @@ export default function EventDetailPanel({ inquiry, onClose }: Props) {
               )}
             </Section>
 
+            {/* ── 3.5 날짜별 운영 표시 ── */}
+            <Section
+              title="날짜별 운영 표시"
+              note="보기 전용 — 계산에는 들어가지 않습니다"
+            >
+              <DayNoteEditor
+                dates={dates}
+                notes={notes}
+                setNotes={setNotes}
+                editing={noteEdit}
+                setEditing={setNoteEdit}
+                saving={savingNotes}
+                onSave={async () => {
+                  setSavingNotes(true)
+                  try {
+                    await saveDayNotes(inquiry.id, notes)
+                    toast.success('운영 표시를 저장했습니다.')
+                    setNoteEdit(false)
+                  } catch (e) {
+                    toast.error('저장 실패: ' + (e as Error).message)
+                  } finally {
+                    setSavingNotes(false)
+                  }
+                }}
+              />
+            </Section>
+
             {/* ── 4. 날짜 × 직무 매트릭스 ── */}
             <Section
               title="날짜별 배정 매트릭스"
@@ -651,5 +686,168 @@ export default function EventDetailPanel({ inquiry, onClose }: Props) {
         )}
       </div>
     </Dialog>
+  )
+}
+
+// ─── 날짜별 운영 표시 편집기 ──────────────────────────────
+// 정기·장기 행사(금토 5주 연속 등)는 기간이 연속이어도 실제로는 띄엄띄엄 돈다.
+// 계산을 건드리지 않고 "사람이 보고 판단할" 표시만 남기는 자리다.
+// 요일 일괄 선택을 둔 이유: 금토 5주면 손으로 20번 눌러 꺼야 하는데,
+// 요일로 한 번에 정해두고 예외인 날만 고치는 편이 실제로 쓰인다.
+function DayNoteEditor({
+  dates, notes, setNotes, editing, setEditing, saving, onSave,
+}: {
+  dates: string[]
+  notes: Record<string, DayNote>
+  setNotes: React.Dispatch<React.SetStateAction<Record<string, DayNote>>>
+  editing: boolean
+  setEditing: (v: boolean) => void
+  saving: boolean
+  onSave: () => void
+}) {
+  if (dates.length === 0) {
+    return <p className="text-xs text-gray-400">행사 날짜가 설정되지 않았습니다.</p>
+  }
+
+  const sum = summarizeDayNotes(dates, notes)
+  const patch = (d: string, next: DayNote) =>
+    setNotes(prev => ({ ...prev, [d]: { ...prev[d], ...next } }))
+
+  /** 고른 요일만 운영으로 두고 나머지를 휴무로 — 메모는 건드리지 않는다 */
+  const keepOnly = (dows: number[]) => setNotes(prev => {
+    const next = { ...prev }
+    dates.forEach(d => {
+      const g = new Date(d + 'T00:00:00').getDay()
+      next[d] = { ...next[d], off: !dows.includes(g) }
+    })
+    return next
+  })
+
+  const allOn = () => setNotes(prev => {
+    const next = { ...prev }
+    dates.forEach(d => { next[d] = { ...next[d], off: false } })
+    return next
+  })
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-[11px] text-gray-500">
+          기간 {dates.length}일 중 <b className="text-gray-800">운영 {sum.on}일</b>
+          {sum.off > 0 && <span className="text-gray-400"> · 휴무 {sum.off}일</span>}
+          {sum.memo > 0 && <span className="text-amber-600"> · 메모 {sum.memo}건</span>}
+        </span>
+        {!editing ? (
+          <button
+            onClick={() => setEditing(true)}
+            className="ml-auto text-[11px] px-2 py-1 rounded border border-gray-200 text-gray-600 hover:border-gray-400"
+          >
+            표시 편집
+          </button>
+        ) : (
+          <div className="ml-auto flex items-center gap-1.5">
+            <button
+              onClick={onSave}
+              disabled={saving}
+              className="text-[11px] px-2.5 py-1 rounded bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-40"
+            >
+              {saving ? '저장 중…' : '저장'}
+            </button>
+            <button
+              onClick={() => setEditing(false)}
+              className="text-[11px] px-2 py-1 rounded border border-gray-200 text-gray-500 hover:border-gray-400"
+            >
+              닫기
+            </button>
+          </div>
+        )}
+      </div>
+
+      {editing && (
+        <div className="flex items-center gap-1.5 flex-wrap text-[11px] bg-gray-50 rounded-lg px-2 py-1.5">
+          <span className="text-gray-400 font-semibold">요일로 한 번에</span>
+          {[
+            { label: '금·토', dows: [5, 6] },
+            { label: '토·일', dows: [6, 0] },
+            { label: '주말',  dows: [0, 6] },
+            { label: '평일',  dows: [1, 2, 3, 4, 5] },
+          ].map(p => (
+            <button
+              key={p.label}
+              onClick={() => keepOnly(p.dows)}
+              className="px-2 py-0.5 rounded border border-gray-200 bg-white text-gray-600 hover:border-blue-400"
+            >
+              {p.label}만
+            </button>
+          ))}
+          <button
+            onClick={allOn}
+            className="px-2 py-0.5 rounded border border-gray-200 bg-white text-gray-600 hover:border-blue-400"
+          >
+            전체 운영
+          </button>
+          <span className="text-gray-400">누른 뒤 예외인 날만 고치세요</span>
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-1">
+        {dates.map(d => {
+          const dt  = new Date(d + 'T00:00:00')
+          const n   = notes[d] ?? {}
+          const off = !!n.off
+          const we  = dt.getDay() === 0 || dt.getDay() === 6
+          return (
+            <div
+              key={d}
+              className={`rounded-lg border px-1.5 py-1 min-w-[62px]
+                ${off ? 'border-gray-200 bg-gray-50 opacity-60' : 'border-blue-200 bg-blue-50/50'}`}
+            >
+              <button
+                type="button"
+                disabled={!editing}
+                onClick={() => patch(d, { off: !off })}
+                className={`w-full text-center ${editing ? 'cursor-pointer' : 'cursor-default'}`}
+                title={editing ? (off ? '누르면 운영일로' : '누르면 휴무로') : undefined}
+              >
+                <div className={`text-[11px] font-bold tabular-nums leading-tight
+                  ${off ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
+                  {dt.getMonth() + 1}/{dt.getDate()}
+                </div>
+                <div className={`text-[9px] ${
+                  off ? 'text-gray-300'
+                    : dt.getDay() === 0 ? 'text-red-500'
+                    : dt.getDay() === 6 ? 'text-blue-500'
+                    : we ? 'text-gray-400' : 'text-gray-400'
+                }`}>
+                  {DOW[dt.getDay()]}
+                </div>
+              </button>
+
+              {editing ? (
+                <input
+                  value={n.text ?? ''}
+                  onChange={e => patch(d, { text: e.target.value })}
+                  placeholder="메모"
+                  className="mt-0.5 w-full text-[9px] px-1 py-0.5 rounded border border-gray-200
+                    focus:border-blue-400 focus:outline-none"
+                />
+              ) : n.text ? (
+                <div
+                  className="mt-0.5 text-[9px] text-amber-700 bg-amber-50 rounded px-1 py-0.5 truncate"
+                  title={n.text}
+                >
+                  {n.text}
+                </div>
+              ) : null}
+            </div>
+          )
+        })}
+      </div>
+
+      <p className="text-[10px] text-gray-400">
+        여기서 끈 날은 운영 캘린더에서 막대가 끊겨 실제 운영일만 보입니다.
+        중복배정 판정·금액·마진은 이 값과 무관하게 지금 그대로 계산됩니다.
+      </p>
+    </div>
   )
 }

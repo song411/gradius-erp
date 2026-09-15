@@ -21,15 +21,31 @@ export const DOW = ['일', '월', '화', '수', '목', '금', '토']
 // ─── 타입 ─────────────────────────────────────────────────
 export interface MemoRecord { id: string; inquiry_id: string; content: string }
 
+/** 날짜 하나에 사람이 직접 달아두는 표시.
+ *
+ *  ※ 이 값은 "보기 위한" 값이다. 계산에는 절대 들어가지 않는다.
+ *  중복배정 판정·금액·마진·배정 인원 수는 이 값과 무관하게 지금 그대로 돈다.
+ *  그래서 잘못 적어도 다른 화면 숫자가 어긋나지 않고, 부담 없이 적어둘 수 있다.
+ *  (부대비용 수동입력과 같은 원칙 — 사람이 적은 것은 사람이 보는 데만 쓴다) */
+export interface DayNote {
+  /** 이 날은 실제로 운영하지 않음. 달력에서 막대를 끊어 '금토만' 같은 실제 모습이 보이게 한다. */
+  off?: boolean
+  /** 그 날에 대한 짧은 메모 (예: '1주차 4명', '우천 취소 가능') */
+  text?: string
+}
+
 export interface ScheduleConfig {
   customJobs: Array<{ jobType: string; required: number; payRate: number }>
   hiddenJobs: string[]
   requiredOverrides: Record<string, number>
   labelOverrides: Record<string, string>
+  /** 'YYYY-MM-DD' → 표시용 메모 */
+  dayNotes: Record<string, DayNote>
 }
 
 export const EMPTY_CONFIG: ScheduleConfig = {
   customJobs: [], hiddenJobs: [], requiredOverrides: {}, labelOverrides: {},
+  dayNotes: {},
 }
 
 /** 행사 1건의 직무 단위 기준값 (날짜 무관) */
@@ -123,6 +139,7 @@ export function parseConfigs(memos: MemoRecord[]): Map<string, ScheduleConfig> {
         hiddenJobs:        p.hiddenJobs        ?? [],
         requiredOverrides: p.requiredOverrides ?? {},
         labelOverrides:    p.labelOverrides    ?? {},
+        dayNotes:          p.dayNotes          ?? {},
       })
     } catch { /* 설정 파싱 실패는 기본값으로 진행 */ }
   })
