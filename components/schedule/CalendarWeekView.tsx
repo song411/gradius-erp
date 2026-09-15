@@ -10,7 +10,7 @@
 // 그 제약이 없다. 대신 기간이 안 보이니 위에 띠로 기간을 함께 깐다.
 
 import { useMemo } from 'react'
-import { AlertTriangle, StickyNote, MapPin, Clock } from 'lucide-react'
+import { AlertTriangle, StickyNote, MapPin, Clock, Plus } from 'lucide-react'
 import type { Inquiry } from '@/lib/supabase/types'
 import {
   cleanStaffName, makeCell, coversDate, fmt, jobMoney,
@@ -19,6 +19,7 @@ import {
 import { md, dowOf, weekOf, type GridDay } from './dateUtils'
 import type { EventBase, ScheduleData } from './useScheduleData'
 import type { LayerKey, ViewPrefs } from './viewPrefs'
+import { colorOf, type CalendarNotesApi } from './useCalendarNotes'
 
 // 월 뷰와 같은 상태색을 쓴다 — 화면을 옮겨도 같은 색이 같은 뜻이어야 한다
 const TONE: Record<string, string> = {
@@ -37,6 +38,9 @@ interface Props {
   events: EventBase[]
   today: string
   onOpenDetail: (inq: Inquiry) => void
+  /** 날짜 칸에 직접 쓰는 메모 */
+  notes: CalendarNotesApi
+  onOpenDay: (date: string) => void
 }
 
 /** 그 날짜의 편성 지문 — 직무별로 누가 들어가는지.
@@ -49,7 +53,7 @@ function daySignature(ev: EventBase, date: string): string {
 }
 
 export default function CalendarWeekView({
-  anchor, data, prefs, events, today, onOpenDetail,
+  anchor, data, prefs, events, today, onOpenDetail, notes, onOpenDay,
 }: Props) {
   const has = (k: LayerKey) => prefs.layers.includes(k)
   const week = useMemo(() => weekOf(anchor), [anchor])
@@ -101,6 +105,8 @@ export default function CalendarWeekView({
             isToday={d.date === today}
             has={has}
             onOpenDetail={onOpenDetail}
+            notes={notes}
+            onOpenDay={onOpenDay}
           />
         ))}
       </div>
@@ -172,7 +178,7 @@ function StandingBar({
 
 // ─── 하루 ─────────────────────────────────────────────────
 function DayColumn({
-  day, col, events, conflictDates, isToday, has, onOpenDetail,
+  day, col, events, conflictDates, isToday, has, onOpenDetail, notes, onOpenDay,
 }: {
   day: GridDay
   col: number
@@ -181,6 +187,8 @@ function DayColumn({
   isToday: boolean
   has: (k: LayerKey) => boolean
   onOpenDetail: (inq: Inquiry) => void
+  notes: CalendarNotesApi
+  onOpenDay: (date: string) => void
 }) {
   const date = day.date
   // 이 날에 걸친 행사만. 시작일이 빠른 순으로 둬야 여러 날 행사가 위에 온다.
@@ -223,7 +231,34 @@ function DayColumn({
           {dowOf(date)}
         </span>
         {conflict && <AlertTriangle className="h-3.5 w-3.5 text-red-500 ml-auto" />}
+        <button
+          type="button"
+          onClick={() => onOpenDay(date)}
+          title="이 날에 메모 쓰기"
+          className={`ml-auto shrink-0 transition
+            ${isToday ? 'text-blue-100 hover:text-white' : 'text-gray-300 hover:text-blue-600'}`}
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </button>
       </div>
+
+      {/* 날짜 메모 — 행사보다 위에 둔다. 행사가 없는 날에도 보여야 한다 */}
+      {(notes.byDate.get(date) ?? []).length > 0 && (
+        <div className="px-1.5 pt-1.5 space-y-1">
+          {(notes.byDate.get(date) ?? []).map(n => (
+            <button
+              key={n.id}
+              type="button"
+              onClick={() => onOpenDay(date)}
+              title={`${n.content}${n.author ? ` — ${n.author}` : ''}`}
+              className={`w-full text-left text-[10px] leading-tight px-1.5 py-1 rounded border
+                hover:brightness-95 transition ${colorOf(n.color).chip}`}
+            >
+              <span className="line-clamp-2 whitespace-pre-wrap break-words">{n.content}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* 그 날의 행사들 */}
       <div className="flex-1 p-1.5 space-y-1.5">

@@ -380,6 +380,19 @@ export interface EventExpense {
 
 export type ProjectMemoType = '인원추천' | '운영메모' | '피드백'
 
+/** 운영 캘린더의 날짜 메모 — 행사에 딸리지 않고 날짜 자체에 붙는다.
+ *  보기 전용이며 어떤 계산에도 들어가지 않는다. */
+export interface CalendarNote {
+  id: string
+  org_id: string
+  note_date: string      // 'YYYY-MM-DD'
+  content: string
+  color?: string | null
+  author?: string | null
+  created_at: string
+  updated_at?: string
+}
+
 export interface ProjectMemo {
   id: string
   inquiry_id: string

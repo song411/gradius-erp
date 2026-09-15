@@ -11,7 +11,7 @@ const ALLOWED_TABLES = [
   'payouts', 'evaluations', 'roles', 'factors', 'guides',
   'estimate_versions', 'closings', 'improvement_notes',
   'guard_profiles', 'dispatch_reports', 'project_memos',
-  'pricing_history', 'event_expenses',
+  'pricing_history', 'event_expenses', 'calendar_notes',
   'sim_roles', 'sim_factors', 'sim_guides',
 ]
 

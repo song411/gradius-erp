@@ -9,13 +9,14 @@
 //  2) 막대에 얹을 정보는 사람마다 다르므로 레이어로 고르게 한다.
 
 import { useMemo } from 'react'
-import { AlertTriangle, StickyNote, MapPin, Clock, Users } from 'lucide-react'
+import { AlertTriangle, StickyNote, MapPin, Clock, Users, Plus } from 'lucide-react'
 import type { Inquiry } from '@/lib/supabase/types'
 import {
   cleanStaffName, makeCell, coversDate, fmt, jobMoney,
 } from './matrixCore'
 import { monthGrid, type GridDay } from './dateUtils'
 import type { EventBase, ScheduleData } from './useScheduleData'
+import { colorOf, type CalendarNotesApi } from './useCalendarNotes'
 import {
   DENSITY_MIN_H, type Density, type LayerKey, type ViewPrefs,
 } from './viewPrefs'
@@ -124,10 +125,13 @@ interface Props {
   events: EventBase[]
   today: string
   onOpenDetail: (inq: Inquiry) => void
+  /** 날짜 칸에 직접 쓰는 메모 */
+  notes: CalendarNotesApi
+  onOpenDay: (date: string) => void
 }
 
 export default function CalendarMonthView({
-  year, month, data, prefs, events, today, onOpenDetail,
+  year, month, data, prefs, events, today, onOpenDetail, notes, onOpenDay,
 }: Props) {
   const { conflictDates } = data
   const has = (k: LayerKey) => prefs.layers.includes(k)
@@ -165,6 +169,8 @@ export default function CalendarMonthView({
           density={prefs.density}
           has={has}
           onOpenDetail={onOpenDetail}
+          notes={notes}
+          onOpenDay={onOpenDay}
         />
       ))}
     </div>
@@ -174,6 +180,7 @@ export default function CalendarMonthView({
 // ─── 한 주 ────────────────────────────────────────────────
 function WeekRow({
   week, isLast, events, conflictDates, today, minH, maxLanes, density, has, onOpenDetail,
+  notes, onOpenDay,
 }: {
   week: GridDay[]
   isLast: boolean
@@ -185,6 +192,8 @@ function WeekRow({
   density: Density
   has: (k: LayerKey) => boolean
   onOpenDetail: (inq: Inquiry) => void
+  notes: CalendarNotesApi
+  onOpenDay: (date: string) => void
 }) {
   const from = week[0].date
   const to   = week[6].date
@@ -235,8 +244,8 @@ function WeekRow({
     return n
   }, [hidden])
 
-  // 그리드 행: 1행 = 날짜 숫자, 2행~ = 막대 줄, 마지막 = 여백(+N건)
-  const rows = `auto repeat(${Math.max(shown.length, 1)}, auto) 1fr`
+  // 그리드 행: 1 = 날짜 숫자, 2 = 날짜 메모, 3~ = 행사 막대, 마지막 = 여백(+N건)
+  const rows = `auto auto repeat(${Math.max(shown.length, 1)}, auto) 1fr`
 
   return (
     <div
@@ -275,7 +284,7 @@ function WeekRow({
           <div
             key={`num-${d.date}`}
             style={{ gridColumn: i + 1, gridRow: 1 }}
-            className="relative z-10 px-1.5 pt-1.5 pb-1 flex items-center gap-1"
+            className="group/day relative z-10 px-1.5 pt-1.5 pb-1 flex items-center gap-1"
           >
             <span
               className={`text-[11px] font-bold tabular-nums w-5 h-5 flex items-center justify-center rounded-full
@@ -300,6 +309,52 @@ function WeekRow({
                 {dayMemos[0].length > 10 ? dayMemos[0].slice(0, 10) + '…' : dayMemos[0]}
               </span>
             )}
+
+            {/* 날짜 메모 추가 — 행사가 없는 날에도 눌러서 쓸 수 있어야 한다 */}
+            <button
+              type="button"
+              onClick={() => onOpenDay(d.date)}
+              title="이 날에 메모 쓰기"
+              className="ml-auto shrink-0 opacity-0 group-hover/day:opacity-100 focus:opacity-100
+                text-gray-400 hover:text-blue-600 transition"
+            >
+              <Plus className="h-3 w-3" />
+            </button>
+          </div>
+        )
+      })}
+
+      {/* 날짜 메모 — 날짜 숫자 바로 아래, 행사 막대보다 위에 깐다 */}
+      {week.map((d, i) => {
+        const dayNotes = notes.byDate.get(d.date) ?? []
+        if (dayNotes.length === 0) return null
+        return (
+          <div
+            key={`note-${d.date}`}
+            style={{ gridColumn: i + 1, gridRow: 2 }}
+            className="relative z-10 px-1 pb-0.5 min-w-0 space-y-0.5"
+          >
+            {dayNotes.slice(0, 2).map(n => (
+              <button
+                key={n.id}
+                type="button"
+                onClick={() => onOpenDay(d.date)}
+                title={`${n.content}${n.author ? ` — ${n.author}` : ''}`}
+                className={`w-full text-left text-[9px] leading-tight px-1 py-0.5 rounded border
+                  truncate hover:brightness-95 transition ${colorOf(n.color).chip}`}
+              >
+                {n.content}
+              </button>
+            ))}
+            {dayNotes.length > 2 && (
+              <button
+                type="button"
+                onClick={() => onOpenDay(d.date)}
+                className="text-[9px] text-gray-400 hover:text-gray-600"
+              >
+                +{dayNotes.length - 2}건
+              </button>
+            )}
           </div>
         )
       })}
@@ -310,7 +365,7 @@ function WeekRow({
           <EventBar
             key={`${seg.ev.inq.id}-${seg.c0}`}
             seg={seg}
-            row={li + 2}
+            row={li + 3}
             conflictDates={conflictDates}
             density={density}
             has={has}
@@ -324,7 +379,7 @@ function WeekRow({
         overflowPerCol[i] > 0 ? (
           <div
             key={`more-${d.date}`}
-            style={{ gridColumn: i + 1, gridRow: shown.length + 2 }}
+            style={{ gridColumn: i + 1, gridRow: shown.length + 3 }}
             className="relative z-10 px-1.5 pb-1 self-end"
           >
             <span className="text-[10px] text-gray-400 font-medium">

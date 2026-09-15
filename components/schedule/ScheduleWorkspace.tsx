@@ -17,6 +17,8 @@ import ScheduleMatrixContent from './ScheduleMatrixContent'
 import CalendarMonthView, { filterEventsForCalendar } from './CalendarMonthView'
 import CalendarWeekView from './CalendarWeekView'
 import { useScheduleData } from './useScheduleData'
+import { useCalendarNotes } from './useCalendarNotes'
+import DayMemoModal from './DayMemoModal'
 import { fmt, todayLocal, jobMoney } from './matrixCore'
 import {
   compressDates, monthGrid, monthDatesOf, weekOf, addDays, weekStartOf, md,
@@ -35,6 +37,7 @@ export default function ScheduleWorkspace() {
   const [query,       setQuery]       = useState('')
   const [onlyProblem, setOnlyProblem] = useState(false)
   const [detailInq,   setDetailInq]   = useState<Inquiry | null>(null)
+  const [memoDate,    setMemoDate]    = useState<string | null>(null)
   const [tuning,      setTuning]      = useState(false)
 
   const { prefs, setView, setDensity, toggleLayer, applyPreset } = useViewPrefs()
@@ -57,6 +60,8 @@ export default function ScheduleWorkspace() {
   }, [isWeek, cursor, year, month])
 
   const data = useScheduleData(from, to)
+  // 날짜 칸에 직접 쓰는 메모 (행사와 무관 — 행사가 없는 날에도 쓸 수 있다)
+  const notes = useCalendarNotes(from, to)
 
   // 표는 '그 달'이 단위다 — 격자 앞뒤의 인접 월 날짜까지 행으로 뿌리면 안 된다
   const tableDates = useMemo(() => monthDatesOf(year, month), [year, month])
@@ -332,6 +337,13 @@ export default function ScheduleWorkspace() {
         <div className="flex-1 min-h-0 overflow-auto p-4 space-y-3">
           <ConflictBox conflicts={data.conflicts} busy={data.busy} />
 
+          {notes.missingTable && (
+            <div className="rounded-xl border-2 border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+              날짜 메모 기능을 쓰려면 <b>supabase/migrations/012_calendar_notes.sql</b> 을
+              Supabase SQL 편집기에서 한 번 실행해 주세요. 그 전까지 달력의 나머지 기능은 정상 동작합니다.
+            </div>
+          )}
+
           {data.busy ? (
             <div className="flex items-center justify-center h-40 text-sm text-gray-400">불러오는 중…</div>
           ) : calEvents.length === 0 ? (
@@ -351,6 +363,8 @@ export default function ScheduleWorkspace() {
               events={calEvents}
               today={today}
               onOpenDetail={setDetailInq}
+              notes={notes}
+              onOpenDay={setMemoDate}
             />
           ) : (
             <CalendarMonthView
@@ -361,6 +375,8 @@ export default function ScheduleWorkspace() {
               events={calEvents}
               today={today}
               onOpenDetail={setDetailInq}
+              notes={notes}
+              onOpenDay={setMemoDate}
             />
           )}
 
@@ -402,6 +418,11 @@ export default function ScheduleWorkspace() {
       {/* ══ 상세 패널 ══ */}
       {detailInq && (
         <EventDetailPanel inquiry={detailInq} onClose={() => setDetailInq(null)} />
+      )}
+
+      {/* ══ 날짜 메모 ══ */}
+      {memoDate && (
+        <DayMemoModal date={memoDate} api={notes} onClose={() => setMemoDate(null)} />
       )}
     </div>
   )
