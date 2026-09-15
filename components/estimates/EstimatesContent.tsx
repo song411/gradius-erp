@@ -176,6 +176,7 @@ export default function EstimatesContent() {
               company_name:   inq?.company_name   || est.company_name || '',
               event_start:    inq?.event_start    || null,
               event_end:      inq?.event_end      || null,
+              event_dates:    inq?.event_dates ?? null,
               phone:          inq?.phone          || null,
               location:       (inq as any)?.location     || null,
               event_time:     (inq as any)?.event_time   || null,

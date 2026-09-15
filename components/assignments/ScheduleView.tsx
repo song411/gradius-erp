@@ -7,6 +7,7 @@ import { db } from '@/lib/supabase/api'
 import { toast } from 'sonner'
 import { Plus, Edit2, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
+import { eventDatesOf } from '@/components/schedule/matrixCore'
 
 // ─── 타입 ─────────────────────────────────────────────────
 
@@ -264,10 +265,13 @@ export default function ScheduleView({
   const [newJobRequired, setNewJobRequired] = useState('1')
   const [openQuickCell, setOpenQuickCell]   = useState<string | null>(null)
 
-  const dates = useMemo(() => {
-    if (!inquiry.event_start || !inquiry.event_end) return []
-    return getDateRange(inquiry.event_start, inquiry.event_end)
-  }, [inquiry.event_start, inquiry.event_end])
+  // 행사에 운영일이 지정돼 있으면 그 날짜만 컬럼으로 세운다.
+  // 금토 5주 연속 행사를 30일 컬럼으로 펼치면 안 하는 날 20개가 섞여
+  // 배정할 칸을 찾기 어렵고, 운영 캘린더와 날짜가 어긋나 보인다.
+  const dates = useMemo(
+    () => eventDatesOf(inquiry),
+    [inquiry],
+  )
 
   // ── 스케줄 설정 로드 ────────────────────────────────────
   const loadConfig = useCallback(async () => {

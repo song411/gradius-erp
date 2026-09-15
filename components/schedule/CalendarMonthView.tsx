@@ -213,12 +213,13 @@ function WeekRow({
       const c1 = week.reduce((acc, d, i) => (d.date <= e ? i : acc), -1)
       if (c0 < 0 || c1 < 0 || c1 < c0) return
 
-      // 운영일이 이어지는 구간마다 막대를 하나씩
+      // 운영일이 이어지는 구간마다 막대를 하나씩.
+      // 행사에 운영일이 지정돼 있으면 안 하는 날에서 막대가 끊긴다.
       let i = c0
       while (i <= c1) {
-        if (ev.dayNotes[week[i].date]?.off) { i++; continue }
+        if (!coversDate(ev.inq, week[i].date)) { i++; continue }
         let j = i
-        while (j + 1 <= c1 && !ev.dayNotes[week[j + 1].date]?.off) j++
+        while (j + 1 <= c1 && coversDate(ev.inq, week[j + 1].date)) j++
         out.push({
           ev, c0: i, c1: j,
           dates: week.slice(i, j + 1).map(d => d.date),
@@ -273,13 +274,6 @@ function WeekRow({
       {week.map((d, i) => {
         const isToday = d.date === today
         const conflict = has('warn') && conflictDates.has(d.date)
-        // 그 날에 사람이 적어둔 메모 (여러 행사면 모아서 보여준다)
-        const dayMemos = has('memo')
-          ? events.flatMap(ev => {
-              const t = ev.dayNotes[d.date]?.text
-              return t ? [`${ev.inq.event_name || ev.inq.company_name || '행사'}: ${t}`] : []
-            })
-          : []
         return (
           <div
             key={`num-${d.date}`}
@@ -301,14 +295,6 @@ function WeekRow({
                 aria-label="중복배정"
               />
             )}
-            {dayMemos.length > 0 && (
-              <span
-                className="text-[9px] text-amber-700 bg-amber-100 rounded px-1 leading-tight truncate min-w-0"
-                title={dayMemos.join(' / ')}
-              >
-                {dayMemos[0].length > 10 ? dayMemos[0].slice(0, 10) + '…' : dayMemos[0]}
-              </span>
-            )}
 
             {/* 날짜 메모 추가 — 행사가 없는 날에도 눌러서 쓸 수 있어야 한다 */}
             <button
@@ -326,15 +312,15 @@ function WeekRow({
 
       {/* 날짜 메모 — 날짜 숫자 바로 아래, 행사 막대보다 위에 깐다 */}
       {week.map((d, i) => {
-        const dayNotes = notes.byDate.get(d.date) ?? []
-        if (dayNotes.length === 0) return null
+        const dayMemos = notes.byDate.get(d.date) ?? []
+        if (dayMemos.length === 0) return null
         return (
           <div
             key={`note-${d.date}`}
             style={{ gridColumn: i + 1, gridRow: 2 }}
             className="relative z-10 px-1 pb-0.5 min-w-0 space-y-0.5"
           >
-            {dayNotes.slice(0, 2).map(n => (
+            {dayMemos.slice(0, 2).map(n => (
               <button
                 key={n.id}
                 type="button"
@@ -346,13 +332,13 @@ function WeekRow({
                 {n.content}
               </button>
             ))}
-            {dayNotes.length > 2 && (
+            {dayMemos.length > 2 && (
               <button
                 type="button"
                 onClick={() => onOpenDay(d.date)}
                 className="text-[9px] text-gray-400 hover:text-gray-600"
               >
-                +{dayNotes.length - 2}건
+                +{dayMemos.length - 2}건
               </button>
             )}
           </div>
@@ -615,7 +601,7 @@ export function filterEventsForCalendar(
   return events.filter(ev => {
     if (onlyProblem) {
       const short = monthDates.some(d => {
-        if (!coversDate(ev.inq.event_start, ev.inq.event_end, d)) return false
+        if (!coversDate(ev.inq, d)) return false
         return ev.jobs.some(job => job.required > 0 && makeCell(job, d).total < job.required)
       })
       if (!short) return false

@@ -132,7 +132,7 @@ export default function ScheduleMatrixContent({
     const out: Run[] = []
 
     events.forEach(base => {
-      const active = dates.filter(d => coversDate(base.inq.event_start, base.inq.event_end, d))
+      const active = dates.filter(d => coversDate(base.inq, d))
       if (active.length === 0) return
 
       base.jobs.forEach(job => {

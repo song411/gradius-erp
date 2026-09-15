@@ -8,6 +8,7 @@ import { parseInquiryText, calcParseConfidence, type ParsedInquiry } from '@/lib
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import EventDatesPicker from './EventDatesPicker'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -37,6 +38,7 @@ const emptyForm = {
   location: '',
   event_start: '',
   event_end: '',
+  event_dates: [] as string[],   // 띄엄띄엄 하는 행사의 실제 운영일 (비면 기간 전체)
   event_time: '',
   date_memo: '',       // 비정기 일정 메모 (예: 5월 5일, 5월 7일)
   service_type: '',
@@ -156,6 +158,7 @@ export default function InquiriesContent() {
       location:       inq.location       || '',
       event_start:    inq.event_start    || '',
       event_end:      inq.event_end      || '',
+      event_dates:    inq.event_dates ?? [],
       event_time:     inq.event_time     || '',
       date_memo:      (inq as any).date_memo || '',
       service_type:   inq.service_type   || '',
@@ -217,6 +220,8 @@ export default function InquiriesContent() {
       location:       form.location.trim()       || null,
       event_start:    form.event_start           || null,
       event_end:      form.event_end             || null,
+      // 비어 있으면 null — '기간 전체가 운영일'이라는 기존 동작을 그대로 뜻한다
+      event_dates:    form.event_dates.length > 0 ? form.event_dates : null,
       event_time:     form.event_time.trim()     || null,
       date_memo:      form.date_memo.trim()      || null,
       service_type:   form.service_type          || null,
@@ -531,6 +536,16 @@ export default function InquiriesContent() {
                   <div>
                     <label className="text-xs text-gray-400 mb-1 block">종료일 <span className="text-gray-300">(당일 행사면 생략)</span></label>
                     <Input type="date" value={form.event_end} onChange={e => setForm(f => ({ ...f, event_end: e.target.value }))} />
+                  </div>
+
+                  {/* 금토 5주 연속처럼 띄엄띄엄 도는 행사 — 안 쓰면 기간 전체가 행사일 */}
+                  <div className="col-span-2">
+                    <EventDatesPicker
+                      start={form.event_start}
+                      end={form.event_end || form.event_start}
+                      value={form.event_dates}
+                      onChange={next => setForm(f => ({ ...f, event_dates: next }))}
+                    />
                   </div>
                 </div>
               )}

@@ -21,31 +21,15 @@ export const DOW = ['일', '월', '화', '수', '목', '금', '토']
 // ─── 타입 ─────────────────────────────────────────────────
 export interface MemoRecord { id: string; inquiry_id: string; content: string }
 
-/** 날짜 하나에 사람이 직접 달아두는 표시.
- *
- *  ※ 이 값은 "보기 위한" 값이다. 계산에는 절대 들어가지 않는다.
- *  중복배정 판정·금액·마진·배정 인원 수는 이 값과 무관하게 지금 그대로 돈다.
- *  그래서 잘못 적어도 다른 화면 숫자가 어긋나지 않고, 부담 없이 적어둘 수 있다.
- *  (부대비용 수동입력과 같은 원칙 — 사람이 적은 것은 사람이 보는 데만 쓴다) */
-export interface DayNote {
-  /** 이 날은 실제로 운영하지 않음. 달력에서 막대를 끊어 '금토만' 같은 실제 모습이 보이게 한다. */
-  off?: boolean
-  /** 그 날에 대한 짧은 메모 (예: '1주차 4명', '우천 취소 가능') */
-  text?: string
-}
-
 export interface ScheduleConfig {
   customJobs: Array<{ jobType: string; required: number; payRate: number }>
   hiddenJobs: string[]
   requiredOverrides: Record<string, number>
   labelOverrides: Record<string, string>
-  /** 'YYYY-MM-DD' → 표시용 메모 */
-  dayNotes: Record<string, DayNote>
 }
 
 export const EMPTY_CONFIG: ScheduleConfig = {
   customJobs: [], hiddenJobs: [], requiredOverrides: {}, labelOverrides: {},
-  dayNotes: {},
 }
 
 /** 행사 1건의 직무 단위 기준값 (날짜 무관) */
@@ -139,7 +123,6 @@ export function parseConfigs(memos: MemoRecord[]): Map<string, ScheduleConfig> {
         hiddenJobs:        p.hiddenJobs        ?? [],
         requiredOverrides: p.requiredOverrides ?? {},
         labelOverrides:    p.labelOverrides    ?? {},
-        dayNotes:          p.dayNotes          ?? {},
       })
     } catch { /* 설정 파싱 실패는 기본값으로 진행 */ }
   })
@@ -352,13 +335,47 @@ export function makeCell(job: JobBase, date: string): JobCell {
   return { job, pinned, allPeriod, total: pinned.length + allPeriod.length }
 }
 
-/** 행사가 이 날짜에 걸쳐 있는지 (event_end가 없으면 당일 행사) */
-export function coversDate(
-  start: string | undefined, end: string | undefined, date: string,
-): boolean {
-  const s = start?.substring(0, 10) ?? ''
+/** 날짜를 가진 행사 (Inquiry 의 날짜 부분만 추린 최소 형태) */
+export interface DatedEvent {
+  event_start?: string
+  event_end?: string
+  /** 실제로 행사가 열리는 날. 정기·불규칙 행사에서만 채운다.
+   *  비어 있으면 start~end 전체를 운영일로 본다 (기존 동작 그대로). */
+  event_dates?: string[] | null
+}
+
+/** 행사가 실제로 열리는 날짜 목록.
+ *
+ *  '금토 5주 연속' 같은 행사는 start~end 가 30일이지만 실제 근무는 10일이다.
+ *  event_dates 가 채워져 있으면 그것이 사실이고, 비어 있으면 예전처럼 구간 전체다.
+ *  ★ 비어 있을 때의 결과는 기존 getDateRange(start,end) 와 완전히 같아야 한다 —
+ *    기존 행사 90%가 여기로 오므로, 여기서 어긋나면 화면 전체 숫자가 흔들린다. */
+export function eventDatesOf(inq: DatedEvent): string[] {
+  const s = inq.event_start?.substring(0, 10) ?? ''
+  if (!s) return []
+  const e = inq.event_end?.substring(0, 10) || s
+
+  const picked = inq.event_dates
+  if (Array.isArray(picked) && picked.length > 0) {
+    // 저장된 값이 구간 밖으로 나가 있어도 화면이 깨지지 않게 정리만 한다.
+    // (사람이 직접 찍는 값이라 start/end 를 나중에 고치면 어긋날 수 있다)
+    return [...new Set(picked.map(d => d.substring(0, 10)))].sort()
+  }
+  return getDateRange(s, e)
+}
+
+/** 행사가 이 날짜에 열리는지.
+ *  event_dates 가 있으면 그 목록에 있는 날만, 없으면 start~end 안이면 된다
+ *  (event_end 가 없으면 당일 행사). */
+export function coversDate(inq: DatedEvent, date: string): boolean {
+  const s = inq.event_start?.substring(0, 10) ?? ''
   if (!s) return false
-  const e = end?.substring(0, 10) || s
+
+  const picked = inq.event_dates
+  if (Array.isArray(picked) && picked.length > 0) {
+    return picked.some(d => d.substring(0, 10) === date)
+  }
+  const e = inq.event_end?.substring(0, 10) || s
   return s <= date && date <= e
 }
 

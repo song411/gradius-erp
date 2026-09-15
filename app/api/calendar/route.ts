@@ -9,6 +9,7 @@ export async function POST(request: NextRequest) {
       event_name, company_name, event_start, event_end,
       phone, location, event_time, required_staff, memo,
       supply_price, total_price, version_label,
+      event_dates,
     } = body
 
     // Vercel 환경변수에서 \n을 실제 줄바꿈으로 변환 (두 가지 케이스 모두 처리)
@@ -69,13 +70,31 @@ export async function POST(request: NextRequest) {
       '※ GUARDIUS ERP에서 자동 등록된 일정입니다.',
     ].filter(v => v !== null).join('\n')
 
+    // 띄엄띄엄 도는 행사(금토 5주 연속 등)는 통 블록으로 올리면 안 하는 날까지
+    // 일정이 잡힌 것처럼 보인다. RDATE 로 실제 운영일만 찍는다 —
+    // 회차마다 이벤트를 따로 만들면 나중에 수정·삭제할 게 여러 개가 되지만,
+    // RDATE 는 이벤트 하나로 불규칙한 날짜까지 정확히 표현된다.
+    const picked: string[] = Array.isArray(event_dates)
+      ? [...new Set(event_dates.map((d: string) => String(d).substring(0, 10)))].sort()
+      : []
+
+    // 운영일을 쓰면 첫 날 하루짜리 이벤트를 만들고 나머지를 RDATE 로 반복시킨다
+    const useRdate = picked.length > 1
+    const baseDate = useRdate ? picked[0] : startDate
+    const baseEnd  = useRdate
+      ? new Date(new Date(picked[0]).getTime() + 86400000).toISOString().split('T')[0]
+      : endDate
+
     const event = await calendar.events.insert({
       calendarId,
       requestBody: {
         summary:     `[가디어스] ${company_name || ''} - ${event_name || ''}`,
         description,
-        start: { date: startDate },
-        end:   { date: endDate },
+        start: { date: baseDate },
+        end:   { date: baseEnd },
+        ...(useRdate
+          ? { recurrence: [`RDATE;VALUE=DATE:${picked.map(d => d.replace(/-/g, '')).join(',')}`] }
+          : {}),
         colorId: '9', // 블루베리 색상
       },
     })

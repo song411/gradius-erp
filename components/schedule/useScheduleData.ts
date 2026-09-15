@@ -12,7 +12,7 @@ import { db } from '@/lib/supabase/api'
 import type { Assignment, Estimate, EstimateItem, Inquiry } from '@/lib/supabase/types'
 import {
   CONTRACTED_STATUSES, CONFIG_TAG, EMPTY_CONFIG,
-  type JobBase, type MemoRecord, type DayNote,
+  type JobBase, type MemoRecord,
   fmt, cleanStaffName, parseConfigs, buildJobs, splitByDate, coversDate, getDateRange,
 } from './matrixCore'
 
@@ -20,8 +20,6 @@ import {
 export interface EventBase {
   inq: Inquiry
   jobs: JobBase[]
-  /** 사람이 직접 찍어둔 날짜별 표시 (운영/휴무·메모). 보기 전용 — 계산에 안 들어간다. */
-  dayNotes: Record<string, DayNote>
   hasFinalEstimate: boolean
   discountLabel: string | null   // 할인이 걸려 있으면 청구단가에 주의 표시
   memoCount: number              // 스케줄 설정 레코드를 뺀 실제 메모 수
@@ -159,7 +157,6 @@ export function useScheduleData(from: string, to: string): ScheduleData {
         return {
           inq,
           jobs,
-          dayNotes: cfg.dayNotes ?? {},
           unassignedJob: jobs.filter(g => g.unmatched)
             .reduce((n, g) => n + g.assignments.length, 0),
           hasFinalEstimate: !!est,
@@ -194,7 +191,7 @@ export function useScheduleData(from: string, to: string): ScheduleData {
     rangeDates.forEach(date => {
       const where = new Map<string, Set<string>>()
       events.forEach(ev => {
-        if (!coversDate(ev.inq.event_start, ev.inq.event_end, date)) return
+        if (!coversDate(ev.inq, date)) return
         const title = ev.inq.event_name || ev.inq.company_name || '(무제)'
         ev.jobs.forEach(job => {
           const { pinned, allPeriod } = splitByDate(job.assignments, date)

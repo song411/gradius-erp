@@ -5,6 +5,7 @@ import { db } from '@/lib/supabase/api'
 import type { Inquiry, Assignment, Attendance, Evaluation, Staff } from '@/lib/supabase/types'
 import type { AttendanceStatus } from '@/lib/supabase/types'
 import { formatDate, formatKRW } from '@/lib/utils'
+import { eventDatesOf } from '@/components/schedule/matrixCore'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -706,7 +707,7 @@ export default function AttendanceContent() {
 
             {/* 날짜 탭 — 다일 행사(2일 이상)일 때만 표시 */}
             {activeTab === 'attendance' && (() => {
-              const dates = getDateRange(selectedInq.event_start, selectedInq.event_end)
+              const dates = eventDatesOf(selectedInq)
               if (dates.length <= 1) return null
               return (
                 <div className="bg-gray-50 border-b border-gray-200 flex overflow-x-auto">
@@ -1094,7 +1095,7 @@ export default function AttendanceContent() {
           assignments={assignments}
           attendances={attendances}
           staffMap={staffMap}
-          dates={getDateRange(selectedInq.event_start, selectedInq.event_end)}
+          dates={eventDatesOf(selectedInq)}
           currentDate={selectedDate}
         />
       )}

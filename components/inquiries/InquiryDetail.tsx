@@ -122,6 +122,7 @@ export default function InquiryDetail({ id }: { id: string }) {
             company_name: inquiry.company_name,
             event_start:  inquiry.event_start,
             event_end:    inquiry.event_end,
+            event_dates:  inquiry.event_dates ?? null,
             phone:        inquiry.phone,
             memo:         inquiry.memo,
           }),

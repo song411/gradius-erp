@@ -101,6 +101,9 @@ export interface Inquiry {
   location?: string
   event_start?: string
   event_end?: string
+  /** 실제로 행사가 열리는 날 (정기·불규칙 행사에만 채운다).
+   *  비어 있으면 event_start~event_end 전체를 운영일로 본다. */
+  event_dates?: string[] | null
   date_memo?: string
   event_time?: string
   service_type?: string
