@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { db } from '@/lib/supabase/api'
 import type { ProjectMemo, ProjectMemoType } from '@/lib/supabase/types'
+import { CONFIG_TAG } from '@/components/schedule/matrixCore'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
@@ -57,7 +58,7 @@ export default function ProjectMemoPanel({ inquiryId, compact = false }: Props) 
       })
       // 스케줄 설정('[스케줄_설정]' JSON)은 같은 테이블에 살지만 사람이 쓴 메모가 아니다.
       // 걸러내지 않으면 운영메모 탭에 JSON 덩어리가 그대로 노출된다.
-      setMemos(data.filter(m => !m.content?.startsWith('[스케줄_설정]')))
+      setMemos(data.filter(m => !m.content?.startsWith(CONFIG_TAG)))
     } catch {
       // 테이블 미생성 등 에러 시 빈 목록 유지
     } finally {
