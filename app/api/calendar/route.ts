@@ -78,12 +78,18 @@ export async function POST(request: NextRequest) {
       ? [...new Set(event_dates.map((d: string) => String(d).substring(0, 10)))].sort()
       : []
 
-    // 운영일을 쓰면 첫 날 하루짜리 이벤트를 만들고 나머지를 RDATE 로 반복시킨다
-    const useRdate = picked.length > 1
-    const baseDate = useRdate ? picked[0] : startDate
-    const baseEnd  = useRdate
+    // 운영일을 쓰면 첫 날 하루짜리 이벤트를 만들고 나머지를 RDATE 로 반복시킨다.
+    //
+    // 기준일은 운영일이 하나뿐이어도 그 날로 잡는다. 예전에는 두 개 이상일 때만
+    // 운영일을 쓰고 하나면 event_start~event_end 로 되돌아갔는데, 그러면 9/18 하루만
+    // 골라도 캘린더에 9/18~10/17 통블록이 잡혔다 (실측 확인: 30일짜리 블록 1개).
+    // 반복(RDATE)은 두 개 이상일 때만 필요하지만, 기준일은 언제나 운영일이어야 한다.
+    const usePicked = picked.length > 0
+    const baseDate  = usePicked ? picked[0] : startDate
+    const baseEnd   = usePicked
       ? new Date(new Date(picked[0]).getTime() + 86400000).toISOString().split('T')[0]
       : endDate
+    const useRdate  = picked.length > 1
 
     const event = await calendar.events.insert({
       calendarId,
