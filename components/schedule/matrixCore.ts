@@ -395,18 +395,18 @@ export const STATE_STYLE: Record<CellState, {
   chip: string
   label: (total: number, required: number) => string
 }> = {
-  none:  { chip: 'bg-red-100 text-red-700 border-red-200',          label: (_t, r) => `미배정 · ${r}명 필요` },
-  short: { chip: 'bg-yellow-100 text-yellow-800 border-yellow-200', label: (t, r)  => `${r - t}명 부족` },
-  full:  { chip: 'bg-green-100 text-green-700 border-green-200',    label: ()      => '충족' },
-  over:  { chip: 'bg-orange-100 text-orange-700 border-orange-200', label: (t, r)  => `${t - r}명 초과` },
-  extra: { chip: 'bg-blue-100 text-blue-700 border-blue-200',       label: ()      => '견적 외' },
-  empty: { chip: 'bg-gray-100 text-gray-400 border-gray-200',       label: ()      => '-' },
+  none:  { chip: 'bg-red-100 text-red-800 border-red-300',          label: (_t, r) => `미배정 · ${r}명 필요` },
+  short: { chip: 'bg-yellow-100 text-yellow-900 border-yellow-300', label: (t, r)  => `${r - t}명 부족` },
+  full:  { chip: 'bg-green-100 text-green-800 border-green-300',    label: ()      => '충족' },
+  over:  { chip: 'bg-orange-100 text-orange-800 border-orange-300', label: (t, r)  => `${t - r}명 초과` },
+  extra: { chip: 'bg-blue-100 text-blue-800 border-blue-300',       label: ()      => '견적 외' },
+  empty: { chip: 'bg-gray-100 text-gray-500 border-gray-300',       label: ()      => '-' },
 }
 
 export const STATUS_CHIP: Record<string, string> = {
-  확정:   'bg-green-50 text-green-800 border-green-200',
-  배정중: 'bg-yellow-50 text-yellow-800 border-yellow-200',
-  후보:   'bg-blue-50 text-blue-800 border-blue-200',
+  확정:   'bg-green-50 text-green-900 border-green-300',
+  배정중: 'bg-yellow-50 text-yellow-900 border-yellow-300',
+  후보:   'bg-blue-50 text-blue-900 border-blue-300',
 }
 
 // ─── 단가 / 마진 ──────────────────────────────────────────

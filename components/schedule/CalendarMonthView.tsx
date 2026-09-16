@@ -141,7 +141,7 @@ export default function CalendarMonthView({
 
   return (
     /* overflow-hidden 을 쓰지 않는다 — 막대 호버 요약이 칸 밖으로 나가므로 잘린다 */
-    <div className="rounded-xl border-2 border-gray-200 bg-white">
+    <div className="rounded-xl border-2 border-gray-300 bg-white">
       {/* ── 요일 머리 ── */}
       <div className="grid grid-cols-7 border-b-2 border-gray-300 bg-gray-100 rounded-t-[10px]">
         {['일', '월', '화', '수', '목', '금', '토'].map((d, i) => (
@@ -250,7 +250,7 @@ function WeekRow({
 
   return (
     <div
-      className={`grid grid-cols-7 ${isLast ? '' : 'border-b border-gray-200'}`}
+      className={`grid grid-cols-7 ${isLast ? '' : 'border-b-2 border-gray-300'}`}
       style={{ gridTemplateRows: rows, minHeight: minH }}
     >
       {/* 날짜 칸 배경 — 모든 행을 가로질러 세로선과 음영을 깐다 */}
@@ -262,7 +262,7 @@ function WeekRow({
           <div
             key={`bg-${d.date}`}
             style={{ gridColumn: i + 1, gridRow: '1 / -1' }}
-            className={`border-l border-gray-100 first:border-l-0
+            className={`border-l border-gray-300 first:border-l-0
               ${!d.inMonth ? 'bg-gray-50/70' : weekend ? 'bg-slate-50/50' : ''}
               ${conflict ? 'bg-red-50/60' : ''}
               ${isToday ? 'ring-2 ring-inset ring-blue-400' : ''}`}
@@ -283,9 +283,9 @@ function WeekRow({
             <span
               className={`text-[11px] font-bold tabular-nums w-5 h-5 flex items-center justify-center rounded-full
                 ${isToday ? 'bg-blue-600 text-white'
-                  : !d.inMonth ? 'text-gray-300'
-                  : i === 0 ? 'text-red-500'
-                  : i === 6 ? 'text-blue-500' : 'text-gray-700'}`}
+                  : !d.inMonth ? 'text-gray-400'
+                  : i === 0 ? 'text-red-600'
+                  : i === 6 ? 'text-blue-600' : 'text-gray-900'}`}
             >
               {d.day}
             </span>
@@ -326,7 +326,7 @@ function WeekRow({
                 type="button"
                 onClick={() => onOpenDay(d.date)}
                 title={`${n.content}${n.author ? ` — ${n.author}` : ''}`}
-                className={`w-full text-left text-[9px] leading-tight px-1 py-0.5 rounded border
+                className={`w-full text-left text-[10px] leading-tight px-1 py-0.5 rounded border
                   truncate hover:brightness-95 transition ${colorOf(n.color).chip}`}
               >
                 {n.content}
@@ -336,7 +336,7 @@ function WeekRow({
               <button
                 type="button"
                 onClick={() => onOpenDay(d.date)}
-                className="text-[9px] text-gray-400 hover:text-gray-600"
+                className="text-[10px] font-medium text-gray-600 hover:text-gray-900"
               >
                 +{dayMemos.length - 2}건
               </button>
@@ -368,7 +368,7 @@ function WeekRow({
             style={{ gridColumn: i + 1, gridRow: shown.length + 3 }}
             className="relative z-10 px-1.5 pb-1 self-end"
           >
-            <span className="text-[10px] text-gray-400 font-medium">
+            <span className="text-[10px] text-gray-600 font-semibold">
               +{overflowPerCol[i]}건
             </span>
           </div>
@@ -470,14 +470,14 @@ function EventBar({
           )}
           {!!money && (
             <div className="text-[10px] text-gray-600 tabular-nums">
-              청구 {fmt(money)}원 <span className="text-gray-400">(행사 전체)</span>
+              청구 {fmt(money)}원 <span className="text-gray-500">(행사 전체)</span>
             </div>
           )}
           {st.crewCount > 0 && (
             <div className="text-[10px] text-gray-500">
               크루 {st.crewCount}명{st.crewVaries ? ' · 날짜별 다름' : ''}
               {!st.crewVaries && st.crew.length > 0 && (
-                <span className="text-gray-400"> · {st.crew.slice(0, 5).join(', ')}
+                <span className="text-gray-600"> · {st.crew.slice(0, 5).join(', ')}
                   {st.crew.length > 5 ? ` 외 ${st.crew.length - 5}` : ''}</span>
               )}
             </div>
@@ -487,7 +487,7 @@ function EventBar({
               {ev.latestMemo}
             </div>
           )}
-          <div className="text-[9px] text-gray-400 pt-0.5 border-t border-gray-100">
+          <div className="text-[10px] text-gray-500 pt-0.5 border-t border-gray-200">
             클릭하면 전체 정보가 열립니다
           </div>
         </div>
@@ -506,7 +506,7 @@ function EventBar({
       >
         {/* 1줄: 행사명 + 배정/경고 */}
         <div className="flex items-center gap-1 min-w-0">
-          {seg.openLeft && <span className="text-[9px] opacity-50 shrink-0">◀</span>}
+          {seg.openLeft && <span className="text-[10px] opacity-75 shrink-0">◀</span>}
           {has('status') && (
             <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${tone.dot}`} />
           )}
@@ -519,7 +519,7 @@ function EventBar({
             // 숫자만 있으면 '9/2'가 인원(9명/2명)인지 9월 2일인지 구분되지 않는다.
             <span
               className={`ml-auto shrink-0 inline-flex items-center gap-0.5 text-[10px] font-bold tabular-nums px-1 rounded
-                ${short ? 'bg-red-100 text-red-700' : 'bg-white/70 text-gray-600'}`}
+                ${short ? 'bg-red-100 text-red-800' : 'bg-white/90 text-gray-800'}`}
               title={`배정 ${range(st.filMin, st.filMax)}명 / 필요 ${range(st.reqMin, st.reqMax)}명`}
             >
               <Users className="h-2.5 w-2.5 shrink-0" />
@@ -532,12 +532,12 @@ function EventBar({
           {has('memo') && ev.memoCount > 0 && (
             <StickyNote className="h-3 w-3 text-amber-500 shrink-0" />
           )}
-          {seg.openRight && <span className="text-[9px] opacity-50 shrink-0 ml-auto">▶</span>}
+          {seg.openRight && <span className="text-[10px] opacity-75 shrink-0 ml-auto">▶</span>}
         </div>
 
         {/* 2줄: 고객사 · 금액 · 장소 · 시간 */}
         {showMeta && (
-          <div className="flex items-center gap-1.5 min-w-0 mt-0.5 text-[10px] opacity-75">
+          <div className="flex items-center gap-1.5 min-w-0 mt-0.5 text-[10px] opacity-90">
             {has('company') && inq.company_name && (
               <span className="truncate min-w-0">{inq.company_name}</span>
             )}
@@ -559,7 +559,7 @@ function EventBar({
 
         {/* 3줄: 현장 준비물 */}
         {showMeta && has('onsite') && (inq.attire || inq.meal || inq.parking) && (
-          <div className="text-[10px] opacity-60 truncate mt-0.5">
+          <div className="text-[10px] opacity-80 truncate mt-0.5">
             {[inq.attire, inq.meal, inq.parking].filter(Boolean).join(' · ')}
           </div>
         )}
@@ -567,7 +567,7 @@ function EventBar({
         {/* 4줄: 크루 이름 — 구간 내내 같을 때만 이름을 적는다 */}
         {showCrew && (
           st.crewVaries ? (
-            <div className="mt-0.5 text-[10px] opacity-60 inline-flex items-center gap-0.5">
+            <div className="mt-0.5 text-[10px] opacity-80 inline-flex items-center gap-0.5">
               <Users className="h-2.5 w-2.5" />크루 {st.crewCount}명 · 날짜별 다름
             </div>
           ) : (
@@ -575,13 +575,13 @@ function EventBar({
               {st.crew.slice(0, 6).map(n => (
                 <span
                   key={n}
-                  className="text-[9px] leading-none px-1 py-0.5 rounded bg-white/70 border border-current/20"
+                  className="text-[10px] leading-none px-1 py-0.5 rounded bg-white/90 border border-current/40"
                 >
                   {n}
                 </span>
               ))}
               {st.crew.length > 6 && (
-                <span className="text-[9px] opacity-60">+{st.crew.length - 6}</span>
+                <span className="text-[10px] font-medium opacity-80">+{st.crew.length - 6}</span>
               )}
             </div>
           )

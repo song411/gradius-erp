@@ -75,11 +75,11 @@ export default function CalendarWeekView({
   }, [events, week])
 
   return (
-    <div className="rounded-xl border-2 border-gray-200 bg-white overflow-hidden">
+    <div className="rounded-xl border-2 border-gray-300 bg-white overflow-hidden">
       {/* 이 주 내내 같은 편성으로 도는 행사 */}
       {standing.length > 0 && (
-        <div className="border-b-2 border-gray-200 bg-slate-50/70 px-2 py-1.5 space-y-1">
-          <div className="text-[10px] font-bold text-gray-400 tracking-wide">
+        <div className="border-b-2 border-gray-300 bg-slate-50/70 px-2 py-1.5 space-y-1">
+          <div className="text-[10px] font-bold text-gray-600 tracking-wide">
             이 주 내내 · 편성 동일
           </div>
           {standing.map(ev => (
@@ -145,7 +145,7 @@ function StandingBar({
         <span className="text-[11px] font-bold text-gray-900 truncate max-w-[220px]">
           {inq.event_name || inq.company_name || '(무제)'}
         </span>
-        <span className="text-[9px] text-gray-400 tabular-nums shrink-0">
+        <span className="text-[10px] text-gray-600 tabular-nums shrink-0">
           {inq.event_start?.substring(5, 10)}
           {inq.event_end && inq.event_end !== inq.event_start
             ? `–${inq.event_end.substring(5, 10)}` : ''}
@@ -163,7 +163,7 @@ function StandingBar({
             {rows.map(({ job, cell, state }) => (
               <span
                 key={job.jobType}
-                className={`text-[9px] px-1 py-px rounded border whitespace-nowrap ${STATE_STYLE[state].chip}`}
+                className={`text-[10px] px-1 py-px rounded border whitespace-nowrap ${STATE_STYLE[state].chip}`}
                 title={`${job.label} — ${STATE_STYLE[state].label(cell.total, job.required)}`}
               >
                 {job.label} {cell.total}/{job.required || '-'}
@@ -206,14 +206,14 @@ function DayColumn({
 
   return (
     <div
-      className={`border-l border-gray-100 first:border-l-0 min-h-[400px] flex flex-col
+      className={`border-l border-gray-300 first:border-l-0 min-h-[400px] flex flex-col
         ${weekend ? 'bg-slate-50/40' : ''}
         ${conflict ? 'bg-red-50/40' : ''}
         ${isToday ? 'ring-2 ring-inset ring-blue-400' : ''}`}
     >
       {/* 날짜 머리 */}
       <div
-        className={`sticky top-0 z-10 px-2 py-1.5 border-b border-gray-200 backdrop-blur
+        className={`sticky top-0 z-10 px-2 py-1.5 border-b-2 border-gray-300 backdrop-blur
           flex items-center gap-1.5 ${isToday ? 'bg-blue-600/95' : 'bg-white/95'}`}
       >
         <span
@@ -224,7 +224,7 @@ function DayColumn({
         >
           {md(date)}
         </span>
-        <span className={`text-[11px] font-medium ${isToday ? 'text-blue-100' : 'text-gray-400'}`}>
+        <span className={`text-[11px] font-medium ${isToday ? 'text-blue-100' : 'text-gray-600'}`}>
           {dowOf(date)}
         </span>
         {conflict && <AlertTriangle className="h-3.5 w-3.5 text-red-500 ml-auto" />}
@@ -233,7 +233,7 @@ function DayColumn({
           onClick={() => onOpenDay(date)}
           title="이 날에 메모 쓰기"
           className={`ml-auto shrink-0 transition
-            ${isToday ? 'text-blue-100 hover:text-white' : 'text-gray-300 hover:text-blue-600'}`}
+            ${isToday ? 'text-blue-100 hover:text-white' : 'text-gray-500 hover:text-blue-600'}`}
         >
           <Plus className="h-3.5 w-3.5" />
         </button>
@@ -260,7 +260,7 @@ function DayColumn({
       {/* 그 날의 행사들 */}
       <div className="flex-1 p-1.5 space-y-1.5">
         {todays.length === 0 ? (
-          <p className="text-[11px] text-gray-300 text-center pt-4">-</p>
+          <p className="text-[11px] text-gray-400 text-center pt-4">-</p>
         ) : (
           todays.map(ev => (
             <DayEventCard
@@ -327,17 +327,17 @@ function DayEventCard({
 
         {/* 여러 날 행사는 전체 기간을 적어준다 — 주간 뷰는 기간이 안 보이므로 */}
         {multi && (
-          <div className="text-[9px] text-gray-400 tabular-nums mt-0.5">
+          <div className="text-[10px] text-gray-500 tabular-nums mt-0.5">
             {md(start)}–{md(end)} 중
           </div>
         )}
 
         {has('company') && inq.company_name && (
-          <div className="text-[10px] text-gray-500 truncate mt-0.5">{inq.company_name}</div>
+          <div className="text-[10px] text-gray-600 truncate mt-0.5">{inq.company_name}</div>
         )}
 
         {(has('site') || has('money')) && (
-          <div className="flex flex-wrap items-center gap-x-1.5 text-[10px] text-gray-500 mt-0.5">
+          <div className="flex flex-wrap items-center gap-x-1.5 text-[10px] text-gray-600 mt-0.5">
             {has('site') && inq.event_time && (
               <span className="inline-flex items-center gap-0.5">
                 <Clock className="h-2.5 w-2.5" />{inq.event_time}
@@ -349,13 +349,13 @@ function DayEventCard({
               </span>
             )}
             {has('money') && money > 0 && (
-              <span className="tabular-nums font-semibold text-gray-600">{fmt(money)}</span>
+              <span className="tabular-nums font-semibold text-gray-800">{fmt(money)}</span>
             )}
           </div>
         )}
 
         {has('onsite') && (inq.attire || inq.meal || inq.parking) && (
-          <div className="text-[10px] text-gray-400 truncate mt-0.5">
+          <div className="text-[10px] text-gray-600 truncate mt-0.5">
             {[inq.attire, inq.meal, inq.parking].filter(Boolean).join(' · ')}
           </div>
         )}
@@ -367,45 +367,54 @@ function DayEventCard({
           {rows.map(({ job, cell, state }) => {
             const sty = STATE_STYLE[state]
             return (
-              <div key={job.jobType} className="border-t border-black/5 pt-1">
+              <div key={job.jobType} className="border-t border-black/10 pt-1">
                 <div className="flex items-center gap-1 min-w-0">
-                  <span className="text-[10px] font-semibold text-gray-600 truncate min-w-0">
+                  <span className="text-[10px] font-semibold text-gray-800 truncate min-w-0">
                     {job.label}
                   </span>
                   <span
-                    className={`ml-auto shrink-0 text-[9px] font-bold px-1 py-px rounded border ${sty.chip}`}
+                    className={`ml-auto shrink-0 text-[10px] font-bold px-1 py-px rounded border ${sty.chip}`}
                     title={sty.label(cell.total, job.required)}
                   >
                     {cell.total}/{job.required || '-'}
                   </span>
                 </div>
 
-                {/* 크루 이름 — 주간 뷰는 날짜 단위라 정확히 그 날 사람만 나온다 */}
+                {/* 크루 이름 — 주간 뷰는 날짜 단위라 정확히 그 날 사람만 나온다.
+                    근무일을 지정한 사람과 '전 일정'으로 자동으로 뜬 사람을 구분한다 —
+                    안 그러면 9/25 칸의 4명이 그 날 확정된 건지 퍼져 보이는 건지 알 수 없다.
+                    점선 표기는 표 뷰(ScheduleMatrixContent)와 같은 것을 쓴다. */}
                 {has('crew') && cell.total > 0 && (
                   <div className="flex flex-wrap gap-0.5 mt-0.5">
-                    {[...cell.pinned, ...cell.allPeriod].map(a => (
+                    {[
+                      ...cell.pinned.map(a => ({ a, whole: false })),
+                      ...cell.allPeriod.map(a => ({ a, whole: true })),
+                    ].map(({ a, whole }) => (
                       <span
                         key={a.id}
-                        className={`text-[9px] leading-none px-1 py-0.5 rounded border
-                          ${STATUS_CHIP[a.status] ?? 'bg-white text-gray-600 border-gray-200'}`}
+                        className={`text-[10px] leading-none px-1 py-0.5 rounded border
+                          ${whole
+                            ? 'bg-white text-gray-500 border-dashed border-gray-400'
+                            : (STATUS_CHIP[a.status] ?? 'bg-white text-gray-700 border-gray-300')}`}
                         title={[
                           cleanStaffName(a.staff_name), a.status,
+                          whole ? '전체기간 투입(날짜 미지정)' : null,
                           a.role_type ?? null,
                           `지급 ${fmt(a.pay_rate)}원`,
                           a.is_payable === false ? '무급' : null,
                           a.phone ?? null,
                         ].filter(Boolean).join(' · ')}
                       >
-                        {a.role_type === '팀장' && <span className="text-indigo-500 font-bold">팀</span>}
+                        {a.role_type === '팀장' && <span className="text-indigo-600 font-bold">팀</span>}
                         {cleanStaffName(a.staff_name)}
-                        {a.is_payable === false && <span className="text-purple-400">무</span>}
+                        {a.is_payable === false && <span className="text-purple-500">무</span>}
                       </span>
                     ))}
                   </div>
                 )}
 
                 {has('warn') && (state === 'none' || state === 'short') && (
-                  <div className="text-[9px] text-red-500 font-semibold mt-0.5">
+                  <div className="text-[10px] text-red-600 font-semibold mt-0.5">
                     {sty.label(cell.total, job.required)}
                   </div>
                 )}
