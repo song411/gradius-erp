@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { db } from '@/lib/supabase/api'
 import type { Inquiry, Assignment, EstimateItem, Estimate, Staff } from '@/lib/supabase/types'
@@ -24,7 +24,9 @@ import ScheduleView from './ScheduleView'
 // 직무명 정규화 규칙은 운영 캘린더와 같은 것을 쓴다. 캘린더는 '행사스탭(주중)'처럼
 // 쪼개진 견적 직무를 '행사스탭'으로 묶어 보여주므로, 그 이름으로 링크를 타고 들어오면
 // 여기 슬롯 키(견적 role_name 원본)와 정확히 맞지 않는다.
-import { normJob } from '@/components/schedule/matrixCore'
+import { normJob, eventDatesOf } from '@/components/schedule/matrixCore'
+import AssignmentDatesPicker from './AssignmentDatesPicker'
+import { compressDates } from '@/components/schedule/dateUtils'
 import { toast } from 'sonner'
 import { DndContext, DragEndEvent, useDraggable, useDroppable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
@@ -768,6 +770,26 @@ export default function AssignmentsContent() {
     loadDetail(selectedInq!)
   }
 
+  // 근무일(날짜) 수정
+  // 날짜를 고르면 그 개수가 일수가 된다. 날짜를 비우면 일수는 건드리지 않는다 —
+  // 사람이 적어둔 숫자가 실제 운영인 경우가 많아서(계절학기 9·2·11일 등) 코드가 덮어쓰면 안 된다.
+  async function handleWorkDatesUpdate(asgn: Assignment, dates: string[]) {
+    const patch: Record<string, unknown> = { work_dates: dates }
+    if (dates.length > 0) patch.work_days = dates.length
+    try {
+      await db.update('assignments', asgn.id, patch)
+      toast.success(
+        dates.length > 0
+          ? `${asgn.staff_name} 근무일 ${dates.length}일 (${compressDates(dates)})`
+          : `${asgn.staff_name} 근무일 해제 — 일수 ${asgn.work_days || 1}일은 그대로 둡니다`
+      )
+      loadDetail(selectedInq!)
+      loadInquiries()
+    } catch (e) {
+      toast.error('근무일 저장 실패: ' + (e as Error).message)
+    }
+  }
+
   // 구간별 단가 저장 (memo에 JSON 보관)
   // pay_rate = 구간 합산 총액, work_days = 1 로 저장
   // → pay_rate × work_days = 정확한 총 지급액 (지급관리 자동계산과 호환)
@@ -946,6 +968,13 @@ export default function AssignmentsContent() {
     !searchText ||
     (i.company_name || '').includes(searchText) ||
     (i.event_name || '').includes(searchText)
+  )
+
+  // 이 행사의 운영일 — 배정 근무일을 고를 때 후보가 된다.
+  // event_dates 가 비어 있으면 기간 전체(예전 동작)라 일반 행사는 달라지는 게 없다.
+  const inqEventDates = useMemo(
+    () => (selectedInq ? eventDatesOf(selectedInq) : []),
+    [selectedInq]
   )
 
   // 배정 완료 인원 / 필요 인원 계산
@@ -1199,9 +1228,15 @@ export default function AssignmentsContent() {
                 </div>
               ) : (
                 slots.map(group => {
-                  const activeCount = group.assignments.filter(a => a.status !== '취소').length
+                  const activeAsgns = group.assignments.filter(a => a.status !== '취소')
+                  const activeCount = activeAsgns.length
                   const isFull = group.required > 0 && activeCount >= group.required
                   const isOver = group.required > 0 && activeCount > group.required
+                  // 여러 날 도는 직무는 '몇 명'만으로는 덜 찬 게 안 보인다.
+                  // 홍천처럼 5명이 1~2일씩 나눠 들어가면 인원은 차 보여도 날짜가 비어 있다.
+                  const quotedManDays   = group.required * (group.days || 1)
+                  const assignedManDays = activeAsgns.reduce((n, a) => n + (a.work_days || 1), 0)
+                  const showManDays     = (group.days || 1) > 1 && quotedManDays > 0
                   return (
                     <DroppableSlot
                       key={group.jobType}
@@ -1220,6 +1255,19 @@ export default function AssignmentsContent() {
                             'bg-gray-200 text-gray-600'
                           }`}>
                             {activeCount} / {group.required}명
+                          </span>
+                        )}
+                        {showManDays && (
+                          <span
+                            className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${
+                              assignedManDays >= quotedManDays
+                                ? 'bg-green-100 text-green-700'
+                                : 'bg-yellow-100 text-yellow-700'
+                            }`}
+                            title={`견적은 ${group.required}명 × ${group.days}일. 지금 배정된 참여 일수를 다 더하면 ${assignedManDays}일입니다.`}
+                          >
+                            <CalendarDays className="h-3 w-3" />
+                            {assignedManDays} / {quotedManDays} 인·일
                           </span>
                         )}
                         {group.payRate > 0 && (
@@ -1370,23 +1418,39 @@ export default function AssignmentsContent() {
                                   }
 
                                   // 단순 모드
+                                  // 날짜를 고른 배정은 일수가 날짜에서 나오므로 숫자 편집기를 감춘다.
+                                  // 두 칸을 동시에 열어두면 어느 쪽이 맞는 값인지 알 수 없다.
+                                  const asgnDates = Array.isArray(asgn.work_dates) ? asgn.work_dates : []
                                   return (
-                                    <div className="flex items-center gap-2 mt-0.5 text-[11px] text-gray-400 flex-wrap">
-                                      <PayRateEditor
-                                        value={asgn.pay_rate}
-                                        onSave={v => handlePayRateUpdate(asgn, v)}
-                                      />
-                                      <span className="text-gray-300">×</span>
-                                      <DaysEditor
-                                        value={asgn.work_days || 1}
-                                        onSave={v => handleWorkDaysUpdate(asgn, v)}
-                                      />
-                                      <span className="font-medium text-gray-600">= {formatKRW((asgn.pay_rate || 0) * (asgn.work_days || 1))}</span>
-                                      <button
-                                        onClick={() => setEditingSegmentsId(asgn.id)}
-                                        className="text-[10px] text-indigo-400 hover:text-indigo-600 hover:underline border border-indigo-200 px-1 py-0.5 rounded"
-                                        title="날짜별 다른 단가 설정"
-                                      >구간설정</button>
+                                    <div className="mt-0.5 text-[11px] text-gray-400">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <PayRateEditor
+                                          value={asgn.pay_rate}
+                                          onSave={v => handlePayRateUpdate(asgn, v)}
+                                        />
+                                        <span className="text-gray-300">×</span>
+                                        {asgnDates.length > 0 ? (
+                                          <span className="text-xs text-gray-700" title="고른 날짜 수가 일수입니다">
+                                            {asgnDates.length}일
+                                          </span>
+                                        ) : (
+                                          <DaysEditor
+                                            value={asgn.work_days || 1}
+                                            onSave={v => handleWorkDaysUpdate(asgn, v)}
+                                          />
+                                        )}
+                                        <span className="font-medium text-gray-600">= {formatKRW((asgn.pay_rate || 0) * (asgn.work_days || 1))}</span>
+                                        <AssignmentDatesPicker
+                                          eventDates={inqEventDates}
+                                          value={asgnDates}
+                                          onSave={dates => handleWorkDatesUpdate(asgn, dates)}
+                                        />
+                                        <button
+                                          onClick={() => setEditingSegmentsId(asgn.id)}
+                                          className="text-[10px] text-indigo-400 hover:text-indigo-600 hover:underline border border-indigo-200 px-1 py-0.5 rounded"
+                                          title="날짜별 다른 단가 설정"
+                                        >구간설정</button>
+                                      </div>
                                     </div>
                                   )
                                 })()}
