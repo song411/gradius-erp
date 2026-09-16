@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import type { Borders, FillPattern, Workbook } from 'exceljs'
+import type { Borders, FillPattern, Workbook, Worksheet } from 'exceljs'
 import type { Inquiry, Assignment, Attendance, Staff } from '@/lib/supabase/types'
 import { Dialog, DialogHeader, DialogTitle, DialogContent, DialogFooter, DialogClose } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -50,6 +50,29 @@ function compactDate(dateStr: string): string {
 // 동적 import한 exceljs에서 실제로 쓰는 부분만 좁혀 잡은 타입
 type ExcelJSModule = { Workbook: new () => Workbook }
 
+// ── 현장 안전관리 교육 확인 및 서약서 ────────────────────
+// 출석부에 서명하는 행위가 곧 안전교육 이수 확인이 되도록 명단 위에 둔다.
+// 인쇄와 엑셀이 같은 문구를 써야 하므로 여기 한 곳에만 적는다.
+const PLEDGE_TITLE = '현장 안전관리 교육 확인 및 서약서'
+const PLEDGE_LEAD =
+  '본인은 주식회사 가디어스가 실시한 현장 안전관리 교육에 참석하여 아래 사항을 교육받았으며, '
+  + '배포된 현장 운영 매뉴얼을 정독하고 그 내용을 충분히 이해하였음을 확인합니다.'
+const PLEDGE_TRAINING = [
+  '근무 기본자세·복장 및 금지 사항',
+  '담당 구역의 임무와 배치 위치',
+  '비상구·소화기·대피 동선 확인',
+  '보고 체계 (가디어스 책임자 우선 보고)',
+  '긴급 상황 대응 절차 (119·112 신고 기준)',
+  '관람객 응대 원칙 (안전·친절·신뢰)',
+]
+const PLEDGE_OATH = [
+  '본인은 본 교육을 이수하고 현장 운영 매뉴얼을 정독하였으며, 근무 중 이를 준수합니다.',
+  '지정된 배치 위치와 보고 체계를 따르며, 문제 발생 시 가디어스 현장 책임자에게 먼저 보고합니다.',
+  '본인의 고의 또는 중대한 부주의로 교육 및 매뉴얼의 안전 수칙을 위반하여 발생한 사고에 대하여는 '
+  + '그에 상응하는 과실 책임이 따를 수 있음을 이해하였습니다.',
+]
+const PLEDGE_NOTE = '아래 명단의 서명란 서명은 본 교육 이수 및 서약에 대한 확인을 겸합니다.'
+
 // ── 엑셀 서식 상수 ───────────────────────────────────────
 const THIN: Partial<Borders> = {
   top:    { style: 'thin', color: { argb: 'FF000000' } },
@@ -87,6 +110,34 @@ function colLetter(n: number): string {
     n = Math.floor((n - 1) / 26)
   }
   return s
+}
+
+/** 엑셀에서 전체 너비로 병합한 칸에 문단을 쓴다.
+ *  엑셀은 병합된 셀의 행 높이를 자동으로 맞춰주지 않는다 — 줄바꿈만 켜두면 글자가 잘린다.
+ *  그래서 글자 수로 줄 수를 추정해 높이를 직접 준다. 한글은 두 칸으로 센다. */
+function writeParagraph(
+  ws: Worksheet,
+  rowIdx: number,
+  nCols: number,
+  totalWidth: number,
+  text: string,
+  opts: { bold?: boolean; size?: number; center?: boolean; indent?: number } = {},
+) {
+  ws.mergeCells(rowIdx, 1, rowIdx, nCols)
+  const cell = ws.getCell(rowIdx, 1)
+  cell.value = text
+  cell.font = { name: '맑은 고딕', size: opts.size ?? 9.5, bold: !!opts.bold }
+  cell.alignment = {
+    horizontal: opts.center ? 'center' : 'left',
+    vertical: 'middle',
+    wrapText: true,
+    indent: opts.center ? 0 : (opts.indent ?? 1),
+  }
+  const units = [...text].reduce((n, ch) => n + (ch.charCodeAt(0) > 0x2000 ? 2 : 1), 0)
+  const perLine = Math.max(20, Math.floor(totalWidth * 0.92) - (opts.indent ?? 1) * 2)
+  const lines = Math.max(1, Math.ceil(units / perLine))
+  ws.getRow(rowIdx).height = lines * ((opts.size ?? 9.5) + 5) + 4
+  return lines
 }
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -134,6 +185,7 @@ export default function AttendanceSheetModal({
   // ('all' = 전체 날짜를 날짜별 여러 장으로) 닫을 때 null로 되돌려 다음 열기에 기본값 복귀.
   const [dateOverride, setDateOverride] = useState<string | null>(null)
   const [includePhone, setIncludePhone] = useState(true)
+  const [includePledge, setIncludePledge] = useState(true)
   // 엑셀 생성 중 (exceljs 동적 로드 + 파일 조립)
   const [busy, setBusy] = useState(false)
   const dateSel = dateOverride ?? currentDate ?? dates[0] ?? ''
@@ -224,6 +276,23 @@ export default function AttendanceSheetModal({
           </tr>
         </table>
 
+        ${includePledge ? `
+        <section class="pledge">
+          <h2>${PLEDGE_TITLE}</h2>
+          <p class="lead">${esc(PLEDGE_LEAD)}</p>
+          <div class="cols">
+            <div class="col">
+              <h3>교육 내용</h3>
+              <ol>${PLEDGE_TRAINING.map(t => `<li>${esc(t)}</li>`).join('')}</ol>
+            </div>
+            <div class="col">
+              <h3>확인 및 서약</h3>
+              <ol>${PLEDGE_OATH.map(t => `<li>${esc(t)}</li>`).join('')}</ol>
+            </div>
+          </div>
+          <p class="note">${esc(PLEDGE_NOTE)}</p>
+        </section>` : ''}
+
         <table class="roster">
           <colgroup>
             <col style="width:6%"><col style="width:13%"><col style="width:13%">
@@ -270,6 +339,17 @@ export default function AttendanceSheetModal({
   .roster td.ph { font-size: 10.5px; white-space: nowrap; }
   .roster td.sig { background: #fcfcfc; }
   .tag { font-size: 8.5px; border: 1px solid #666; padding: 0 2px; border-radius: 2px; font-weight: 700; vertical-align: 1px; }
+  .pledge { border: 1px solid #000; padding: 3mm 3.5mm; margin-bottom: 4mm; }
+  .pledge h2 { text-align: center; font-size: 13px; letter-spacing: 2px; font-weight: 700; margin-bottom: 2mm; }
+  .pledge .lead { font-size: 10.5px; line-height: 1.55; text-align: justify; margin-bottom: 2.5mm; }
+  .pledge .cols { display: flex; gap: 5mm; }
+  .pledge .col { flex: 1; min-width: 0; }
+  .pledge h3 { font-size: 10.5px; font-weight: 700; border-bottom: 1px solid #000;
+               padding-bottom: 0.8mm; margin-bottom: 1.4mm; }
+  .pledge ol { margin: 0; padding-left: 4.5mm; }
+  .pledge li { font-size: 10px; line-height: 1.5; margin-bottom: 0.8mm; word-break: keep-all; }
+  .pledge .note { font-size: 9.5px; margin-top: 2mm; padding-top: 1.5mm;
+                  border-top: 1px dashed #999; text-align: center; }
   .stat { margin-top: 3mm; font-size: 11px; text-align: right; }
   .confirm { margin-top: 8mm; font-size: 11px; }
   .sgn { color: #666; }
@@ -357,8 +437,55 @@ export default function AttendanceSheetModal({
         })
         ws.getRow(6).height = 8
 
-        // 7행: 표 머리글
-        const HEADER_ROW = 7
+        // 안전교육 서약서 — 명단 바로 위. 서명 한 번이 이수 확인을 겸하게 한다.
+        // 전체 너비 병합 + 줄 수 계산(writeParagraph)으로 인쇄해도 글자가 잘리지 않게 한다.
+        const totalWidth = SHEET_COLS(includePhone).reduce((n, c) => n + c.width, 0)
+        let cur = 7
+        if (includePledge) {
+          writeParagraph(ws, cur, nCols, totalWidth, PLEDGE_TITLE, { bold: true, size: 12, center: true })
+          ws.getRow(cur).height = 24
+          cur++
+          writeParagraph(ws, cur, nCols, totalWidth, PLEDGE_LEAD)
+          cur++
+
+          const sectionHead = (label: string) => {
+            writeParagraph(ws, cur, nCols, totalWidth, label, { bold: true, size: 10 })
+            ws.getCell(cur, 1).fill = HEAD_FILL
+            ws.getRow(cur).height = 18
+            cur++
+          }
+          sectionHead('교육 내용')
+          PLEDGE_TRAINING.forEach((t, i) => {
+            writeParagraph(ws, cur, nCols, totalWidth, `${i + 1}. ${t}`, { indent: 2 })
+            cur++
+          })
+          sectionHead('확인 및 서약')
+          PLEDGE_OATH.forEach((t, i) => {
+            writeParagraph(ws, cur, nCols, totalWidth, `${i + 1}. ${t}`, { indent: 2 })
+            cur++
+          })
+          writeParagraph(ws, cur, nCols, totalWidth, PLEDGE_NOTE, { size: 9, center: true })
+          cur++
+
+          // 서약서를 바깥 테두리로만 감싼다 — 칸마다 선을 그으면 격자처럼 보여
+          // 명단 표와 구분이 안 된다. 여기는 '문서', 아래는 '표'로 읽혀야 한다.
+          const line = { style: 'thin' as const, color: { argb: 'FF000000' } }
+          for (let r = 7; r < cur; r++) {
+            for (let c = 1; c <= nCols; c++) {
+              ws.getCell(r, c).border = {
+                ...(c === 1 ? { left: line } : {}),
+                ...(c === nCols ? { right: line } : {}),
+                ...(r === 7 ? { top: line } : {}),
+                ...(r === cur - 1 ? { bottom: line } : {}),
+              }
+            }
+          }
+          ws.getRow(cur).height = 8
+          cur++
+        }
+
+        // 표 머리글
+        const HEADER_ROW = cur
         const cols = SHEET_COLS(includePhone)
         const head = ws.getRow(HEADER_ROW)
         head.height = 24
@@ -419,9 +546,11 @@ export default function AttendanceSheetModal({
         confirm.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 }
         ws.getRow(cursor).height = 26
 
-        // 인쇄 시 페이지마다 머리글 반복 + 화면에서 머리글 고정
+        // 인쇄 시 페이지마다 표 머리글 반복
         ws.pageSetup.printTitlesRow = `${HEADER_ROW}:${HEADER_ROW}`
-        ws.views = [{ state: 'frozen', ySplit: HEADER_ROW }]
+        // 화면 틀 고정은 서약서가 없을 때만. 서약서까지 20여 행을 붙박아두면
+        // 화면 대부분이 고정돼 정작 명단을 스크롤할 수 없다.
+        if (!includePledge) ws.views = [{ state: 'frozen', ySplit: HEADER_ROW }]
       })
 
       // 다일 행사 + 기록 모드: 날짜별 출결을 한 장에 모은 종합 시트
@@ -568,9 +697,22 @@ export default function AttendanceSheetModal({
           <span className="text-[11px] text-gray-400">개인정보 — 배포 시 주의</span>
         </label>
 
+        {/* 안전교육 서약서 — 명단 위에 붙여 서명 한 번으로 이수 확인을 겸하게 한다 */}
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={includePledge}
+            onChange={e => setIncludePledge(e.target.checked)}
+            className="h-4 w-4 accent-blue-600"
+          />
+          <span className="text-sm text-gray-700">안전교육 서약서 포함</span>
+          <span className="text-[11px] text-gray-400">명단 위에 교육 내용·서약 문구</span>
+        </label>
+
         <p className="text-[11px] text-gray-400 bg-gray-50 rounded-lg px-3 py-2 leading-relaxed">
           인원 {rowCount}명 · A4 세로 {targetDates.length}장
           {mode === 'blank' && ' · 출근/퇴근/출결/서명란 비워서 출력'}
+          {includePledge && ' · 명단 위에 안전교육 서약서'}
           <br />
           엑셀도 테두리·인쇄 설정이 들어가 있어 열어서 바로 인쇄하면 출석부가 됩니다.
         </p>
