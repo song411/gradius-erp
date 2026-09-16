@@ -5,6 +5,11 @@ import { formatKRW } from '@/lib/utils'
 import { ChevronDown, ChevronRight, TrendingUp, TrendingDown, Minus, Clock, Users, Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import type { CeoData } from './CeoContent'
+import {
+  buildFinanceIndex, payoutOf, expenseOf, isCountable, isEstimated,
+  PAYOUT_STAGE_LABEL,
+  type PayoutSource, type PayoutStage,
+} from '@/lib/finance'
 import type { Inquiry, Settlement, Payout } from '@/lib/supabase/types'
 import { PeriodFilter, isInPeriodFn, type PeriodState } from './PeriodFilter'
 
@@ -59,6 +64,38 @@ interface ProjectRow {
   profitRate:  number
   payoutCase:  PayoutCase      // 케이스 구분
   hqNames:     string[]        // 본사 인원 이름 목록
+  payoutSource: PayoutSource   // 지급액을 어디서 알아냈는지 (추정이면 화면에 밝힌다)
+  payoutStage:  PayoutStage    // 지급이 어디까지 갔는지 (실제로 돈이 나갔나)
+  paidAmount:   number         // 실제 나간 돈
+  pendingAmount: number        // 금액은 확정, 아직 안 나감
+}
+
+// 지급이 어디까지 갔는지 — 금액과 별개다.
+// 수익은 stage 와 무관하게 발생 기준으로 계산되지만, '이 행사 정산이 끝났나'는
+// 눈으로 바로 보여야 한다. 지급관리에서 지급을 등록하면 자동으로 올라간다.
+const STAGE_STYLE: Record<PayoutStage, string> = {
+  paid:      'bg-green-100  text-green-800  border-green-300',
+  partial:   'bg-yellow-100 text-yellow-900 border-yellow-300',
+  unpaid:    'bg-orange-100 text-orange-800 border-orange-300',
+  estimated: 'bg-white      text-gray-500   border-dashed border-gray-400',
+  none:      'bg-gray-100   text-gray-500   border-gray-300',
+}
+
+function StageBadge({ stage }: { stage: PayoutStage }) {
+  return (
+    <span
+      className={`inline-block text-[9px] leading-none px-1 py-0.5 rounded border ${STAGE_STYLE[stage]}`}
+      title={
+        stage === 'paid'      ? '전액 송금 완료' :
+        stage === 'partial'   ? '일부만 송금됨' :
+        stage === 'unpaid'    ? '금액은 확정, 아직 송금 전' :
+        stage === 'estimated' ? '지급 기록이 없어 추정한 값. 지급관리에 등록되면 확정됩니다' :
+        '지급 정보 없음'
+      }
+    >
+      {PAYOUT_STAGE_LABEL[stage]}
+    </span>
+  )
 }
 
 export default function ProfitTab({ data }: { data: CeoData }) {
@@ -80,10 +117,16 @@ export default function ProfitTab({ data }: { data: CeoData }) {
     return true
   }
 
+  // 돈을 세는 규칙은 lib/finance.ts 한 곳에 있다 — 대시보드·경영현황·정산청구와 같은 것.
+  const finIndex = useMemo(
+    () => buildFinanceIndex(payouts, expenses, assignments),
+    [payouts, expenses, assignments],
+  )
+
   // 프로젝트별 수익 계산
   const projects: ProjectRow[] = useMemo(() => {
     return inquiries
-      .filter(q => !['접수', '견적', '미체결', '보류', '취소'].includes(q.status))
+      .filter(q => isCountable(q))
       .map(q => {
         const sett         = settlements.find(s => s.inquiry_id === q.id)
         const donePaouts   = payouts.filter(p => p.inquiry_id === q.id && (p.status === '지급완료' || p.status === '완료'))
@@ -91,11 +134,17 @@ export default function ProfitTab({ data }: { data: CeoData }) {
         const inqAssigns   = assignments.filter(a => a.inquiry_id === q.id)
 
         const supplyPrice = sett?.supply_price || 0
-        const totalPayout = donePaouts.reduce((s, p) => s + p.final_pay, 0)
+        // 지급완료만 세면 매출은 발생 시점, 인건비는 송금 시점이 되어 수익이 부풀었다.
+        // 금액이 잡힌 순간 비용으로 본다 (확인완료 포함). 지급 기록이 아예 없으면
+        // 정산 입력값 → 배정 추정 순으로 내려가고, 추정이면 화면에 그렇다고 밝힌다.
+        const pay          = payoutOf(finIndex, q.id, sett?.payout_amount)
+        const totalPayout  = pay.amount
+        const payoutSource = pay.source
+        const payoutStage  = pay.stage
+        const paidAmount   = pay.paid
+        const pendingAmount = pay.pending
         // 부대비용은 지급과 달리 상태가 없다 — 등록된 즉시 실제 지출로 본다
-        const totalExpense = expenses
-          .filter(e => e.inquiry_id === q.id)
-          .reduce((s, e) => s + (e.amount || 0), 0)
+        const totalExpense = expenseOf(finIndex, q.id)
         const profit      = supplyPrice - totalPayout - totalExpense
         const profitRate  = supplyPrice > 0 ? Math.round((profit / supplyPrice) * 100) : 0
 
@@ -116,7 +165,7 @@ export default function ProfitTab({ data }: { data: CeoData }) {
           payoutCase = 'none'                  // 배정 자체 없음
         }
 
-        return { inquiry: q, settlement: sett, payouts: donePaouts, supplyPrice, totalPayout, totalExpense, profit, profitRate, payoutCase, hqNames }
+        return { inquiry: q, settlement: sett, payouts: donePaouts, supplyPrice, totalPayout, totalExpense, profit, profitRate, payoutCase, hqNames, payoutSource, payoutStage, paidAmount, pendingAmount }
       })
       .filter(r => r.supplyPrice > 0)
       .sort((a, b) => {
@@ -125,13 +174,14 @@ export default function ProfitTab({ data }: { data: CeoData }) {
         if (sortKey === 'supply')  return b.supplyPrice - a.supplyPrice
         return 0
       })
-  }, [inquiries, settlements, payouts, assignments, expenses, sortKey])
+  }, [inquiries, settlements, payouts, assignments, finIndex, sortKey])
 
   // 검색 + 기간 + 수익률 필터
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return projects.filter(r => {
-      if (!isInPeriodFn(r.inquiry.event_start, periodState)) return false
+      // 행사일이 없으면 정산 등록일로 — 그러지 않으면 그 건은 어느 기간에도 안 잡혀 사라진다
+      if (!isInPeriodFn(r.inquiry.event_start || r.settlement?.created_at, periodState)) return false
       if (!matchesRateFilter(r.profitRate)) return false
       if (!q) return true
       const eventName = (r.inquiry.event_name || '').toLowerCase()
@@ -147,6 +197,11 @@ export default function ProfitTab({ data }: { data: CeoData }) {
   const totalExpense = filtered.reduce((s, r) => s + r.totalExpense, 0)
   const totalProfit  = filtered.reduce((s, r) => s + r.profit, 0)
   const avgRate     = totalSupply > 0 ? Math.round((totalProfit / totalSupply) * 100) : 0
+  // 지급액에 추정이 섞인 건 — 확정값처럼 보이면 안 되므로 건수와 금액을 그대로 밝힌다
+  const estRows      = filtered.filter(r => isEstimated(r.payoutSource))
+  const estAmount    = estRows.reduce((s, r) => s + r.totalPayout, 0)
+  const paidAmount    = filtered.reduce((s, r) => s + r.paidAmount, 0)
+  const pendingAmount = filtered.reduce((s, r) => s + r.pendingAmount, 0)
 
   function toggleRow(id: string) {
     setOpenRows(prev => {
@@ -164,12 +219,34 @@ export default function ProfitTab({ data }: { data: CeoData }) {
         <p className="text-xs font-semibold text-slate-400 mb-4 uppercase tracking-wider">프로젝트 수익 총계 ({filtered.length}건{search ? ` / 검색 중` : ''})</p>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <SummaryCard label="총 공급가액" value={formatKRW(totalSupply)} sub="(VAT 제외)" color="white" />
-          <SummaryCard label="총 지급액" value={formatKRW(totalPayout)} sub="지급완료 기준" color="orange" />
+          <SummaryCard
+            label="총 지급액"
+            value={formatKRW(totalPayout)}
+            sub={[
+              `완료 ${formatKRW(paidAmount)}`,
+              pendingAmount > 0 ? `미지급 ${formatKRW(pendingAmount)}` : null,
+              estAmount > 0 ? `추정 ${formatKRW(estAmount)}` : null,
+            ].filter(Boolean).join(' · ')}
+            color="orange"
+          />
           <SummaryCard label="총 부대비용" value={formatKRW(totalExpense)} sub="실제 지출" color="rose" />
           <SummaryCard label="총 순수익" value={formatKRW(totalProfit)} sub="공급가-지급-부대" color="emerald" />
           <SummaryCard label="평균 수익률" value={`${avgRate}%`} sub="" color="purple" />
         </div>
       </div>
+
+      {(estRows.length > 0 || pendingAmount > 0) && (
+        <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 leading-relaxed">
+          {estRows.length > 0 && (
+            <>지급 기록이 아직 없어 추정으로 잡은 행사 <strong>{estRows.length}건</strong>
+            ({formatKRW(estAmount)}). 지급관리에 등록되면 자동으로 확정값이 됩니다. </>
+          )}
+          {pendingAmount > 0 && (
+            <>금액은 확정됐지만 아직 나가지 않은 지급 <strong>{formatKRW(pendingAmount)}</strong>.
+            수익에서는 이미 빼고 있습니다 — 줄 돈이지 번 돈이 아니기 때문입니다.</>
+          )}
+        </p>
+      )}
 
       {/* 검색 + 기간 + 수익률 필터 */}
       <div className="space-y-2">
@@ -258,10 +335,21 @@ export default function ProfitTab({ data }: { data: CeoData }) {
                     </td>
                     <td className="px-3 py-3 text-right font-semibold text-gray-900">{formatKRW(r.supplyPrice)}</td>
                     <td className="px-3 py-3 text-right text-orange-600">
-                      {r.payoutCase === 'normal'  && formatKRW(r.totalPayout)}
-                      {r.payoutCase === 'hq_only' && <span className="text-slate-400 text-xs">₩0 (본사)</span>}
-                      {r.payoutCase === 'pending' && <span className="text-amber-500 text-xs flex items-center justify-end gap-1"><Clock className="h-3 w-3" />지급 전</span>}
-                      {r.payoutCase === 'none'    && <span className="text-gray-300 text-xs">배정 없음</span>}
+                      {r.payoutCase === 'hq_only' ? (
+                        <span className="text-slate-400 text-xs">₩0 (본사)</span>
+                      ) : r.totalPayout > 0 ? (
+                        <div className="flex flex-col items-end gap-0.5">
+                          <span>{formatKRW(r.totalPayout)}</span>
+                          <StageBadge stage={r.payoutStage} />
+                          {r.payoutStage === 'partial' && (
+                            <span className="text-[9px] text-gray-400">
+                              완료 {formatKRW(r.paidAmount)} · 남음 {formatKRW(r.pendingAmount)}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-gray-300 text-xs">배정 없음</span>
+                      )}
                     </td>
                     <td className="px-3 py-3 text-right text-rose-600 text-xs">
                       {r.totalExpense > 0

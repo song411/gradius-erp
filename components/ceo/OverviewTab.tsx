@@ -11,9 +11,13 @@ import {
 } from 'recharts'
 import { Activity } from 'lucide-react'
 import type { CeoData } from './CeoContent'
+import {
+  buildFinanceIndex, dedupeSettlements, toRows, countableRows, sumRows,
+  inPeriod, unpaidTotal,
+} from '@/lib/finance'
 
 export default function OverviewTab({ data }: { data: CeoData }) {
-  const { inquiries, settlements, payouts, expenses } = data
+  const { inquiries, settlements, payouts, expenses, assignments } = data
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
 
   const availableYears = [
@@ -22,97 +26,45 @@ export default function OverviewTab({ data }: { data: CeoData }) {
     new Date().getFullYear() - 2,
   ]
 
-  // inquiry당 settlement 중복 제거 (inquiry_id별 첫 번째 레코드만 사용)
-  // → 동일 inquiry에 settlement가 2건 이상일 때 이중 집계 방지
-  const dedupedSettlements = Array.from(
-    settlements.reduce<Map<string, typeof settlements[0]>>((m, s) => {
-      if (s.inquiry_id && !m.has(s.inquiry_id)) m.set(s.inquiry_id, s)
-      return m
-    }, new Map()).values()
-  )
+  // 돈을 세는 규칙은 lib/finance.ts 한 곳에 있다 — 대시보드·수익보고·정산청구와 같은 것.
+  const inqMap    = new Map(inquiries.map(q => [q.id, q]))
+  const finIndex  = buildFinanceIndex(payouts, expenses, assignments)
+  const countable = countableRows(toRows(dedupeSettlements(settlements), inqMap, finIndex))
 
-  // inquiry 빠른 조회 맵 — 대시보드와 동일한 날짜 기준 로직 적용
-  const inqMap = new Map(inquiries.map(q => [q.id, q]))
-
-  // 실제 지급액: payouts 우선, 없으면 settlement.payout_amount fallback — 대시보드와 동일 기준
-  const payoutByInquiry = payouts.reduce<Map<string, number>>((m, p) => {
-    if (p.inquiry_id && (p.status === '지급완료' || p.status === '완료'))
-      m.set(p.inquiry_id, (m.get(p.inquiry_id) || 0) + (p.final_pay || 0))
-    return m
-  }, new Map())
-  function getActualPayout(inquiryId: string | undefined, settPayout: number): number {
-    if (!inquiryId) return settPayout
-    const fromPayouts = payoutByInquiry.get(inquiryId)
-    return (fromPayouts !== undefined && fromPayouts > 0) ? fromPayouts : settPayout
-  }
-
-  // 부대비용(실제 지출) — 인건비와 별도로 수익에서 차감
-  const expenseByInquiry = expenses.reduce<Map<string, number>>((m, e) => {
-    if (e.inquiry_id) m.set(e.inquiry_id, (m.get(e.inquiry_id) || 0) + (e.amount || 0))
-    return m
-  }, new Map())
-  function getExpense(inquiryId: string | undefined): number {
-    return inquiryId ? (expenseByInquiry.get(inquiryId) || 0) : 0
-  }
-
-  // 월별 데이터: event_start 기준, 없으면 settlement.created_at 대체 — 대시보드와 동일 기준
   const monthlyData = Array.from({ length: 12 }, (_, i) => {
-    const month = String(i + 1).padStart(2, '0')
-    const key   = `${selectedYear}-${month}`
-
-    const monthSets = dedupedSettlements.filter(s => {
-      if (!s.inquiry_id) return false
-      const inq = inqMap.get(s.inquiry_id)
-      const dateRef = inq?.event_start || s.created_at
-      return dateRef?.startsWith(key) ?? false
-    })
-    const monthInqIds = new Set(monthSets.map(s => s.inquiry_id).filter(Boolean) as string[])
-    const monthInqs   = inquiries.filter(q => monthInqIds.has(q.id))
-    const revenue     = monthSets.reduce((s, r) => s + (r.supply_price || 0), 0)
-    const payout      = monthSets.reduce((s, r) => s + getActualPayout(r.inquiry_id, r.payout_amount), 0)
-    const expense     = monthSets.reduce((s, r) => s + getExpense(r.inquiry_id), 0)
-    const profit      = revenue - payout - expense
-
-    const inqCount  = monthInqs.length
-    const completed = monthInqs.filter(q => ['완료', '정산완료'].includes(q.status)).length
-
+    const key  = `${selectedYear}-${String(i + 1).padStart(2, '0')}`
+    const rows = countable.filter(r => inPeriod(r, key))
+    const t    = sumRows(rows)
+    const monthInqs = rows.map(r => r.inquiry).filter(Boolean) as typeof inquiries
     return {
       month: `${i + 1}월`,
-      revenue, payout, expense, profit,
-      inquiryCount: inqCount,
-      completedCount: completed,
-      profitRate: revenue > 0 ? Math.round((profit / revenue) * 100) : 0,
+      revenue: t.revenue, payout: t.payout, expense: t.expense, profit: t.profit,
+      inquiryCount: monthInqs.length,
+      completedCount: monthInqs.filter(q => ['완료', '정산완료'].includes(q.status)).length,
+      profitRate: t.profitRate,
     }
   })
 
-  // 연간 집계: event_start 기준, 없으면 settlement.created_at 대체 — 대시보드와 동일 기준
-  const yearSets = dedupedSettlements.filter(s => {
-    if (!s.inquiry_id) return false
-    const inq = inqMap.get(s.inquiry_id)
-    const dateRef = inq?.event_start || s.created_at
-    return dateRef?.startsWith(String(selectedYear)) ?? false
-  })
-  const yearInqIds = new Set(yearSets.map(s => s.inquiry_id).filter(Boolean) as string[])
-  const yearInqs   = inquiries.filter(q => yearInqIds.has(q.id))
-  const yearRevenue  = yearSets.reduce((s, r) => s + (r.supply_price || 0), 0)
-  const yearPayout   = yearSets.reduce((s, r) => s + getActualPayout(r.inquiry_id, r.payout_amount), 0)
-  const yearExpense  = yearSets.reduce((s, r) => s + getExpense(r.inquiry_id), 0)
-  const yearProfit   = yearRevenue - yearPayout - yearExpense
-  const yearReceived = yearSets.reduce((s, r) => s + (r.received_amount || 0), 0)
+  const yearRows   = countable.filter(r => inPeriod(r, String(selectedYear)))
+  const yearTotals = sumRows(yearRows)
+  const yearInqs   = yearRows.map(r => r.inquiry).filter(Boolean) as typeof inquiries
+  const yearRevenue  = yearTotals.revenue
+  const yearPayout   = yearTotals.payout
+  const yearExpense  = yearTotals.expense
+  const yearProfit   = yearTotals.profit
+  const yearReceived = yearRows.reduce((s, r) => s + (r.settlement.received_amount || 0), 0)
   // 미수금은 기간 실적이 아니라 '지금 못 받은 잔액'이라 연도로 자르지 않는다.
-  // 작년 미수금도 못 받은 건 여전히 못 받은 돈이다. 대시보드와 같은 기준.
-  // 초과입금(잔액 음수)은 우리 수익이지 받을 돈이 아니므로 다른 건의 미수금을
-  // 상쇄하지 않게 양수만 합산한다.
-  const totalUnpaid  = settlements.reduce((s, r) => s + Math.max(0, r.balance || 0), 0)
-  const yearProfitRate = yearRevenue > 0 ? Math.round((yearProfit / yearRevenue) * 100) : 0
+  // 작년 미수금도 못 받은 건 여전히 못 받은 돈이다.
+  const totalUnpaid  = unpaidTotal(settlements)
+  const yearProfitRate = yearTotals.profitRate
   const yearContracted = yearInqs.filter(q => !['접수', '견적', '미체결', '보류', '취소'].includes(q.status)).length
   const completionRate = yearInqs.length > 0 ? Math.round((yearContracted / yearInqs.length) * 100) : 0
 
-  // 고객사별 누적 매출 Top10 (deduped 기준)
+  // 고객사별 누적 매출 Top10 — 매출을 세는 대상이 다른 지표와 같아야 한다
   const clientRevenue = Object.entries(
-    dedupedSettlements.reduce<Record<string, number>>((acc, s) => {
-      const name = s.company_name || '미정'
-      acc[name] = (acc[name] || 0) + (s.supply_price || 0)
+    countable.reduce<Record<string, number>>((acc, r) => {
+      const name = r.settlement.company_name || '미정'
+      acc[name] = (acc[name] || 0) + r.revenue
       return acc
     }, {})
   ).sort(([, a], [, b]) => b - a).slice(0, 10).map(([name, value]) => ({ name, value }))

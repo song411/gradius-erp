@@ -15,7 +15,13 @@ import {
   Plus, Search, Edit2, CheckCircle, AlertCircle,
   BadgePercent, StickyNote, Banknote, ChevronDown, ChevronRight, Sparkles, Trash2,
 } from 'lucide-react'
-import type { Settlement, DepositStatus, ProjectProgress, Inquiry, Payout } from '@/lib/supabase/types'
+import type {
+  Settlement, DepositStatus, ProjectProgress, Inquiry, Payout, EventExpense, Assignment,
+} from '@/lib/supabase/types'
+import {
+  buildFinanceIndex, dedupeSettlements, toRows, countableRows, sumRows, unpaidTotal,
+  payoutOf, PAYOUT_SOURCE_LABEL, PAYOUT_STAGE_LABEL,
+} from '@/lib/finance'
 import { toast } from 'sonner'
 
 interface PaySegment { rate: number; days: number }
@@ -46,6 +52,9 @@ function ProfitRateBadge({ rate }: { rate: number | null }) {
 export default function SettlementsContent() {
   const [settlements, setSettlements] = useState<(Settlement & { inquiries?: Inquiry })[]>([])
   const [inquiries, setInquiries]     = useState<Inquiry[]>([])
+  const [allPayouts, setAllPayouts]   = useState<Payout[]>([])
+  const [expenses, setExpenses]       = useState<EventExpense[]>([])
+  const [allAssignments, setAllAssignments] = useState<Assignment[]>([])
   const [loading, setLoading]         = useState(true)
   const [searchText, setSearchText]   = useState('')
   const [filterDeposit, setFilterDeposit] = useState('')
@@ -122,7 +131,10 @@ export default function SettlementsContent() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [setts, inqs] = await Promise.all([
+      // 수익을 세려면 지급·부대비용·배정이 필요하다. 이 화면은 예전에 정산에 적힌
+      // 예상지급(payout_amount)만 보고 수익을 냈는데, 그 값이 비어 있는 정산이 81건이라
+      // 그만큼 수익이 통째로 부풀어 있었다 (2026-09 실측 4,884만원).
+      const [setts, inqs, pays, exps, asgns] = await Promise.all([
         db.list<Settlement & { inquiries?: Inquiry }>('settlements', {
           select: '*, inquiries(event_name, company_name, status)',
           order: 'created_at', asc: false,
@@ -131,9 +143,15 @@ export default function SettlementsContent() {
           inFilter: { status: ['체결', '배정완료', '진행중', '완료', '정산완료'] },
           order: 'created_at', asc: false,
         }),
+        db.list<Payout>('payouts', { order: 'created_at', asc: false }),
+        db.list<EventExpense>('event_expenses', { order: 'created_at', asc: false }).catch(() => []),
+        db.list<Assignment>('assignments', { order: 'assigned_at', asc: false }),
       ])
       setSettlements(setts)
       setInquiries(inqs)
+      setAllPayouts(pays)
+      setExpenses(exps)
+      setAllAssignments(asgns)
 
       // 완료 → 정산완료 자동 전환 체크 (페이지 로드 시)
       // 입금완료 + 문의상태 완료인 후보만 추림
@@ -406,11 +424,17 @@ export default function SettlementsContent() {
     return matchSearch && matchDeposit && matchProgress
   })
 
-  // 집계 (필터 무관 전체 기준)
+  // 집계 (필터 무관 전체 기준) — 규칙은 lib/finance.ts. 대시보드·CEO와 같은 것을 쓴다.
+  const finIndex  = buildFinanceIndex(allPayouts, expenses, allAssignments)
+  const inqMapAll = new Map(inquiries.map(i => [i.id, i]))
+  const profitRows = countableRows(toRows(dedupeSettlements(settlements), inqMapAll, finIndex))
+  const profitTotals = sumRows(profitRows)
+
   const totalInvoice  = settlements.reduce((s, r) => s + (r.invoice_amount || r.supply_price + r.vat), 0)
   const totalReceived = settlements.reduce((s, r) => s + r.received_amount, 0)
-  const totalUnpaid   = settlements.reduce((s, r) => s + (r.balance || 0), 0)
-  const totalProfit   = settlements.reduce((s, r) => s + (r.supply_price - r.payout_amount), 0)
+  // 초과입금(잔액 음수)이 다른 건의 미수금을 상쇄하면 안 된다
+  const totalUnpaid   = unpaidTotal(settlements)
+  const totalProfit   = profitTotals.profit
 
   return (
     <>
@@ -429,8 +453,13 @@ export default function SettlementsContent() {
           <p className="text-xl font-bold mt-1">{formatKRW(totalUnpaid)}</p>
         </div>
         <div className="bg-gradient-to-br from-purple-600 to-purple-500 rounded-xl p-4 text-white">
-          <p className="text-xs opacity-80">총 수익 (공급가-지급액)</p>
+          <p className="text-xs opacity-80">총 수익 (공급가-지급-부대)</p>
           <p className="text-xl font-bold mt-1">{formatKRW(totalProfit)}</p>
+          <p className="text-[10px] opacity-70 mt-0.5">
+            지급 {formatKRW(profitTotals.payout)}
+            {profitTotals.pendingAmount > 0 && ` (미지급 ${formatKRW(profitTotals.pendingAmount)})`}
+            {profitTotals.estimatedCount > 0 && ` · 추정 ${profitTotals.estimatedCount}건`}
+          </p>
         </div>
       </div>
 
@@ -490,7 +519,10 @@ export default function SettlementsContent() {
                   ) : (
                     filtered.map(s => {
                       const invoiceAmt   = s.invoice_amount || (s.supply_price + s.vat)
-                      const profitRate   = calcProfitRate(s.supply_price, s.payout_amount)
+                      // 행의 수익도 합계와 같은 규칙으로 — 정산에 적힌 예상지급이 비어 있으면
+                      // 예전에는 수익이 공급가 전액으로 보였다
+                      const rowPay       = payoutOf(finIndex, s.inquiry_id, s.payout_amount)
+                      const profitRate   = calcProfitRate(s.supply_price, rowPay.amount)
                       const isMemoEditing = memoEditId === s.id
 
                       const isAmtEditing = amtEditId === s.id
@@ -577,7 +609,21 @@ export default function SettlementsContent() {
                               <ProfitRateBadge rate={profitRate} />
                             </div>
                             <p className="text-[10px] text-gray-400 mt-0.5">
-                              {formatKRW(s.supply_price - s.payout_amount)}
+                              {formatKRW(s.supply_price - rowPay.amount)}
+                              {rowPay.stage !== 'paid' && (
+                                <span
+                                  className={`ml-1 text-[9px] ${
+                                    rowPay.stage === 'partial'   ? 'text-yellow-700' :
+                                    rowPay.stage === 'unpaid'    ? 'text-orange-600' :
+                                    rowPay.stage === 'estimated' ? 'text-amber-600'  : 'text-gray-400'
+                                  }`}
+                                  title={rowPay.source === 'actual'
+                                    ? '지급 금액은 확정됐지만 아직 송금 전입니다'
+                                    : PAYOUT_SOURCE_LABEL[rowPay.source]}
+                                >
+                                  {PAYOUT_STAGE_LABEL[rowPay.stage]}
+                                </span>
+                              )}
                             </p>
                           </td>
 

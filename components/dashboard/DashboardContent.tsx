@@ -16,6 +16,10 @@ import {
   ResponsiveContainer, PieChart, Pie, Cell, ComposedChart, Line,
 } from 'recharts'
 import type { Inquiry, Settlement, Assignment, Payout, EventExpense } from '@/lib/supabase/types'
+import {
+  buildFinanceIndex, dedupeSettlements, toRows, countableRows, sumRows,
+  inPeriod, unpaidTotal,
+} from '@/lib/finance'
 
 // 파이프라인 전체 단계
 const ALL_PIPELINE = [
@@ -118,83 +122,43 @@ export default function DashboardContent() {
     return m
   }, new Map())
 
-  // ── 실제 지급액 계산 (payouts.final_pay 우선, fallback: settlement.payout_amount)
-  // 이관 데이터는 payouts 레코드가 없어 settlement.payout_amount도 0일 수 있음
-  const payoutByInquiry = payouts.reduce<Map<string, number>>((m, p) => {
-    if (p.inquiry_id && (p.status === '지급완료' || p.status === '완료'))
-      m.set(p.inquiry_id, (m.get(p.inquiry_id) || 0) + (p.final_pay || 0))
-    return m
-  }, new Map())
-
-  function getActualPayout(inquiryId: string | undefined, settPayout: number): number {
-    if (!inquiryId) return settPayout
-    const fromPayouts = payoutByInquiry.get(inquiryId)
-    // payouts 레코드가 존재하면 그 값 사용, 없으면 settlement 값 fallback
-    return (fromPayouts !== undefined && fromPayouts > 0) ? fromPayouts : settPayout
-  }
-
-  // 부대비용(실제 지출) — 인건비와 별도로 수익에서 차감
-  const expenseByInquiry = expenses.reduce<Map<string, number>>((m, e) => {
-    if (e.inquiry_id) m.set(e.inquiry_id, (m.get(e.inquiry_id) || 0) + (e.amount || 0))
-    return m
-  }, new Map())
-
-  function getExpense(inquiryId: string | undefined): number {
-    return inquiryId ? (expenseByInquiry.get(inquiryId) || 0) : 0
-  }
+  // 돈을 세는 규칙은 lib/finance.ts 한 곳에 있다. CEO 경영현황·수익보고·정산/청구도
+  // 같은 것을 쓴다 — 예전에는 화면마다 복붙이라 기준이 조용히 갈라졌다.
+  const finIndex = buildFinanceIndex(payouts, expenses, assignments)
+  const inqMapAll = new Map(inquiries.map(i => [i.id, i]))
 
   // payouts 테이블에 실제 데이터가 있는지 여부
   const hasRealPayoutData = payouts.length > 0
 
-  // inquiry당 settlement 중복 제거: inquiry_id별 첫 번째 settlement만 사용
-  const dedupedSettlements = Array.from(
-    settlements.reduce<Map<string, Settlement>>((m, s) => {
-      if (s.inquiry_id && !m.has(s.inquiry_id)) m.set(s.inquiry_id, s)
-      return m
-    }, new Map()).values()
-  )
+  // 문의당 정산 중복 제거 → 세는 대상만 → 화면이 쓰는 행
+  const countable = countableRows(toRows(dedupeSettlements(settlements), inqMapAll, finIndex))
 
-  // 이번달 체결 매출 (event_start 기준, inquiry당 중복 제거)
-  const thisMonthInqIds = new Set(
-    inquiries.filter(i => i.event_start?.startsWith(thisMonth)).map(i => i.id)
-  )
-  const thisMonthSetts = dedupedSettlements.filter(s => s.inquiry_id && thisMonthInqIds.has(s.inquiry_id))
-  const monthlyRevenue = thisMonthSetts.reduce((s, r) => s + (r.supply_price || 0), 0)
-  // 이번달 총청구액 (VAT 포함)
-  const monthlyInvoice = thisMonthSetts.reduce((s, r) => s + (r.invoice_amount || (r.supply_price || 0) + (r.vat || 0)), 0)
-  // 이번달 수익: 공급가액 - 실제지급액(payouts 우선)
-  const monthlyPayout  = thisMonthSetts.reduce((s, r) => s + getActualPayout(r.inquiry_id, r.payout_amount), 0)
-  const monthlyExpense = thisMonthSetts.reduce((s, r) => s + getExpense(r.inquiry_id), 0)
-  const monthlyProfit  = monthlyRevenue - monthlyPayout - monthlyExpense
+  // 이번달 (행사일 기준)
+  const monthRows      = countable.filter(r => inPeriod(r, thisMonth))
+  const monthTotals    = sumRows(monthRows)
+  const monthlyRevenue = monthTotals.revenue
+  const monthlyInvoice = monthRows.reduce(
+    (s, r) => s + (r.settlement.invoice_amount || r.revenue + (r.settlement.vat || 0)), 0)
+  const monthlyProfit  = monthTotals.profit
   // 이번달 신규 문의 수 (created_at 기준)
   const monthlyNewInquiries = inquiries.filter(i => i.created_at?.startsWith(thisMonth)).length
 
   // 미수금 = 아직 못 받은 잔액. 입금상태가 아니라 잔액으로 판단한다 —
   // 상태로 거르면 '부분입금'인데 상태만 '입금완료'로 바뀐 건 등을 놓친다.
-  // 초과입금(잔액 음수)은 수익이지 받을 돈이 아니라 다른 건을 상쇄하면 안 된다.
-  // CEO 경영현황·업체입금 탭도 같은 기준을 쓴다.
-  const unpaidAmount = settlements
-    .reduce((s, r) => s + Math.max(0, r.balance || 0), 0)
+  const unpaidAmount = unpaidTotal(settlements)
 
   const activeInquiries = inquiries.filter(i => ['접수','견적','체결','배정완료','진행중'].includes(i.status))
 
-  // ── 연간 KPI (event_start 기준, 없으면 settlement.created_at 대체)
+  // ── 연간 KPI
   const YEAR = String(now.getFullYear())
-  const inqMap = new Map(inquiries.map(i => [i.id, i]))
-  // dedupedSettlements 재활용 (위에서 이미 선언)
-  const settsYear = dedupedSettlements.filter(s => {
-    if (!s.inquiry_id) return false
-    const inq = inqMap.get(s.inquiry_id)
-    // 행사일이 있으면 우선 사용, 없으면(날짜 미정) 정산 등록일로 대체
-    const dateRef = inq?.event_start || s.created_at
-    return dateRef?.startsWith(YEAR) ?? false
-  })
-  const rev2026         = settsYear.reduce((s, r) => s + (r.supply_price || 0), 0)
+  const inqMap = inqMapAll
+  const yearRows        = countable.filter(r => inPeriod(r, YEAR))
+  const yearTotals      = sumRows(yearRows)
+  const rev2026         = yearTotals.revenue
   // 실제 청구금액(invoice_amount) 합계 — 없으면 supply_price + vat fallback
-  const invoiceTotal2026 = settsYear.reduce((s, r) => s + (r.invoice_amount || (r.supply_price || 0) + (r.vat || Math.floor((r.supply_price || 0) * 0.1))), 0)
-  const payout2026      = settsYear.reduce((s, r) => s + getActualPayout(r.inquiry_id, r.payout_amount), 0)
-  const expense2026     = settsYear.reduce((s, r) => s + getExpense(r.inquiry_id), 0)
-  const profit2026      = rev2026 - payout2026 - expense2026
+  const invoiceTotal2026 = yearRows.reduce(
+    (s, r) => s + (r.settlement.invoice_amount || r.revenue + (r.settlement.vat || Math.floor(r.revenue * 0.1))), 0)
+  const profit2026      = yearTotals.profit
   // 체결율: 체결 이상 / 전체 문의
   const contractedStatuses = ['체결', '배정완료', '진행중', '완료', '정산완료']
   const contractRate = inquiries.length > 0
@@ -254,17 +218,12 @@ export default function DashboardContent() {
     const month = String(i + 1).padStart(2, '0')
     const key   = `${now.getFullYear()}-${month}`
     const label = `${i + 1}월`
-    // event_start 기준 (행사 시작일이 해당 월인 문의만)
-    const monthInqIds = new Set(
-      inquiries.filter(inq => inq.event_start?.startsWith(key)).map(inq => inq.id)
-    )
-    const sInMonth  = dedupedSettlements.filter(s => s.inquiry_id && monthInqIds.has(s.inquiry_id))
-    const revenue   = sInMonth.reduce((s, r) => s + (r.supply_price || 0), 0)
-    const payoutAmt = sInMonth.reduce((s, r) => s + getActualPayout(r.inquiry_id, r.payout_amount), 0)
-    const expenseAmt = sInMonth.reduce((s, r) => s + getExpense(r.inquiry_id), 0)
-    const profit    = revenue - payoutAmt - expenseAmt
-    const hasData   = payoutAmt > 0
-    return { label, revenue, profit, profitRate: (revenue > 0 && hasData) ? Math.round((profit / revenue) * 100) : 0 }
+    const t = sumRows(countable.filter(r => inPeriod(r, key)))
+    const hasData = t.payout > 0
+    return {
+      label, revenue: t.revenue, profit: t.profit,
+      profitRate: (t.revenue > 0 && hasData) ? t.profitRate : 0,
+    }
   })
 
   // 상태 분포
@@ -313,8 +272,8 @@ export default function DashboardContent() {
           monthlyRevenue={monthlyRevenue}
           monthlyInvoice={monthlyInvoice}
           monthlyProfit={monthlyProfit}
-          monthlyPayout={monthlyPayout}
-          monthlySettCount={thisMonthSetts.length}
+          monthlyPayout={monthTotals.payout}
+          monthlySettCount={monthRows.length}
           monthlyNewInquiries={monthlyNewInquiries}
           unpaidAmount={unpaidAmount}
           unpaidTop5={unpaidTop5}
@@ -327,11 +286,15 @@ export default function DashboardContent() {
           year={YEAR}
           rev2026={rev2026}
           invoiceTotal2026={invoiceTotal2026}
-          payout2026={payout2026}
+          payout2026={yearTotals.payout}
           profit2026={profit2026}
           contractRate={contractRate}
           hasRealPayoutData={hasRealPayoutData}
-          settsYearCount={settsYear.length}
+          settsYearCount={yearRows.length}
+          yearEstimatedCount={yearTotals.estimatedCount}
+          yearEstimatedAmount={yearTotals.estimatedAmount}
+          yearPaidAmount={yearTotals.paidAmount}
+          yearPendingAmount={yearTotals.pendingAmount}
         />
       )}
 
@@ -347,7 +310,7 @@ export default function DashboardContent() {
 
       {/* ══════════════ 탭 4: 고객사현황 ══════════════ */}
       {activeTab === 'clients' && (
-        <ClientsTab inquiries={inquiries} settlements={settlements} payoutByInquiry={payoutByInquiry} expenseByInquiry={expenseByInquiry} />
+        <ClientsTab inquiries={inquiries} settlements={settlements} payoutByInquiry={finIndex.payoutByInquiry} expenseByInquiry={finIndex.expenseByInquiry} />
       )}
     </div>
   )
@@ -364,6 +327,7 @@ function OverviewTab({
   unpaidAmount, unpaidTop5, staffCount, customerCount,
   monthlyChart, statusDist, assignCountMap, todayStr,
   year, rev2026, invoiceTotal2026, payout2026, profit2026, contractRate, hasRealPayoutData, settsYearCount,
+  yearEstimatedCount, yearEstimatedAmount, yearPaidAmount, yearPendingAmount,
 }: {
   inquiries: Inquiry[]; settlements: Settlement[]
   happeningToday: Inquiry[]; prepThisWeek: Inquiry[]; unassigned: Inquiry[]
@@ -377,6 +341,8 @@ function OverviewTab({
   assignCountMap: Map<string, number>; todayStr: string
   year: string; rev2026: number; invoiceTotal2026: number; payout2026: number; profit2026: number; contractRate: number
   hasRealPayoutData: boolean; settsYearCount: number
+  yearEstimatedCount: number; yearEstimatedAmount: number
+  yearPaidAmount: number; yearPendingAmount: number
 }) {
   const thisMonth = todayStr.substring(0, 7)
   const thisMonthCompleted = inquiries.filter(i =>
@@ -508,8 +474,16 @@ function OverviewTab({
           <div className="bg-orange-500/20 rounded-xl p-4 border border-orange-500/30">
             <p className="text-xs text-orange-300 mb-1">총 지급액</p>
             <p className="text-2xl font-bold text-orange-200 leading-tight">{formatKRW(payout2026)}</p>
-            <p className="text-[11px] text-orange-400 mt-1">
-              {hasRealPayoutData ? '지급관리 확인 기준' : '* 지급관리 미입력'}
+            {/* 같은 '지급액' 안에 실제 나간 돈과 아직 안 나간 돈, 추정이 섞여 있다.
+                수익은 셋을 다 뺀 값이지만, 어디까지가 실제인지는 밝혀둔다. */}
+            <p className="text-[11px] text-orange-400 mt-1 leading-relaxed">
+              {!hasRealPayoutData ? '* 지급관리 미입력' : (
+                <>
+                  지급완료 {formatKRW(yearPaidAmount)}
+                  {yearPendingAmount > 0 && <> · 미지급 {formatKRW(yearPendingAmount)}</>}
+                  {yearEstimatedAmount > 0 && <> · 추정 {formatKRW(yearEstimatedAmount)}</>}
+                </>
+              )}
             </p>
           </div>
           {/* 체결율 */}
