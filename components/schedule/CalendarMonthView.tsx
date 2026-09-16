@@ -44,6 +44,7 @@ interface SegStat {
   gapDays: number          // 필요보다 사람이 적은 날 수
   conflictDays: number     // 중복배정이 있는 날 수
   crew: string[]           // 구간 내내 동일하면 이름 목록, 아니면 빈 배열
+  crewAll: string[]        // 구간에 한 번이라도 등장한 이름 (편성이 날마다 달라도 보여주려고)
   crewVaries: boolean
   crewCount: number        // 구간에 한 번이라도 등장한 크루 수
 }
@@ -79,6 +80,7 @@ function segStat(ev: EventBase, dates: string[], conflictDates: Set<string>): Se
     filMin: filMin === Infinity ? 0 : filMin, filMax,
     gapDays, conflictDays,
     crew: crewVaries ? [] : (perDay[0] ? perDay[0].split('|') : []),
+    crewAll: [...all].sort(),
     crewVaries,
     crewCount: all.size,
   }
@@ -426,7 +428,9 @@ function EventBar({
 
   // 밀도에 따라 막대 안에 몇 줄까지 넣을지
   const showMeta = density !== 'compact'
-  const showCrew = density === 'detail' && has('crew') && st.crewCount > 0
+  // 크루 레이어를 켰다는 건 이름을 보겠다는 뜻이다. 밀도는 '얼마나 촘촘히'지
+  // '무엇을 감출지'가 아니다. 한 줄짜리 막대인 간략에서만 뺀다.
+  const showCrew = density !== 'compact' && has('crew') && st.crewCount > 0
 
   return (
     <div
@@ -473,15 +477,18 @@ function EventBar({
               청구 {fmt(money)}원 <span className="text-gray-500">(행사 전체)</span>
             </div>
           )}
-          {st.crewCount > 0 && (
-            <div className="text-[10px] text-gray-500">
-              크루 {st.crewCount}명{st.crewVaries ? ' · 날짜별 다름' : ''}
-              {!st.crewVaries && st.crew.length > 0 && (
-                <span className="text-gray-600"> · {st.crew.slice(0, 5).join(', ')}
-                  {st.crew.length > 5 ? ` 외 ${st.crew.length - 5}` : ''}</span>
-              )}
-            </div>
-          )}
+          {st.crewCount > 0 && (() => {
+            const list = st.crewVaries ? st.crewAll : st.crew
+            return (
+              <div className="text-[10px] text-gray-500">
+                크루 {st.crewCount}명{st.crewVaries ? ' · 날짜별 다름' : ''}
+                {list.length > 0 && (
+                  <span className="text-gray-700"> · {list.slice(0, 5).join(', ')}
+                    {list.length > 5 ? ` 외 ${list.length - 5}` : ''}</span>
+                )}
+              </div>
+            )
+          })()}
           {ev.memoCount > 0 && ev.latestMemo && (
             <div className="text-[10px] text-amber-700 bg-amber-50 rounded px-1 py-0.5 line-clamp-2">
               {ev.latestMemo}
@@ -565,14 +572,16 @@ function EventBar({
         )}
 
         {/* 4줄: 크루 이름 — 구간 내내 같을 때만 이름을 적는다 */}
-        {showCrew && (
-          st.crewVaries ? (
-            <div className="mt-0.5 text-[10px] opacity-80 inline-flex items-center gap-0.5">
-              <Users className="h-2.5 w-2.5" />크루 {st.crewCount}명 · 날짜별 다름
-            </div>
-          ) : (
-            <div className="mt-0.5 flex flex-wrap gap-0.5">
-              {st.crew.slice(0, 6).map(n => (
+        {/* 4줄: 크루 이름.
+            예전에는 구간 안에서 편성이 하루라도 다르면 '날짜별 다름'만 적고 이름을 통째로
+            감췄다. 그런데 이름을 보려고 켜는 레이어인데 정작 이름이 없으면 쓸모가 없다.
+            이름을 보여주되 '날짜별 다름'을 함께 붙여, 이 목록이 그 구간에 한 번이라도
+            들어온 사람이라는 것을 분명히 한다. 날짜별 정확한 편성은 주간 뷰가 답한다. */}
+        {showCrew && (() => {
+          const list = st.crewVaries ? st.crewAll : st.crew
+          return (
+            <div className="mt-0.5 flex flex-wrap items-center gap-0.5">
+              {list.slice(0, 6).map(n => (
                 <span
                   key={n}
                   className="text-[10px] leading-none px-1 py-0.5 rounded bg-white/90 border border-current/40"
@@ -580,12 +589,21 @@ function EventBar({
                   {n}
                 </span>
               ))}
-              {st.crew.length > 6 && (
-                <span className="text-[10px] font-medium opacity-80">+{st.crew.length - 6}</span>
+              {list.length > 6 && (
+                <span className="text-[10px] font-medium opacity-80">+{list.length - 6}</span>
+              )}
+              {st.crewVaries && (
+                <span
+                  className="text-[10px] leading-none px-1 py-0.5 rounded inline-flex items-center gap-0.5
+                    bg-white/70 border border-dashed border-current/50 opacity-90"
+                  title="이 구간 안에서 날짜마다 들어가는 사람이 다릅니다. 날짜별 정확한 편성은 주간 뷰에서 보입니다."
+                >
+                  <Users className="h-2.5 w-2.5" />날짜별 다름
+                </span>
               )}
             </div>
           )
-        )}
+        })()}
       </button>
     </div>
   )
