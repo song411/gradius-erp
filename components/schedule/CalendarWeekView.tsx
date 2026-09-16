@@ -14,7 +14,7 @@ import { AlertTriangle, StickyNote, MapPin, Clock, Plus } from 'lucide-react'
 import type { Inquiry } from '@/lib/supabase/types'
 import {
   cleanStaffName, makeCell, coversDate, fmt, jobMoney,
-  cellState, STATE_STYLE, STATUS_CHIP,
+  cellState, daySignature, STATE_STYLE, STATUS_CHIP,
 } from './matrixCore'
 import { md, dowOf, weekOf, type GridDay } from './dateUtils'
 import type { EventBase, ScheduleData } from './useScheduleData'
@@ -43,15 +43,6 @@ interface Props {
   onOpenDay: (date: string) => void
 }
 
-/** 그 날짜의 편성 지문 — 직무별로 누가 들어가는지.
- *  이 값이 이레 내내 같으면 날짜별로 따로 보여줄 이유가 없다. */
-function daySignature(ev: EventBase, date: string): string {
-  return ev.jobs.map(job => {
-    const c = makeCell(job, date)
-    return `${job.jobType}:${job.required}:${[...c.pinned, ...c.allPeriod].map(a => a.id).sort().join(',')}`
-  }).sort().join('|')
-}
-
 export default function CalendarWeekView({
   anchor, data, prefs, events, today, onOpenDetail, notes, onOpenDay,
 }: Props) {
@@ -68,7 +59,7 @@ export default function CalendarWeekView({
     events.forEach(ev => {
       const coversAll = week.every(d => coversDate(ev.inq, d.date))
       const sameAllWeek = coversAll
-        && new Set(week.map(d => daySignature(ev, d.date))).size === 1
+        && new Set(week.map(d => daySignature(ev.jobs, d.date))).size === 1
       ;(sameAllWeek ? standing : perDay).push(ev)
     })
     return { standing, perDay }

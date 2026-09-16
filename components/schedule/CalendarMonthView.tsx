@@ -12,7 +12,7 @@ import { useMemo } from 'react'
 import { AlertTriangle, StickyNote, MapPin, Clock, Users, Plus } from 'lucide-react'
 import type { Inquiry } from '@/lib/supabase/types'
 import {
-  cleanStaffName, makeCell, coversDate, fmt, jobMoney,
+  cleanStaffName, makeCell, coversDate, daySignature, fmt, jobMoney,
 } from './matrixCore'
 import { monthGrid, type GridDay } from './dateUtils'
 import type { EventBase, ScheduleData } from './useScheduleData'
@@ -34,6 +34,10 @@ const BAR_FALLBACK = { bar: 'bg-gray-50 border-gray-300 text-gray-800', dot: 'bg
 
 /** 밀도별로 한 주에 몇 줄까지 막대를 펼칠지. 넘치면 '+N건'으로 접는다. */
 const MAX_LANES: Record<Density, number> = { compact: 3, normal: 5, detail: 99 }
+
+/** 막대 하나에 이름을 몇 개까지 적을지. 편성이 바뀌면 막대를 끊으므로
+ *  여기 적히는 이름은 '그 날 실제로 들어가는 사람'이다. 잘라낼 이유가 적다. */
+const CREW_CAP: Record<Density, number> = { compact: 0, normal: 12, detail: 24 }
 
 // ─── 구간 통계 ────────────────────────────────────────────
 /** 막대 한 개(= 행사의 그 주 구간)에 대한 집계.
@@ -200,6 +204,10 @@ function WeekRow({
   const from = week[0].date
   const to   = week[6].date
 
+  // 막대에 이름을 적는 중인가 — 구간을 어떻게 끊을지가 여기에 달려 있다.
+  // EventBar 의 showCrew 와 같은 조건이어야 한다.
+  const showCrewNames = has('crew') && density !== 'compact'
+
   // 이 주에 걸친 행사를 막대 구간으로 바꾼다.
   // 사람이 '휴무'로 찍어둔 날에서는 막대를 끊는다 — 금토 5주 연속 같은 행사가
   // 30일짜리 통막대로 보이면 실제 운영 모습이 전혀 읽히지 않기 때문이다.
@@ -217,11 +225,22 @@ function WeekRow({
 
       // 운영일이 이어지는 구간마다 막대를 하나씩.
       // 행사에 운영일이 지정돼 있으면 안 하는 날에서 막대가 끊긴다.
+      //
+      // 크루 이름을 보는 중이면 편성이 바뀌는 자리에서도 끊는다.
+      // 안 끊으면 9/18(5명)과 9/19(5명)를 묶은 막대에 합집합 7명이 적혀
+      // 어느 날에도 맞지 않는 목록이 된다. 세로 줄은 늘지 않는다 —
+      // 이어진 막대끼리는 열이 겹치지 않아 같은 줄에 들어간다.
+      const splitByCrew = showCrewNames
       let i = c0
       while (i <= c1) {
         if (!coversDate(ev.inq, week[i].date)) { i++; continue }
+        const sig0 = splitByCrew ? daySignature(ev.jobs, week[i].date) : ''
         let j = i
-        while (j + 1 <= c1 && coversDate(ev.inq, week[j + 1].date)) j++
+        while (
+          j + 1 <= c1
+          && coversDate(ev.inq, week[j + 1].date)
+          && (!splitByCrew || daySignature(ev.jobs, week[j + 1].date) === sig0)
+        ) j++
         out.push({
           ev, c0: i, c1: j,
           dates: week.slice(i, j + 1).map(d => d.date),
@@ -233,7 +252,7 @@ function WeekRow({
       }
     })
     return out
-  }, [events, week, from, to])
+  }, [events, week, from, to, showCrewNames])
 
   const lanes    = useMemo(() => packLanes(segments), [segments])
   const shown    = lanes.slice(0, maxLanes)
@@ -483,8 +502,8 @@ function EventBar({
               <div className="text-[10px] text-gray-500">
                 크루 {st.crewCount}명{st.crewVaries ? ' · 날짜별 다름' : ''}
                 {list.length > 0 && (
-                  <span className="text-gray-700"> · {list.slice(0, 5).join(', ')}
-                    {list.length > 5 ? ` 외 ${list.length - 5}` : ''}</span>
+                  <span className="text-gray-700"> · {list.slice(0, 12).join(', ')}
+                    {list.length > 12 ? ` 외 ${list.length - 12}` : ''}</span>
                 )}
               </div>
             )
@@ -579,9 +598,10 @@ function EventBar({
             들어온 사람이라는 것을 분명히 한다. 날짜별 정확한 편성은 주간 뷰가 답한다. */}
         {showCrew && (() => {
           const list = st.crewVaries ? st.crewAll : st.crew
+          const cap  = CREW_CAP[density]
           return (
             <div className="mt-0.5 flex flex-wrap items-center gap-0.5">
-              {list.slice(0, 6).map(n => (
+              {list.slice(0, cap).map(n => (
                 <span
                   key={n}
                   className="text-[10px] leading-none px-1 py-0.5 rounded bg-white/90 border border-current/40"
@@ -589,8 +609,8 @@ function EventBar({
                   {n}
                 </span>
               ))}
-              {list.length > 6 && (
-                <span className="text-[10px] font-medium opacity-80">+{list.length - 6}</span>
+              {list.length > cap && (
+                <span className="text-[10px] font-medium opacity-80">+{list.length - cap}</span>
               )}
               {st.crewVaries && (
                 <span

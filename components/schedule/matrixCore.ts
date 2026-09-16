@@ -335,6 +335,18 @@ export function makeCell(job: JobBase, date: string): JobCell {
   return { job, pinned, allPeriod, total: pinned.length + allPeriod.length }
 }
 
+/** 그 날짜의 편성 지문 — 직무별로 누가 들어가는지.
+ *  이 값이 날마다 같으면 여러 날을 하나로 묶어 보여줘도 거짓이 되지 않는다.
+ *  반대로 다르면 묶는 순간 어느 날에도 맞지 않는 목록이 만들어진다
+ *  (9/18=5명, 9/19=5명인데 둘을 묶으면 7명이 되는 식). 주간 뷰와 월 달력이
+ *  같은 판단을 하려면 이 함수 하나만 봐야 한다. */
+export function daySignature(jobs: JobBase[], date: string): string {
+  return jobs.map(job => {
+    const c = makeCell(job, date)
+    return `${job.jobType}:${job.required}:${[...c.pinned, ...c.allPeriod].map(a => a.id).sort().join(',')}`
+  }).sort().join('|')
+}
+
 /** 날짜를 가진 행사 (Inquiry 의 날짜 부분만 추린 최소 형태) */
 export interface DatedEvent {
   event_start?: string
