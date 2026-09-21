@@ -35,7 +35,7 @@ const TOOLS: Tool[] = [
     id: 'guide',
     emoji: '📚',
     name: 'ERP 가이드북',
-    desc: '업무 플로우 · 메뉴별 사용법 · FAQ · 버전별 업데이트 노트',
+    desc: '업무 플로우 · 영업 보드 온보딩 · 메뉴별 사용법 · FAQ · 업데이트 노트',
     category: '가이드 & 도구',
     status: 'ready',
     gradient: 'from-amber-500 to-orange-600',
