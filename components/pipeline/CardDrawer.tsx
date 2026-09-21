@@ -15,7 +15,8 @@ import { toast } from 'sonner'
 import { db } from '@/lib/supabase/api'
 import { formatKRW } from '@/lib/utils'
 import {
-  LOST_REASONS, DEAD_STATUSES, isDead, type PipelineCard,
+  LOST_REASONS, DEAD_STATUSES, CONTACT_KINDS, ACTIVITY_TYPE,
+  isDead, splitActivity, type PipelineCard, type ContactKind,
 } from '@/lib/pipeline'
 import type { InquiryStatus, ProjectMemo } from '@/lib/supabase/types'
 import {
@@ -29,11 +30,6 @@ import {
   Phone, Mail, Users, MessageSquare, ExternalLink, Trash2, Flag, CalendarClock,
 } from 'lucide-react'
 
-/** 접촉 수단. 내용 앞에 [통화] 처럼 붙여 한 컬럼에 담는다 —
- *  이것 때문에 테이블을 하나 더 만들 이유는 없다. */
-const CONTACT_KINDS = ['통화', '메일·문자', '미팅', '기타'] as const
-type ContactKind = typeof CONTACT_KINDS[number]
-
 const KIND_ICON: Record<string, React.ReactNode> = {
   '통화':      <Phone className="h-3.5 w-3.5" />,
   '메일·문자': <Mail className="h-3.5 w-3.5" />,
@@ -42,12 +38,6 @@ const KIND_ICON: Record<string, React.ReactNode> = {
 }
 
 const AUTHOR_KEY = 'gradius.pipeline.author'
-
-/** '[통화] 부재중' → { kind: '통화', body: '부재중' } */
-function splitActivity(content: string): { kind: string; body: string } {
-  const m = content.match(/^\[([^\]]+)\]\s*([\s\S]*)$/)
-  return m ? { kind: m[1], body: m[2] } : { kind: '기타', body: content }
-}
 
 interface Props {
   card: PipelineCard
@@ -83,7 +73,7 @@ export default function CardDrawer({ card, onClose, onChanged }: Props) {
   const loadLogs = useCallback(async () => {
     try {
       const rows = await db.list<ProjectMemo>('project_memos', {
-        filters: { inquiry_id: inq.id, type: '영업활동' },
+        filters: { inquiry_id: inq.id, type: ACTIVITY_TYPE },
         order: 'created_at',
         asc: false,
       })
@@ -120,7 +110,7 @@ export default function CardDrawer({ card, onClose, onChanged }: Props) {
     try {
       await db.insert('project_memos', {
         inquiry_id: inq.id,
-        type: '영업활동',
+        type: ACTIVITY_TYPE,
         content: `[${kind}] ${body.trim()}`,
         author: author.trim() || '미지정',
       })
@@ -161,7 +151,7 @@ export default function CardDrawer({ card, onClose, onChanged }: Props) {
       try {
         await db.insert('project_memos', {
           inquiry_id: inq.id,
-          type: '영업활동',
+          type: ACTIVITY_TYPE,
           content: `[기타] ${lostStatus} 처리 — 사유: ${lostReason}`,
           author: author.trim() || '미지정',
         })

@@ -129,7 +129,78 @@ function signalFor(stage: PipelineStage, days: number | null): Signal {
   return 'ok'
 }
 
-// ─── ④ 카드 ───────────────────────────────────────────────
+// ─── ④ 적어둔 것 ──────────────────────────────────────────
+// 카드가 뼈대만 보여주면 결국 전부 눌러봐야 한다. 무슨 얘기가 오갔는지
+// 한 줄이라도 카드에 올려야 목록이 '나열'이 아니라 '현황'이 된다.
+
+/** project_memos에서 카드가 쓰는 만큼만 */
+export interface MemoLike {
+  inquiry_id: string
+  type: string
+  content: string
+  author?: string | null
+  created_at: string
+}
+
+/** 접촉 수단은 내용 앞에 [통화] 처럼 붙여 한 컬럼에 담는다 */
+export const CONTACT_KINDS = ['통화', '메일·문자', '미팅', '기타'] as const
+export type ContactKind = typeof CONTACT_KINDS[number]
+
+/** '[통화] 부재중' → { kind: '통화', body: '부재중' } */
+export function splitActivity(content: string): { kind: string; body: string } {
+  const m = content.match(/^\[([^\]]+)\]\s*([\s\S]*)$/)
+  return m ? { kind: m[1], body: m[2] } : { kind: '기타', body: content }
+}
+
+export const ACTIVITY_TYPE = '영업활동'
+
+export interface CardNote {
+  /** 어디서 온 글인가 — 카드에 출처를 적어야 오해가 없다.
+   *  '문의'는 고객이 보낸 원문이지 우리가 적은 게 아니다. */
+  source: '활동' | '상담' | '문의'
+  kind: string
+  text: string
+  author?: string | null
+  on?: string
+}
+
+/** 문의 원문에 붙은 정리용 태그. 별도 칸으로 이미 빠져 있어 카드에서는 군더더기다.
+ *  화면에서만 떼어낸다 — 저장된 값은 건드리지 않는다. */
+const NOTE_TAGS = /\[(복장|식사|주차|페이)\s*:[^\]]*\]\s*/g
+
+export function cleanNote(text: string | null | undefined): string {
+  return (text ?? '').replace(NOTE_TAGS, '').replace(/\n{2,}/g, '\n').trim()
+}
+
+/** 카드에 미리 보여줄 한 줄.
+ *
+ *  우리가 적은 것 → 상담 기록 → 고객이 보낸 원문 순으로 내려간다.
+ *  실측(2026-09-21): 보드 146건 중 영업활동 2건, consult_notes 8건인데
+ *  문의 원문은 141건에 있다. 원문까지 내려가지 않으면 카드 대부분이
+ *  빈 채로 남아 '그냥 나열'이 된다. 대신 출처를 반드시 같이 적는다. */
+function pickNote(inq: Inquiry, memos: MemoLike[]): CardNote | null {
+  const latestMemo = memos[0]
+  if (latestMemo) {
+    const { kind, body } = splitActivity(latestMemo.content)
+    return {
+      source: '활동',
+      kind,
+      text: body.trim(),
+      author: latestMemo.author,
+      on: kstDay(latestMemo.created_at),
+    }
+  }
+
+  const consult = cleanNote(inq.consult_notes)
+  if (consult) return { source: '상담', kind: '상담', text: consult }
+
+  const raw = cleanNote(inq.notes)
+  if (raw) return { source: '문의', kind: '문의 원문', text: raw }
+
+  return null
+}
+
+// ─── ⑤ 카드 ───────────────────────────────────────────────
 export interface PipelineCard {
   inq: Inquiry
   stage: PipelineStage
@@ -152,13 +223,19 @@ export interface PipelineCard {
   expired: boolean
   /** 결론 난 날 (없으면 null) */
   concludedOn: string | null
+  /** 카드에 미리 보여줄 최근 기록 한 줄 */
+  lastNote: CardNote | null
+  /** 이 건에 쌓인 영업활동 기록 수 */
+  noteCount: number
 }
 
 const STALL_VERB: Record<PipelineStage, string> = {
   '접수': '접수', '견적작성': '작성', '발송대기': '발송', '결론': '',
 }
 
-export function buildCard(inq: Inquiry, allEstimates: Estimate[]): PipelineCard {
+export function buildCard(
+  inq: Inquiry, allEstimates: Estimate[], memos: MemoLike[] = [],
+): PipelineCard {
   const ests = allEstimates.filter(e => e.inquiry_id === inq.id)
   const stage = stageOf(inq, ests)
   const dead = isDead(inq)
@@ -201,12 +278,29 @@ export function buildCard(inq: Inquiry, allEstimates: Estimate[]): PipelineCard 
     dday,
     expired,
     concludedOn: dead ? kstDay(inq.updated_at || inq.created_at) : null,
+    lastNote: pickNote(inq, memos),
+    noteCount: memos.length,
   }
 }
 
 /** 보드에 올릴 카드 전부. 체결된 건은 여기서 빠진다 (운영 캘린더 몫). */
-export function buildBoard(inquiries: Inquiry[], estimates: Estimate[]): PipelineCard[] {
-  return inquiries.filter(isPreContract).map(inq => buildCard(inq, estimates))
+export function buildBoard(
+  inquiries: Inquiry[], estimates: Estimate[], memos: MemoLike[] = [],
+): PipelineCard[] {
+  // 문의별로 한 번만 갈라둔다. 카드마다 전체를 훑으면 건수 × 메모수가 된다.
+  const byInq = new Map<string, MemoLike[]>()
+  for (const m of memos) {
+    if (m.type !== ACTIVITY_TYPE) continue
+    const list = byInq.get(m.inquiry_id)
+    if (list) list.push(m)
+    else byInq.set(m.inquiry_id, [m])
+  }
+  // 최신이 앞으로 (조회 순서를 믿지 않는다)
+  byInq.forEach(list => list.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')))
+
+  return inquiries
+    .filter(isPreContract)
+    .map(inq => buildCard(inq, estimates, byInq.get(inq.id) ?? []))
 }
 
 /** 급한 것이 위로. 기한 지난 할 일 → 신호등 → 오래 멈춘 순.
@@ -229,7 +323,7 @@ export function dueToday(cards: PipelineCard[]): PipelineCard[] {
     .sort((a, b) => (a.inq.next_action_at || '').localeCompare(b.inq.next_action_at || ''))
 }
 
-// ─── ⑤ 결론 칸 ────────────────────────────────────────────
+// ─── ⑥ 결론 칸 ────────────────────────────────────────────
 /** 끝난 건은 계속 쌓인다 (실측 2026-09-21 기준 108건). 전부 펼치면
  *  결론 칸이 화면을 뒤덮어 살아 있는 세 칸이 안 읽힌다. 최근 것만 펼친다. */
 export const RECENT_CONCLUDED_DAYS = 30
@@ -239,7 +333,7 @@ export function isRecentlyConcluded(card: PipelineCard, t = today()): boolean {
   return dayDiff(card.concludedOn, t) <= RECENT_CONCLUDED_DAYS
 }
 
-// ─── ⑥ 미체결 사유 ────────────────────────────────────────
+// ─── ⑦ 미체결 사유 ────────────────────────────────────────
 /** 왜 졌는지를 남겨두면 다음 견적의 근거가 된다.
  *  자유 입력만 두면 아무도 안 적는다 — 고르게 만든다. */
 export const LOST_REASONS = [
