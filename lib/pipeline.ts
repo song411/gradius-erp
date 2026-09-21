@@ -415,16 +415,61 @@ export function buildBoard(
   return inquiries.map(inq => buildCard(inq, estimates, byInq.get(inq.id) ?? []))
 }
 
-/** 급한 것이 위로. 기한 지난 할 일 → 신호등 → 오래 멈춘 순.
- *  끝난 건(체결·미체결)은 최근 것이 위로 온다 — 거기선 '오래됨'이 급한 게 아니다. */
-export function sortCards(cards: PipelineCard[]): PipelineCard[] {
-  const rank: Record<Signal, number> = { alert: 0, warn: 1, ok: 2 }
-  return [...cards].sort((a, b) => {
-    if (a.concludedOn && b.concludedOn) return b.concludedOn.localeCompare(a.concludedOn)
-    if (a.overdue !== b.overdue) return a.overdue ? -1 : 1
-    if (rank[a.signal] !== rank[b.signal]) return rank[a.signal] - rank[b.signal]
-    return (b.stalledDays ?? -1) - (a.stalledDays ?? -1)
-  })
+// ─── 정렬 ─────────────────────────────────────────────────
+// 아침에 훑을 때와 이번 주 행사를 챙길 때는 보고 싶은 순서가 다르다.
+// 하나만 고집하면 다른 용도에서는 목록을 위에서 아래로 다 읽어야 한다.
+export type SortKey = 'urgent' | 'event' | 'stalled' | 'amount' | 'recent'
+
+export const SORT_MODES: Array<{ key: SortKey; label: string; hint: string }> = [
+  { key: 'urgent',  label: '급한 순',       hint: '기한 지난 할 일 → 신호등 → 오래 멈춘 순' },
+  { key: 'event',   label: '행사일 임박순',  hint: '행사가 가까운 것부터. 지난 행사는 뒤로' },
+  { key: 'stalled', label: '오래 멈춘 순',   hint: '답이 없는 지 오래된 것부터' },
+  { key: 'amount',  label: '금액 큰 순',     hint: '견적 금액이 큰 것부터' },
+  { key: 'recent',  label: '최근 접수순',    hint: '새로 들어온 문의부터' },
+]
+
+const SIGNAL_RANK: Record<Signal, number> = { alert: 0, warn: 1, ok: 2 }
+
+/** 급한 것이 위로. 끝난 건(체결·미체결)은 최근 것이 위로 온다 —
+ *  거기선 '오래됨'이 급한 게 아니다. */
+function urgentCmp(a: PipelineCard, b: PipelineCard): number {
+  if (a.concludedOn && b.concludedOn) return b.concludedOn.localeCompare(a.concludedOn)
+  if (a.overdue !== b.overdue) return a.overdue ? -1 : 1
+  if (SIGNAL_RANK[a.signal] !== SIGNAL_RANK[b.signal]) {
+    return SIGNAL_RANK[a.signal] - SIGNAL_RANK[b.signal]
+  }
+  return (b.stalledDays ?? -1) - (a.stalledDays ?? -1)
+}
+
+/** 행사일 정렬 자리. 앞으로 올 행사가 먼저, 지난 행사는 뒤로, 날짜 없는 건 맨 뒤.
+ *  지난 행사끼리는 최근에 지난 것부터 — 오래될수록 볼 일이 없다.
+ *  날짜가 없어도 date_memo('10월 예정')는 있을 수 있지만 정렬에는 쓸 수 없다. */
+function eventRank(c: PipelineCard): [number, number] {
+  if (c.dday == null) return [2, 0]
+  if (c.dday >= 0)    return [0, c.dday]
+  return [1, -c.dday]
+}
+
+export function sortCards(cards: PipelineCard[], key: SortKey = 'urgent'): PipelineCard[] {
+  const out = [...cards]
+  switch (key) {
+    case 'event':
+      return out.sort((a, b) => {
+        const [ga, va] = eventRank(a)
+        const [gb, vb] = eventRank(b)
+        return ga !== gb ? ga - gb : va !== vb ? va - vb : urgentCmp(a, b)
+      })
+    case 'stalled':
+      return out.sort((a, b) =>
+        (b.stalledDays ?? -1) - (a.stalledDays ?? -1) || urgentCmp(a, b))
+    case 'amount':
+      return out.sort((a, b) => b.amount - a.amount || urgentCmp(a, b))
+    case 'recent':
+      return out.sort((a, b) =>
+        (b.inq.created_at || '').localeCompare(a.inq.created_at || '') || urgentCmp(a, b))
+    default:
+      return out.sort(urgentCmp)
+  }
 }
 
 /** 오늘까지 하기로 한 일 (지난 것 포함) */

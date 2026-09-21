@@ -14,17 +14,18 @@ import { toast } from 'sonner'
 import { db } from '@/lib/supabase/api'
 import {
   buildBoard, sortCards, dueToday, isRecentlyConcluded, isLiveStage, winRate, shortKRW,
-  PIPELINE_STAGES, STAGE_DESC, STALE_RULES, RECENT_CONCLUDED_DAYS, ACTIVITY_TYPE,
+  PIPELINE_STAGES, STAGE_DESC, STALE_RULES, RECENT_CONCLUDED_DAYS, ACTIVITY_TYPE, SORT_MODES,
   today, dayDiff, kstDay,
-  type PipelineCard, type PipelineStage, type Signal, type MemoLike,
+  type PipelineCard, type PipelineStage, type Signal, type MemoLike, type SortKey,
 } from '@/lib/pipeline'
 import type { Estimate, Inquiry } from '@/lib/supabase/types'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
 import CardDrawer from './CardDrawer'
 import {
   Search, AlertTriangle, Send, Inbox, TrendingUp, CalendarClock, RefreshCw,
-  MessageSquare, MapPin, Rows3, Rows2, Clock, Moon, Phone, Users, Trophy,
+  MessageSquare, MapPin, Rows3, Rows2, Clock, Moon, Phone, Users, Trophy, ArrowDownWideNarrow,
 } from 'lucide-react'
 
 // ─── 신호등 ───────────────────────────────────────────────
@@ -84,6 +85,7 @@ const TABS: Array<{
 ]
 
 const DETAIL_KEY = 'gradius.pipeline.detail'
+const SORT_KEY   = 'gradius.pipeline.sort'
 
 export default function PipelineContent() {
   const [inquiries, setInquiries] = useState<Inquiry[]>([])
@@ -97,6 +99,7 @@ export default function PipelineContent() {
   // 카드에 적어둔 내용까지 펼칠지. 서버 렌더에서는 localStorage를 읽을 수 없어
   // 첫 렌더는 기본값으로 그리고 마운트 뒤에 갈아끼운다 (viewPrefs와 같은 방식).
   const [detail, setDetail] = useState(true)
+  const [sortKey, setSortKey] = useState<SortKey>('urgent')
   // 카드 객체가 아니라 id만 들고 있는다. 객체를 들고 있으면 저장 직후
   // 창 안의 값이 예전 값으로 남아, 그걸 맞추는 동기화 코드가 또 필요해진다.
   const [openId, setOpenId] = useState<string | null>(null)
@@ -132,9 +135,17 @@ export default function PipelineContent() {
       try {
         const saved = localStorage.getItem(DETAIL_KEY)
         if (saved !== null) setDetail(saved === '1')
+        const savedSort = localStorage.getItem(SORT_KEY)
+        // 모르는 값은 버린다 — 예전 버전이거나 사람이 고쳤을 수 있다
+        if (SORT_MODES.some(m => m.key === savedSort)) setSortKey(savedSort as SortKey)
       } catch { /* 저장이 막힌 브라우저 — 기본값으로 둔다 */ }
     })
   }, [])
+
+  function changeSort(key: SortKey) {
+    setSortKey(key)
+    try { localStorage.setItem(SORT_KEY, key) } catch { /* 무시 */ }
+  }
 
   function toggleDetail() {
     setDetail(v => {
@@ -186,15 +197,15 @@ export default function PipelineContent() {
     const map = {} as Record<PipelineStage, PipelineCard[]>
     PIPELINE_STAGES.forEach(s => { map[s] = [] })
     visible.forEach(c => { map[c.stage].push(c) })
-    PIPELINE_STAGES.forEach(s => { map[s] = sortCards(map[s]) })
+    PIPELINE_STAGES.forEach(s => { map[s] = sortCards(map[s], sortKey) })
     return map
-  }, [visible])
+  }, [visible, sortKey])
 
   /** 탭 하나가 품는 카드 (검색·필터 적용 후) */
   const cardsOfTab = useCallback(
     (stages: PipelineStage[] | null) =>
-      stages === null ? visible : sortCards(visible.filter(c => stages.includes(c.stage))),
-    [visible],
+      sortCards(stages === null ? visible : visible.filter(c => stages.includes(c.stage)), sortKey),
+    [visible, sortKey],
   )
 
   const activeTab = TABS.find(t => t.key === tab)!
@@ -311,6 +322,20 @@ export default function PipelineContent() {
             onChange={e => setSearchText(e.target.value)}
           />
         </div>
+        {/* 정렬 — 아침에 훑을 때와 이번 주 행사를 챙길 때는 보고 싶은 순서가 다르다 */}
+        <div className="relative">
+          <ArrowDownWideNarrow className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Select
+            value={sortKey}
+            onChange={e => changeSort(e.target.value as SortKey)}
+            title={SORT_MODES.find(m => m.key === sortKey)?.hint}
+            className="h-10 w-44 pl-8 text-sm font-medium"
+          >
+            {SORT_MODES.map(m => (
+              <option key={m.key} value={m.key}>{m.label}</option>
+            ))}
+          </Select>
+        </div>
         <button
           onClick={() => setOnlyRisky(v => !v)}
           className={[
@@ -388,6 +413,9 @@ export default function PipelineContent() {
             <h2 className="text-base font-bold text-gray-900">{activeTab.label}</h2>
             <span className="text-sm font-semibold text-gray-500">{tabCards.length}건</span>
             <span className="text-xs text-gray-400">{activeTab.hint}</span>
+            <span className="ml-auto text-xs text-gray-400">
+              {SORT_MODES.find(m => m.key === sortKey)?.label}
+            </span>
           </div>
           {tabCards.length === 0 ? (
             <div className="rounded-xl border border-dashed border-gray-300 py-16 text-center text-sm text-gray-400">
