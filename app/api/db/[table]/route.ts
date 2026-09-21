@@ -84,12 +84,19 @@ export async function PATCH(
   }
 
   const { searchParams } = new URL(request.url)
-  const id = searchParams.get('id')
-  if (!id) return NextResponse.json({ error: 'id 필요' }, { status: 400 })
+  const id  = searchParams.get('id')
+  // 여러 건을 같은 값으로 고칠 때 (예: 견적 일괄 발송 표시).
+  // 한 건씩 보내면 100건에 100번 왕복한다 — 중간에 끊기면 절반만 바뀐다.
+  const ids = searchParams.get('ids')?.split(',').map(v => v.trim()).filter(Boolean)
+
+  if (!id && !ids?.length) {
+    return NextResponse.json({ error: 'id 또는 ids 필요' }, { status: 400 })
+  }
 
   const body = await request.json()
   const supabase = createAdminClient()
-  const { data, error } = await supabase.from(table).update(body).eq('id', id).select()
+  const q = supabase.from(table).update(body)
+  const { data, error } = await (id ? q.eq('id', id) : q.in('id', ids!)).select()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ data })

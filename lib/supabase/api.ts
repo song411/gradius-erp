@@ -66,6 +66,19 @@ export const db = {
     return data as T[]
   },
 
+  // 여러 건을 같은 값으로 수정 (일괄 처리용)
+  async updateMany<T>(table: string, ids: string[], payload: Record<string, unknown>): Promise<T[]> {
+    if (ids.length === 0) return []
+    const res = await fetch(`${BASE}/${table}?ids=${ids.join(',')}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    if (!res.ok) { const e = await res.json(); throw new Error(e.error) }
+    const { data } = await res.json()
+    return data as T[]
+  },
+
   // 삭제 (id 기준)
   async delete(table: string, id: string): Promise<void> {
     const res = await fetch(`${BASE}/${table}?id=${id}`, { method: 'DELETE' })

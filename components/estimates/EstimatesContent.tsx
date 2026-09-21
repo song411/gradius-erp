@@ -7,6 +7,7 @@ import { formatKRW, calcProfitRate } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
 import { Plus, Search, Edit2, Trash2, Eye, Package, FileText, TrendingUp, Send, Clock, CheckCircle, Star, Copy, RotateCcw, XCircle, LayoutList } from 'lucide-react'
 import type { Estimate, EstimateItem, Inquiry } from '@/lib/supabase/types'
 import EstimateBuilder from './EstimateBuilder'
@@ -58,6 +59,9 @@ const TABS: { key: TabKey; label: string; icon: React.ReactNode; desc: string }[
 
 const DEAD_STATUSES = ['미체결', '보류', '취소']
 
+/** 견적을 어떻게 보냈나. 일괄 처리할 때 고른다. */
+const SEND_METHODS = ['문자', '이메일', '카카오톡', '이미지', '직접전달', '기타']
+
 export default function EstimatesContent() {
   const [estimates, setEstimates] = useState<EstimateRow[]>([])
   // 견적 없는 접수 문의 (견적 대기)
@@ -77,6 +81,12 @@ export default function EstimatesContent() {
 
   // 견적에 연결할 모든 문의 (빌더용)
   const [allInquiries, setAllInquiries] = useState<Inquiry[]>([])
+
+  // 일괄 처리용 선택. 한 건씩 누르던 발송 표시를 여러 건 묶어서 한다.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkDate, setBulkDate] = useState('')     // 실제로 보낸 날 (비면 오늘)
+  const [bulkMethod, setBulkMethod] = useState('문자')
+  const [bulkBusy, setBulkBusy] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -276,6 +286,60 @@ export default function EstimatesContent() {
     }
   }
 
+  // 화면에 안 보이는 건을 선택한 채로 두면, 누른 기억이 없는 건이 같이 바뀐다.
+  function clearSelection() { setSelectedIds(new Set()) }
+
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectMany(ids: string[], on: boolean) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      ids.forEach(id => { if (on) next.add(id); else next.delete(id) })
+      return next
+    })
+  }
+
+  // ── 일괄 발송 처리 ──────────────────────────────────────
+  // 발송일을 오늘로 못박지 않는다. 이미 지난주에 보낸 걸 오늘 표시만 하는
+  // 경우가 대부분이라, 오늘로 찍으면 '무응답 며칠'이 통째로 틀어진다.
+  async function handleBulkSend(markSent: boolean) {
+    const ids = [...selectedIds]
+    if (ids.length === 0) return
+
+    const when = bulkDate || new Date().toISOString().slice(0, 10)
+    const msg = markSent
+      ? `선택한 ${ids.length}건을 ${when} 발송완료로 표시합니다. 계속할까요?`
+      : `선택한 ${ids.length}건을 미발송으로 되돌립니다. 계속할까요?`
+    if (!confirm(msg)) return
+
+    setBulkBusy(true)
+    const tid = toast.loading(markSent ? '발송 표시 중...' : '되돌리는 중...')
+    try {
+      await db.updateMany('estimates', ids, markSent
+        ? {
+            send_status: '발송완료',
+            // 날짜만 고른 값이라 시각은 정오로 둔다 — 자정으로 두면
+            // 시간대에 따라 하루 앞뒤로 밀려 보인다
+            sent_at: `${when}T12:00:00+09:00`,
+            send_method: bulkMethod,
+          }
+        : { send_status: '미발송', sent_at: null })
+      toast.success(`${ids.length}건 처리했습니다.`, { id: tid })
+      clearSelection()
+      load()
+    } catch (e) {
+      toast.error('일괄 처리 실패: ' + (e as Error).message, { id: tid })
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
   // 견적 발송 상태 토글
   async function handleToggleSent(est: EstimateRow) {
     const isSent = est.send_status === '발송완료'
@@ -347,6 +411,12 @@ export default function EstimatesContent() {
       .some(v => v?.toLowerCase().includes(searchText.toLowerCase()))
   )
 
+  // 선택은 '지금 보이는 목록' 기준으로만 판단한다
+  const visibleIds = filteredEsts.map(e => e.id)
+  const selectedVisible = visibleIds.filter(id => selectedIds.has(id)).length
+  const allVisibleSelected  = visibleIds.length > 0 && selectedVisible === visibleIds.length
+  const someVisibleSelected = selectedVisible > 0
+
   // ── 집계 ─────────────────────────────────────────────────
   const inProgressCount  = estimates.filter(e => e.send_status !== '발송완료' && !e.is_final && !DEAD_STATUSES.includes(e.inquiries?.status || '')).length
   const sentCount        = estimates.filter(e => e.send_status === '발송완료'  && !e.is_final && !DEAD_STATUSES.includes(e.inquiries?.status || '')).length
@@ -388,7 +458,7 @@ export default function EstimatesContent() {
         {TABS.map(tab => (
           <button
             key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
+            onClick={() => { setActiveTab(tab.key); clearSelection() }}
             className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${
               activeTab === tab.key
                 ? 'border-blue-600 text-blue-600 bg-blue-50'
@@ -410,6 +480,62 @@ export default function EstimatesContent() {
           </button>
         ))}
       </div>
+
+      {/* 일괄 처리 바 — 견적 목록이 보이는 탭에서만 */}
+      {activeTab !== 'pending_inquiry' && filteredEsts.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 mb-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-blue-600"
+              checked={allVisibleSelected}
+              ref={el => { if (el) el.indeterminate = someVisibleSelected && !allVisibleSelected }}
+              onChange={e => toggleSelectMany(visibleIds, e.target.checked)}
+            />
+            전체 선택
+            <span className="text-xs text-gray-400">({filteredEsts.length}건)</span>
+          </label>
+
+          {selectedIds.size > 0 ? (
+            <>
+              <span className="text-sm font-semibold text-blue-700">{selectedIds.size}건 선택됨</span>
+
+              <div className="flex items-center gap-2 ml-auto flex-wrap">
+                <label className="text-xs text-gray-500">발송일</label>
+                <Input
+                  type="date"
+                  value={bulkDate}
+                  onChange={e => setBulkDate(e.target.value)}
+                  className="h-9 w-40 text-xs"
+                  title="실제로 보낸 날. 비워두면 오늘로 기록됩니다."
+                />
+                <Select
+                  value={bulkMethod}
+                  onChange={e => setBulkMethod(e.target.value)}
+                  className="h-9 w-28 text-xs"
+                >
+                  {SEND_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
+                </Select>
+                <Button size="sm" onClick={() => handleBulkSend(true)} disabled={bulkBusy} className="gap-1.5">
+                  <Send className="h-3.5 w-3.5" />
+                  발송완료로 표시
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => handleBulkSend(false)} disabled={bulkBusy} className="gap-1.5">
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  미발송으로
+                </Button>
+                <Button size="sm" variant="ghost" onClick={clearSelection} disabled={bulkBusy}>
+                  선택 해제
+                </Button>
+              </div>
+            </>
+          ) : (
+            <span className="text-xs text-gray-400">
+              체크해서 여러 건을 한 번에 발송완료로 표시할 수 있습니다.
+            </span>
+          )}
+        </div>
+      )}
 
       <Card>
         <CardContent className="p-0">
@@ -481,6 +607,9 @@ export default function EstimatesContent() {
                   onAddVersion={openAddVersion}
                   onCreate={openCreate}
                   onToggleSent={handleToggleSent}
+                  selectedIds={selectedIds}
+                  onToggleSelect={toggleSelect}
+                  onToggleGroup={toggleSelectMany}
                 />
               )}
             </>
@@ -513,6 +642,7 @@ export default function EstimatesContent() {
 function EstimateGroupTable({
   estimates, allEstimates,
   onPreview, onEdit, onDelete, onMarkFinal, onUnmarkFinal, onAddVersion, onCreate, onToggleSent,
+  selectedIds, onToggleSelect, onToggleGroup,
 }: {
   estimates: EstimateRow[]
   allEstimates: EstimateRow[]
@@ -524,6 +654,9 @@ function EstimateGroupTable({
   onAddVersion: (inq: Inquiry) => void
   onCreate: () => void
   onToggleSent: (est: EstimateRow) => void
+  selectedIds: Set<string>
+  onToggleSelect: (id: string) => void
+  onToggleGroup: (ids: string[], on: boolean) => void
 }) {
   if (estimates.length === 0) {
     return (
@@ -558,10 +691,24 @@ function EstimateGroupTable({
         const hasFinal = group.some(e => e.is_final)
         const totalForInquiry = allEstimates.filter(e => e.inquiry_id === first.inquiry_id).length
 
+        const groupIds = group.map(g => g.id)
+
         return (
           <div key={key}>
             {/* 그룹 헤더 */}
             <div className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-slate-50 to-gray-50 border-l-4 border-slate-400">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-blue-600 shrink-0"
+                title="이 문의의 견적 전체 선택"
+                checked={groupIds.length > 0 && groupIds.every(id => selectedIds.has(id))}
+                ref={el => {
+                  if (!el) return
+                  const picked = groupIds.filter(id => selectedIds.has(id)).length
+                  el.indeterminate = picked > 0 && picked < groupIds.length
+                }}
+                onChange={e => onToggleGroup(groupIds, e.target.checked)}
+              />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-semibold text-gray-800 text-sm">{first.company_name || '-'}</span>
@@ -608,11 +755,21 @@ function EstimateGroupTable({
                       <tr
                         key={est.id}
                         className={`border-b border-gray-100 transition-colors ${
-                          isFinal ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-gray-50'
+                          selectedIds.has(est.id) ? 'bg-blue-50 hover:bg-blue-100'
+                            : isFinal ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-gray-50'
                         }`}
                       >
+                        {/* 선택 */}
+                        <td className="pl-4 pr-1 py-3 w-8">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 accent-blue-600"
+                            checked={selectedIds.has(est.id)}
+                            onChange={() => onToggleSelect(est.id)}
+                          />
+                        </td>
                         {/* 버전 라벨 */}
-                        <td className="pl-8 pr-2 py-3 w-20">
+                        <td className="pl-2 pr-2 py-3 w-20">
                           <div className="flex items-center gap-1.5">
                             {isFinal && <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500 shrink-0" />}
                             <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
