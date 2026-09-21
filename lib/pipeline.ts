@@ -46,7 +46,7 @@ export const PIPELINE_STAGES: PipelineStage[] =
 export const STAGE_DESC: Record<PipelineStage, string> = {
   '접수':     '문의는 들어왔고 견적서는 아직',
   '견적작성': '견적서는 썼고 아직 안 보냄',
-  '체결 전':  '견적을 보냈고 답을 기다리는 중',
+  '체결 전':  '견적서 발송 완료 건 — 답을 기다리는 중',
   '체결':     '계약이 된 건',
   '미체결':   '미체결 · 보류 · 취소',
 }

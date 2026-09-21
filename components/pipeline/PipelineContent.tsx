@@ -69,7 +69,7 @@ const TABS: Array<{
     stages: ['접수', '견적작성'],
     tone: 'border-orange-500 bg-orange-500 text-white',
     idle: 'border-gray-200 bg-white text-gray-600 hover:border-orange-300' },
-  { key: 'pending',     label: '체결 전',     hint: '보내고 답 기다리는 중',
+  { key: 'pending',     label: '체결 전',     hint: '견적서 발송 완료 건',
     stages: ['체결 전'],
     tone: 'border-blue-600 bg-blue-600 text-white',
     idle: 'border-blue-300 bg-blue-50 text-blue-800 hover:border-blue-500' },
