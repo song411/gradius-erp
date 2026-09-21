@@ -23,9 +23,11 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import CardDrawer from './CardDrawer'
+import PipelineCalendar from './PipelineCalendar'
 import {
   Search, AlertTriangle, Send, Inbox, TrendingUp, CalendarClock, RefreshCw,
   MessageSquare, MapPin, Rows3, Rows2, Clock, Moon, Phone, Users, Trophy, ArrowDownWideNarrow,
+  LayoutGrid, CalendarDays,
 } from 'lucide-react'
 
 // ─── 신호등 ───────────────────────────────────────────────
@@ -86,6 +88,7 @@ const TABS: Array<{
 
 const DETAIL_KEY = 'gradius.pipeline.detail'
 const SORT_KEY   = 'gradius.pipeline.sort'
+const VIEW_KEY   = 'gradius.pipeline.view'
 
 export default function PipelineContent() {
   const [inquiries, setInquiries] = useState<Inquiry[]>([])
@@ -100,6 +103,7 @@ export default function PipelineContent() {
   // 첫 렌더는 기본값으로 그리고 마운트 뒤에 갈아끼운다 (viewPrefs와 같은 방식).
   const [detail, setDetail] = useState(true)
   const [sortKey, setSortKey] = useState<SortKey>('urgent')
+  const [view, setView] = useState<'board' | 'calendar'>('board')
   // 카드 객체가 아니라 id만 들고 있는다. 객체를 들고 있으면 저장 직후
   // 창 안의 값이 예전 값으로 남아, 그걸 맞추는 동기화 코드가 또 필요해진다.
   const [openId, setOpenId] = useState<string | null>(null)
@@ -138,6 +142,8 @@ export default function PipelineContent() {
         const savedSort = localStorage.getItem(SORT_KEY)
         // 모르는 값은 버린다 — 예전 버전이거나 사람이 고쳤을 수 있다
         if (SORT_MODES.some(m => m.key === savedSort)) setSortKey(savedSort as SortKey)
+        const savedView = localStorage.getItem(VIEW_KEY)
+        if (savedView === 'board' || savedView === 'calendar') setView(savedView)
       } catch { /* 저장이 막힌 브라우저 — 기본값으로 둔다 */ }
     })
   }, [])
@@ -145,6 +151,11 @@ export default function PipelineContent() {
   function changeSort(key: SortKey) {
     setSortKey(key)
     try { localStorage.setItem(SORT_KEY, key) } catch { /* 무시 */ }
+  }
+
+  function changeView(next: 'board' | 'calendar') {
+    setView(next)
+    try { localStorage.setItem(VIEW_KEY, next) } catch { /* 무시 */ }
   }
 
   function toggleDetail() {
@@ -311,8 +322,25 @@ export default function PipelineContent() {
           hint={`체결 ${score.won} · 미체결 ${score.lost}`} />
       </div>
 
-      {/* 검색 */}
+      {/* 검색 · 보기 */}
       <div className="flex flex-wrap gap-2 mb-4">
+        <div className="inline-flex overflow-hidden rounded-lg border border-gray-300">
+          {([['board', '보드', <LayoutGrid key="b" className="h-4 w-4" />],
+             ['calendar', '캘린더', <CalendarDays key="c" className="h-4 w-4" />]] as const).map(
+            ([k, label, icon]) => (
+              <button
+                key={k}
+                onClick={() => changeView(k)}
+                aria-pressed={view === k}
+                className={[
+                  'inline-flex items-center gap-1.5 px-3 h-10 text-sm font-semibold transition-colors',
+                  view === k ? 'bg-slate-800 text-white' : 'bg-white text-gray-600 hover:bg-gray-50',
+                ].join(' ')}
+              >
+                {icon}{label}
+              </button>
+            ))}
+        </div>
         <div className="relative flex-1 min-w-[14rem]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <Input
@@ -366,7 +394,15 @@ export default function PipelineContent() {
       </div>
 
       {/* ── 본문 ──────────────────────────────────────────── */}
-      {tab === 'all' ? (
+      {view === 'calendar' ? (
+        <PipelineCalendar
+          // 전체 탭에서는 체결 건을 칩으로 또 그리지 않는다 — 그날 확정 인원은
+          // 이미 칸마다 숫자로 나오므로 두 번 그리면 달력만 시끄러워진다.
+          cards={tab === 'all' ? tabCards.filter(c => isLiveStage(c.stage)) : tabCards}
+          allCards={allCards}
+          onOpen={setOpenId}
+        />
+      ) : tab === 'all' ? (
         // 전체: 단계별 보드
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3 items-start">
           {PIPELINE_STAGES.map(stage => {
