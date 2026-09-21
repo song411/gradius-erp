@@ -153,7 +153,7 @@ export default function CalendarMonthView({
         {['일', '월', '화', '수', '목', '금', '토'].map((d, i) => (
           <div
             key={d}
-            className={`text-center text-[11px] font-bold py-1.5 tracking-wide
+            className={`text-center text-xs font-bold py-1.5 tracking-wide
               ${i === 0 ? 'text-red-500' : i === 6 ? 'text-blue-500' : 'text-gray-600'}`}
           >
             {d}
@@ -302,7 +302,7 @@ function WeekRow({
             className="group/day relative z-10 px-1.5 pt-1.5 pb-1 flex items-center gap-1"
           >
             <span
-              className={`text-[11px] font-bold tabular-nums w-5 h-5 flex items-center justify-center rounded-full
+              className={`text-xs font-bold tabular-nums w-5 h-5 flex items-center justify-center rounded-full
                 ${isToday ? 'bg-blue-600 text-white'
                   : !d.inMonth ? 'text-gray-400'
                   : i === 0 ? 'text-red-600'
@@ -347,7 +347,7 @@ function WeekRow({
                 type="button"
                 onClick={() => onOpenDay(d.date)}
                 title={`${n.content}${n.author ? ` — ${n.author}` : ''}`}
-                className={`w-full text-left text-[10px] leading-tight px-1 py-0.5 rounded border
+                className={`w-full text-left text-2xs leading-tight px-1 py-0.5 rounded border
                   truncate hover:brightness-95 transition ${colorOf(n.color).chip}`}
               >
                 {n.content}
@@ -357,7 +357,7 @@ function WeekRow({
               <button
                 type="button"
                 onClick={() => onOpenDay(d.date)}
-                className="text-[10px] font-medium text-gray-600 hover:text-gray-900"
+                className="text-2xs font-medium text-gray-600 hover:text-gray-900"
               >
                 +{dayMemos.length - 2}건
               </button>
@@ -389,7 +389,7 @@ function WeekRow({
             style={{ gridColumn: i + 1, gridRow: shown.length + 3 }}
             className="relative z-10 px-1.5 pb-1 self-end"
           >
-            <span className="text-[10px] text-gray-600 font-semibold">
+            <span className="text-2xs text-gray-600 font-semibold">
               +{overflowPerCol[i]}건
             </span>
           </div>
@@ -463,43 +463,43 @@ function EventBar({
         role="tooltip"
       >
         <div className="rounded-lg border border-gray-300 bg-white shadow-lg p-2 space-y-1">
-          <div className="text-[11px] font-bold text-gray-900 leading-tight">
+          <div className="text-xs font-bold text-gray-900 leading-tight">
             {inq.event_name || inq.company_name || '(무제)'}
           </div>
-          <div className="text-[10px] text-gray-500 tabular-nums">
+          <div className="text-2xs text-gray-500 tabular-nums">
             {inq.event_start?.substring(5, 10)}
             {inq.event_end && inq.event_end !== inq.event_start
               ? ` ~ ${inq.event_end.substring(5, 10)}` : ''}
             <span className="ml-1 px-1 rounded bg-gray-100 text-gray-600">{inq.status}</span>
           </div>
           {inq.company_name && (
-            <div className="text-[10px] text-gray-600">{inq.company_name}</div>
+            <div className="text-2xs text-gray-600">{inq.company_name}</div>
           )}
           {st.reqMax > 0 && (
-            <div className={`text-[10px] font-semibold ${short ? 'text-red-600' : 'text-gray-600'}`}>
+            <div className={`text-2xs font-semibold ${short ? 'text-red-600' : 'text-gray-600'}`}>
               배정 {range(st.filMin, st.filMax)} / 필요 {range(st.reqMin, st.reqMax)}명
               {short && ` · 부족한 날 ${st.gapDays}일`}
             </div>
           )}
           {clash && (
-            <div className="text-[10px] font-semibold text-red-600">
+            <div className="text-2xs font-semibold text-red-600">
               중복배정 있는 날 {st.conflictDays}일
             </div>
           )}
           {(inq.location || inq.event_time) && (
-            <div className="text-[10px] text-gray-500">
+            <div className="text-2xs text-gray-500">
               {[inq.event_time, inq.location].filter(Boolean).join(' · ')}
             </div>
           )}
           {!!money && (
-            <div className="text-[10px] text-gray-600 tabular-nums">
+            <div className="text-2xs text-gray-600 tabular-nums">
               청구 {fmt(money)}원 <span className="text-gray-500">(행사 전체)</span>
             </div>
           )}
           {st.crewCount > 0 && (() => {
             const list = st.crewVaries ? st.crewAll : st.crew
             return (
-              <div className="text-[10px] text-gray-500">
+              <div className="text-2xs text-gray-500">
                 크루 {st.crewCount}명{st.crewVaries ? ' · 날짜별 다름' : ''}
                 {list.length > 0 && (
                   <span className="text-gray-700"> · {list.slice(0, 12).join(', ')}
@@ -509,11 +509,11 @@ function EventBar({
             )
           })()}
           {ev.memoCount > 0 && ev.latestMemo && (
-            <div className="text-[10px] text-amber-700 bg-amber-50 rounded px-1 py-0.5 line-clamp-2">
+            <div className="text-2xs text-amber-700 bg-amber-50 rounded px-1 py-0.5 line-clamp-2">
               {ev.latestMemo}
             </div>
           )}
-          <div className="text-[10px] text-gray-500 pt-0.5 border-t border-gray-200">
+          <div className="text-2xs text-gray-500 pt-0.5 border-t border-gray-200">
             클릭하면 전체 정보가 열립니다
           </div>
         </div>
@@ -532,11 +532,11 @@ function EventBar({
       >
         {/* 1줄: 행사명 + 배정/경고 */}
         <div className="flex items-center gap-1 min-w-0">
-          {seg.openLeft && <span className="text-[10px] opacity-75 shrink-0">◀</span>}
+          {seg.openLeft && <span className="text-2xs opacity-75 shrink-0">◀</span>}
           {has('status') && (
             <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${tone.dot}`} />
           )}
-          <span className="text-[11px] font-bold truncate leading-tight min-w-0">
+          <span className="text-xs font-bold truncate leading-tight min-w-0">
             {inq.event_name || inq.company_name || '(무제)'}
           </span>
 
@@ -544,7 +544,7 @@ function EventBar({
             // 사람 아이콘을 반드시 함께 둔다 — 이 앱은 날짜도 '9/3'으로 쓰기 때문에
             // 숫자만 있으면 '9/2'가 인원(9명/2명)인지 9월 2일인지 구분되지 않는다.
             <span
-              className={`ml-auto shrink-0 inline-flex items-center gap-0.5 text-[10px] font-bold tabular-nums px-1 rounded
+              className={`ml-auto shrink-0 inline-flex items-center gap-0.5 text-2xs font-bold tabular-nums px-1 rounded
                 ${short ? 'bg-red-100 text-red-800' : 'bg-white/90 text-gray-800'}`}
               title={`배정 ${range(st.filMin, st.filMax)}명 / 필요 ${range(st.reqMin, st.reqMax)}명`}
             >
@@ -558,12 +558,12 @@ function EventBar({
           {has('memo') && ev.memoCount > 0 && (
             <StickyNote className="h-3 w-3 text-amber-500 shrink-0" />
           )}
-          {seg.openRight && <span className="text-[10px] opacity-75 shrink-0 ml-auto">▶</span>}
+          {seg.openRight && <span className="text-2xs opacity-75 shrink-0 ml-auto">▶</span>}
         </div>
 
         {/* 2줄: 고객사 · 금액 · 장소 · 시간 */}
         {showMeta && (
-          <div className="flex items-center gap-1.5 min-w-0 mt-0.5 text-[10px] opacity-90">
+          <div className="flex items-center gap-1.5 min-w-0 mt-0.5 text-2xs opacity-90">
             {has('company') && inq.company_name && (
               <span className="truncate min-w-0">{inq.company_name}</span>
             )}
@@ -585,7 +585,7 @@ function EventBar({
 
         {/* 3줄: 현장 준비물 */}
         {showMeta && has('onsite') && (inq.attire || inq.meal || inq.parking) && (
-          <div className="text-[10px] opacity-80 truncate mt-0.5">
+          <div className="text-2xs opacity-80 truncate mt-0.5">
             {[inq.attire, inq.meal, inq.parking].filter(Boolean).join(' · ')}
           </div>
         )}
@@ -604,17 +604,17 @@ function EventBar({
               {list.slice(0, cap).map(n => (
                 <span
                   key={n}
-                  className="text-[10px] leading-none px-1 py-0.5 rounded bg-white/90 border border-current/40"
+                  className="text-2xs leading-none px-1 py-0.5 rounded bg-white/90 border border-current/40"
                 >
                   {n}
                 </span>
               ))}
               {list.length > cap && (
-                <span className="text-[10px] font-medium opacity-80">+{list.length - cap}</span>
+                <span className="text-2xs font-medium opacity-80">+{list.length - cap}</span>
               )}
               {st.crewVaries && (
                 <span
-                  className="text-[10px] leading-none px-1 py-0.5 rounded inline-flex items-center gap-0.5
+                  className="text-2xs leading-none px-1 py-0.5 rounded inline-flex items-center gap-0.5
                     bg-white/70 border border-dashed border-current/50 opacity-90"
                   title="이 구간 안에서 날짜마다 들어가는 사람이 다릅니다. 날짜별 정확한 편성은 주간 뷰에서 보입니다."
                 >

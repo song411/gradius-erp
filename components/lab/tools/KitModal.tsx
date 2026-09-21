@@ -381,13 +381,13 @@ function NoteCard({ note, onDelete, onStatusChange, onCommentSave }: {
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap mb-1">
-              <span className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${sm.color}`}>
+              <span className={`flex items-center gap-1 text-2xs font-bold px-2 py-0.5 rounded-full ${sm.color}`}>
                 {sm.icon}{sm.label}
               </span>
-              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${pm.color}`}>
+              <span className={`text-2xs font-semibold px-2 py-0.5 rounded-full ${pm.color}`}>
                 {note.priority}
               </span>
-              <span className="text-[10px] text-gray-400">{note.category}</span>
+              <span className="text-2xs text-gray-400">{note.category}</span>
             </div>
             <div className={`font-semibold text-sm truncate ${isDone ? 'line-through text-gray-400' : 'text-gray-900'}`}>
               {note.title}
@@ -404,7 +404,7 @@ function NoteCard({ note, onDelete, onStatusChange, onCommentSave }: {
         {note.tags?.length > 0 && (
           <div className="flex gap-1 flex-wrap mt-2">
             {note.tags.map(t => (
-              <span key={t} className="text-[10px] bg-violet-50 text-violet-600 px-1.5 py-0.5 rounded-full">#{t}</span>
+              <span key={t} className="text-2xs bg-violet-50 text-violet-600 px-1.5 py-0.5 rounded-full">#{t}</span>
             ))}
           </div>
         )}
@@ -413,7 +413,7 @@ function NoteCard({ note, onDelete, onStatusChange, onCommentSave }: {
         {note.dev_comment && !expanded && (
           <div className="mt-2 flex items-start gap-1.5 bg-indigo-50 rounded-lg px-3 py-2">
             <MessageSquare className="h-3 w-3 text-indigo-400 shrink-0 mt-0.5" />
-            <p className="text-[11px] text-indigo-700 line-clamp-1">{note.dev_comment}</p>
+            <p className="text-xs text-indigo-700 line-clamp-1">{note.dev_comment}</p>
           </div>
         )}
       </div>
@@ -426,13 +426,13 @@ function NoteCard({ note, onDelete, onStatusChange, onCommentSave }: {
           {/* 개발자 코멘트 */}
           <div className="bg-indigo-50 rounded-lg p-3">
             <div className="flex items-center justify-between mb-1.5">
-              <span className="flex items-center gap-1.5 text-[11px] font-bold text-indigo-700">
+              <span className="flex items-center gap-1.5 text-xs font-bold text-indigo-700">
                 <MessageSquare className="h-3.5 w-3.5" />
                 개발자 코멘트
               </span>
               {!editComment && (
                 <button onClick={() => { setEditComment(true); setCommentVal(note.dev_comment || '') }}
-                  className="text-[10px] text-indigo-500 hover:text-indigo-700 underline">
+                  className="text-2xs text-indigo-500 hover:text-indigo-700 underline">
                   {note.dev_comment ? '수정' : '코멘트 남기기'}
                 </button>
               )}
@@ -449,10 +449,10 @@ function NoteCard({ note, onDelete, onStatusChange, onCommentSave }: {
                 <div className="flex gap-1.5">
                   <button
                     onClick={() => { onCommentSave(note.id, commentVal); setEditComment(false) }}
-                    className="px-3 py-1 bg-indigo-600 text-white text-[10px] font-bold rounded-lg hover:bg-indigo-700"
+                    className="px-3 py-1 bg-indigo-600 text-white text-2xs font-bold rounded-lg hover:bg-indigo-700"
                   >저장</button>
                   <button onClick={() => setEditComment(false)}
-                    className="px-3 py-1 bg-gray-100 text-gray-600 text-[10px] rounded-lg hover:bg-gray-200"
+                    className="px-3 py-1 bg-gray-100 text-gray-600 text-2xs rounded-lg hover:bg-gray-200"
                   >취소</button>
                 </div>
               </div>
@@ -468,7 +468,7 @@ function NoteCard({ note, onDelete, onStatusChange, onCommentSave }: {
             <div className="flex gap-1 flex-wrap">
               {ALL_STATUSES.map(s => (
                 <button key={s} onClick={() => onStatusChange(note.id, s)}
-                  className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border transition-all ${
+                  className={`text-2xs font-semibold px-2 py-0.5 rounded-full border transition-all ${
                     note.status === s
                       ? STATUS_META[s].color + ' border-current ring-1 ring-current'
                       : 'bg-gray-50 text-gray-400 border-gray-200 hover:border-gray-400'
@@ -630,7 +630,7 @@ export default function KitModal({ onClose }: { onClose: () => void }) {
             <div className="flex gap-1 flex-wrap">
               {(['전체', ...CATEGORY_LIST] as (Category | '전체')[]).map(c => (
                 <button key={c} onClick={() => setFilterCat(c)}
-                  className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all ${
+                  className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-all ${
                     filterCat === c ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-gray-500 border-gray-200 hover:border-violet-300'
                   }`}>{c}</button>
               ))}
@@ -638,7 +638,7 @@ export default function KitModal({ onClose }: { onClose: () => void }) {
             <div className="flex gap-1 flex-wrap">
               {(['전체', ...ALL_STATUSES] as (Status | '전체')[]).map(s => (
                 <button key={s} onClick={() => setFilterStatus(s)}
-                  className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all ${
+                  className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-all ${
                     filterStatus === s
                       ? 'bg-gray-800 text-white border-gray-800'
                       : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'

@@ -175,11 +175,11 @@ export default function BulkPayoutModal({ open, onClose, assignments, eventName,
                 }`}
               >
                 <p className={`text-sm font-bold ${taxRate === o.value ? 'text-blue-700' : 'text-gray-700'}`}>{o.label}</p>
-                <p className="text-[10px] text-gray-400">{o.sub}</p>
+                <p className="text-2xs text-gray-400">{o.sub}</p>
               </button>
             ))}
           </div>
-          <p className="text-[10px] text-gray-400 mt-1.5">
+          <p className="text-2xs text-gray-400 mt-1.5">
             등록 후 개별 수정에서 사람마다 다르게 바꿀 수 있습니다.
           </p>
         </div>
@@ -192,7 +192,7 @@ export default function BulkPayoutModal({ open, onClose, assignments, eventName,
               <button
                 type="button"
                 onClick={() => setExcluded(excluded.size ? new Set() : new Set(rows.map(r => r.assign.id)))}
-                className="text-[10px] text-blue-600 hover:underline"
+                className="text-2xs text-blue-600 hover:underline"
               >
                 {excluded.size ? '전체 선택' : '전체 해제'}
               </button>
@@ -215,17 +215,17 @@ export default function BulkPayoutModal({ open, onClose, assignments, eventName,
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {r.assign.role_type === '팀장' && (
-                      <span className="text-[10px] text-indigo-600 font-bold bg-indigo-50 px-1.5 py-0.5 rounded">[팀장]</span>
+                      <span className="text-2xs text-indigo-600 font-bold bg-indigo-50 px-1.5 py-0.5 rounded">[팀장]</span>
                     )}
                     <span className="text-sm font-semibold text-gray-800">{r.assign.staff_name}</span>
-                    {r.assign.job_type && <span className="text-[10px] text-gray-400">{r.assign.job_type}</span>}
+                    {r.assign.job_type && <span className="text-2xs text-gray-400">{r.assign.job_type}</span>}
                     {r.noAccount && (
-                      <span className="text-[10px] text-orange-500 flex items-center gap-0.5">
+                      <span className="text-2xs text-orange-500 flex items-center gap-0.5">
                         <AlertCircle className="h-3 w-3" />계좌 미입력
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-1 flex-wrap mt-0.5 text-[10px] text-gray-500">
+                  <div className="flex items-center gap-1 flex-wrap mt-0.5 text-2xs text-gray-500">
                     {r.segs ? r.segs.map((seg, i) => (
                       <span key={i} className="bg-indigo-50 text-indigo-700 px-1 py-0.5 rounded font-medium">
                         {formatKRW(seg.rate)}×{seg.days}일
@@ -265,12 +265,12 @@ export default function BulkPayoutModal({ open, onClose, assignments, eventName,
         {(noAccountCount > 0 || zeroAmountCount > 0) && (
           <div className="bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 space-y-0.5">
             {noAccountCount > 0 && (
-              <p className="text-[11px] text-orange-700">
+              <p className="text-xs text-orange-700">
                 ⚠ 계좌 정보가 없는 인원 {noAccountCount}명 — 등록은 되지만 이체목록 엑셀에서 계좌가 빕니다.
               </p>
             )}
             {zeroAmountCount > 0 && (
-              <p className="text-[11px] text-orange-700">
+              <p className="text-xs text-orange-700">
                 ⚠ 금액이 0원인 인원 {zeroAmountCount}명 — 배정 단가가 비어 있습니다. 등록 후 개별 수정이 필요합니다.
               </p>
             )}
@@ -279,7 +279,7 @@ export default function BulkPayoutModal({ open, onClose, assignments, eventName,
       </DialogContent>
 
       <div className="px-5 pb-1">
-        <p className="text-[10px] text-gray-400 leading-relaxed">
+        <p className="text-2xs text-gray-400 leading-relaxed">
           <span className="font-medium text-gray-500">대기로 등록</span> — 금액을 나중에 검토 &nbsp;/&nbsp;
           <span className="font-medium text-gray-500">검토완료로 등록</span> — 금액 확정, 바로 입금 처리 가능
         </p>

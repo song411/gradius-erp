@@ -662,7 +662,7 @@ export default function AttendanceSheetModal({
                 }`}
               >
                 <span className="block text-sm font-semibold">{o.label}</span>
-                <span className="block text-[11px] text-gray-400 mt-0.5">{o.desc}</span>
+                <span className="block text-xs text-gray-400 mt-0.5">{o.desc}</span>
               </button>
             ))}
           </div>
@@ -694,7 +694,7 @@ export default function AttendanceSheetModal({
             className="h-4 w-4 accent-blue-600"
           />
           <span className="text-sm text-gray-700">연락처 포함</span>
-          <span className="text-[11px] text-gray-400">개인정보 — 배포 시 주의</span>
+          <span className="text-xs text-gray-400">개인정보 — 배포 시 주의</span>
         </label>
 
         {/* 안전교육 서약서 — 명단 위에 붙여 서명 한 번으로 이수 확인을 겸하게 한다 */}
@@ -706,10 +706,10 @@ export default function AttendanceSheetModal({
             className="h-4 w-4 accent-blue-600"
           />
           <span className="text-sm text-gray-700">안전교육 서약서 포함</span>
-          <span className="text-[11px] text-gray-400">명단 위에 교육 내용·서약 문구</span>
+          <span className="text-xs text-gray-400">명단 위에 교육 내용·서약 문구</span>
         </label>
 
-        <p className="text-[11px] text-gray-400 bg-gray-50 rounded-lg px-3 py-2 leading-relaxed">
+        <p className="text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2 leading-relaxed">
           인원 {rowCount}명 · A4 세로 {targetDates.length}장
           {mode === 'blank' && ' · 출근/퇴근/출결/서명란 비워서 출력'}
           {includePledge && ' · 명단 위에 안전교육 서약서'}

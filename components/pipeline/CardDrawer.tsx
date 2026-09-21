@@ -45,7 +45,7 @@ function Field({ label, value, href }: { label: string; value?: string | null; h
   if (!v || v === 'null') return null
   return (
     <div className="min-w-0">
-      <dt className="text-[10px] text-gray-400">{label}</dt>
+      <dt className="text-2xs text-gray-400">{label}</dt>
       <dd className="truncate text-xs font-medium text-gray-800" title={v}>
         {href
           ? <a href={href} className="text-blue-600 hover:underline">{v}</a>
@@ -275,7 +275,7 @@ export default function CardDrawer({ card, onClose, onChanged }: Props) {
                   className="flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded-lg bg-gray-50 px-3 py-1.5 text-xs">
                   <span className="font-semibold text-gray-800">{est.version_label || 'A안'}</span>
                   {est.is_final && (
-                    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">
+                    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-2xs font-bold text-amber-700">
                       최종
                     </span>
                   )}
@@ -303,7 +303,7 @@ export default function CardDrawer({ card, onClose, onChanged }: Props) {
                 <p className="whitespace-pre-line break-words text-sm leading-relaxed text-gray-800">
                   {cleanNote(inq.notes)}
                 </p>
-                <p className="mt-1.5 text-[10px] text-gray-400">고객이 보낸 내용</p>
+                <p className="mt-1.5 text-2xs text-gray-400">고객이 보낸 내용</p>
               </div>
             )}
             {cleanNote(inq.consult_notes) && (
@@ -311,7 +311,7 @@ export default function CardDrawer({ card, onClose, onChanged }: Props) {
                 <p className="whitespace-pre-line break-words text-sm leading-relaxed text-gray-800">
                   {cleanNote(inq.consult_notes)}
                 </p>
-                <p className="mt-1.5 text-[10px] text-blue-500">상담 내용 (내부)</p>
+                <p className="mt-1.5 text-2xs text-blue-500">상담 내용 (내부)</p>
               </div>
             )}
           </section>
@@ -340,7 +340,7 @@ export default function CardDrawer({ card, onClose, onChanged }: Props) {
               {savingAction ? '저장…' : '저장'}
             </Button>
           </div>
-          <p className="text-[11px] text-gray-400 mt-1.5">
+          <p className="text-xs text-gray-400 mt-1.5">
             날짜를 넣으면 그 날 보드 맨 위 &lsquo;오늘의 후속&rsquo;에 올라옵니다.
           </p>
         </section>
@@ -396,7 +396,7 @@ export default function CardDrawer({ card, onClose, onChanged }: Props) {
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm text-gray-800 whitespace-pre-line break-words">{text}</p>
-                      <p className="text-[11px] text-gray-400 mt-0.5">
+                      <p className="text-xs text-gray-400 mt-0.5">
                         {k} · {log.author || '미지정'} · {log.created_at?.substring(0, 10)}
                       </p>
                     </div>
@@ -457,7 +457,7 @@ export default function CardDrawer({ card, onClose, onChanged }: Props) {
                   {savingLost ? '처리 중…' : '닫기'}
                 </Button>
               </div>
-              <p className="text-[11px] text-gray-400 mt-1.5">
+              <p className="text-xs text-gray-400 mt-1.5">
                 사유는 다음 견적의 근거가 됩니다. 상태만 바꾸면 왜 졌는지가 남지 않습니다.
               </p>
             </>

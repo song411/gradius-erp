@@ -243,7 +243,7 @@ export default function AnnounceModal({ inquiry, assignments, onClose }: Props) 
                 {copied ? '복사됨' : '복사하기'}
               </button>
             </div>
-            <pre className="flex-1 whitespace-pre-wrap break-words text-[13px] leading-relaxed text-gray-800 bg-white border border-gray-200 rounded-xl p-3.5 font-sans overflow-y-auto">
+            <pre className="flex-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-gray-800 bg-white border border-gray-200 rounded-xl p-3.5 font-sans overflow-y-auto">
               {message}
             </pre>
           </div>

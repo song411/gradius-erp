@@ -528,7 +528,7 @@ export default function GuideModal({ onClose }: { onClose: () => void }) {
               <BookOpen className="h-4 w-4 text-amber-400" />
               <span className="font-extrabold text-white text-sm">ERP 가이드북</span>
             </div>
-            <span className="text-[10px] text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded-full">{CURRENT_VERSION}</span>
+            <span className="text-2xs text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded-full">{CURRENT_VERSION}</span>
           </div>
           <nav className="flex-1 py-3 px-2 space-y-0.5">
             {SECTIONS.map(s => (
@@ -572,7 +572,7 @@ export default function GuideModal({ onClose }: { onClose: () => void }) {
                           <div className="flex items-center gap-2 mb-1.5">
                             <span className="text-xl">{step.emoji}</span>
                             <span className="font-extrabold text-gray-900">{step.title}</span>
-                            <span className="text-[10px] bg-gray-100 text-gray-500 rounded-full px-2 py-0.5">{step.menu}</span>
+                            <span className="text-2xs bg-gray-100 text-gray-500 rounded-full px-2 py-0.5">{step.menu}</span>
                           </div>
                           <p className="text-sm text-gray-600 mb-2">{step.desc}</p>
                           {step.tips.map(tip => (
@@ -641,7 +641,7 @@ export default function GuideModal({ onClose }: { onClose: () => void }) {
                           <div className="flex items-center gap-2">
                             <MessageCircle className="h-4 w-4 text-gray-600" />
                             <span className="font-bold text-gray-800">{t.title}</span>
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${t.tagColor}`}>{t.tag}</span>
+                            <span className={`text-2xs font-bold px-2 py-0.5 rounded-full ${t.tagColor}`}>{t.tag}</span>
                           </div>
                           <CopyButton text={'copyText' in t && t.copyText ? String(t.copyText) : t.template} />
                         </div>
@@ -779,7 +779,7 @@ export default function GuideModal({ onClose }: { onClose: () => void }) {
                             className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 transition-colors text-left">
                             <GitBranch className="h-4 w-4 text-gray-400 shrink-0" />
                             <span className="font-extrabold text-gray-800">{log.version}</span>
-                            {log.label && <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${log.color}`}>{log.label}</span>}
+                            {log.label && <span className={`text-2xs font-bold px-2 py-0.5 rounded-full ${log.color}`}>{log.label}</span>}
                             <div className="flex-1 flex items-center gap-1.5 text-xs text-gray-400">
                               <Clock className="h-3 w-3" />{log.date}
                             </div>

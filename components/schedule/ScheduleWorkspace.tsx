@@ -251,7 +251,7 @@ export default function ScheduleWorkspace() {
         {/* ══ 달력 보기 설정 ══ */}
         {LAYERED_VIEWS.includes(prefs.view) && (
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[11px] font-semibold text-gray-400">보기</span>
+            <span className="text-xs font-semibold text-gray-400">보기</span>
 
             {/* 역할 프리셋 */}
             {PRESETS.map(p => (
@@ -281,7 +281,7 @@ export default function ScheduleWorkspace() {
                   key={d}
                   onClick={() => setDensity(d)}
                   title="칸에 넣을 정보가 많으면 밀도를 올리세요"
-                  className={`text-[11px] px-2 py-1 font-medium transition
+                  className={`text-xs px-2 py-1 font-medium transition
                     ${prefs.density === d
                       ? 'bg-gray-700 text-white'
                       : 'bg-white text-gray-500 hover:bg-gray-50'}`}
@@ -302,7 +302,7 @@ export default function ScheduleWorkspace() {
               항목 고르기
             </button>
 
-            <span className="text-[11px] text-gray-400">
+            <span className="text-xs text-gray-400">
               {prefs.layers.length}개 항목 표시 중
             </span>
           </div>
@@ -318,7 +318,7 @@ export default function ScheduleWorkspace() {
                   key={l.key}
                   onClick={() => toggleLayer(l.key)}
                   title={l.hint}
-                  className={`inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full border transition
+                  className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition
                     ${on
                       ? 'bg-blue-50 border-blue-300 text-blue-700 font-semibold'
                       : 'bg-white border-gray-200 text-gray-400 hover:border-gray-400'}`}
@@ -380,7 +380,7 @@ export default function ScheduleWorkspace() {
             />
           )}
 
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-gray-400">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-400">
             <span className="font-semibold text-gray-500">범례</span>
             <span>
               {isWeek
@@ -445,7 +445,7 @@ function ConflictBox({
         같은 날 두 곳에 배정된 크루 {conflicts.length}건
       </div>
       <div
-        className="grid gap-x-3 gap-y-1 text-[11px]"
+        className="grid gap-x-3 gap-y-1 text-xs"
         style={{ gridTemplateColumns: 'minmax(0,max-content) minmax(0,max-content) minmax(0,1fr)' }}
       >
         {conflicts.map(cf => (
@@ -460,7 +460,7 @@ function ConflictBox({
           </div>
         ))}
       </div>
-      <p className="text-[10px] text-red-500 mt-2">
+      <p className="text-2xs text-red-500 mt-2">
         배정에 근무일(work_dates)이 지정되지 않은 인력은 행사 전체 기간에 투입된 것으로 계산됩니다.
         실제로는 날짜가 갈리는 경우라면 인원배정 화면에서 날짜를 지정해 주세요.
       </p>

@@ -167,10 +167,10 @@ function PaySegmentsEditor({
 
   return (
     <div className="mt-1.5 bg-indigo-50 rounded-lg p-2 space-y-1.5 border border-indigo-200">
-      <p className="text-[10px] font-semibold text-indigo-700 mb-1">구간별 단가 설정</p>
+      <p className="text-2xs font-semibold text-indigo-700 mb-1">구간별 단가 설정</p>
       {segs.map((seg, i) => (
         <div key={i} className="flex items-center gap-1.5">
-          <span className="text-[10px] text-gray-500 w-8 shrink-0">{i + 1}구간</span>
+          <span className="text-2xs text-gray-500 w-8 shrink-0">{i + 1}구간</span>
           <Input
             type="number"
             value={seg.rate || ''}
@@ -178,7 +178,7 @@ function PaySegmentsEditor({
             placeholder="단가"
             className="w-24 h-6 text-xs px-1"
           />
-          <span className="text-[10px] text-gray-400">원 ×</span>
+          <span className="text-2xs text-gray-400">원 ×</span>
           <Input
             type="number"
             value={seg.days || ''}
@@ -187,23 +187,23 @@ function PaySegmentsEditor({
             className="w-12 h-6 text-xs px-1"
             min={1}
           />
-          <span className="text-[10px] text-gray-400">일 =</span>
-          <span className="text-[10px] font-semibold text-indigo-700 w-16 shrink-0">
+          <span className="text-2xs text-gray-400">일 =</span>
+          <span className="text-2xs font-semibold text-indigo-700 w-16 shrink-0">
             {formatKRW(seg.rate * seg.days)}
           </span>
           {segs.length > 1 && (
-            <button onClick={() => removeSeg(i)} className="text-red-400 hover:text-red-600 text-[10px]">✕</button>
+            <button onClick={() => removeSeg(i)} className="text-red-400 hover:text-red-600 text-2xs">✕</button>
           )}
         </div>
       ))}
-      <button onClick={addSeg} className="text-[10px] text-indigo-600 hover:underline">+ 구간 추가</button>
+      <button onClick={addSeg} className="text-2xs text-indigo-600 hover:underline">+ 구간 추가</button>
       <div className="border-t border-indigo-200 pt-1 flex items-center justify-between">
-        <span className="text-[10px] text-gray-500">합계: {days}일 / {formatKRW(total)}</span>
+        <span className="text-2xs text-gray-500">합계: {days}일 / {formatKRW(total)}</span>
         <div className="flex gap-1">
-          <button onClick={onCancel} className="text-[10px] text-gray-400 hover:text-gray-600 px-1.5 py-0.5 border rounded">취소</button>
+          <button onClick={onCancel} className="text-2xs text-gray-400 hover:text-gray-600 px-1.5 py-0.5 border rounded">취소</button>
           <button
             onClick={() => onSave(segs)}
-            className="text-[10px] text-white bg-indigo-600 hover:bg-indigo-700 px-2 py-0.5 rounded font-medium"
+            className="text-2xs text-white bg-indigo-600 hover:bg-indigo-700 px-2 py-0.5 rounded font-medium"
           >저장</button>
         </div>
       </div>
@@ -243,7 +243,7 @@ function DraggableStaffCard({ staff }: { staff: Staff }) {
       <GripVertical className="h-3.5 w-3.5 text-gray-300 shrink-0" />
       <div className="min-w-0 flex-1">
         <p className="text-xs font-medium text-gray-800 truncate">{staff.name}</p>
-        <p className="text-[10px] text-gray-400 truncate">
+        <p className="text-2xs text-gray-400 truncate">
           {Array.isArray(staff.available_jobs) ? staff.available_jobs.slice(0, 2).join('·') : ''}
         </p>
       </div>
@@ -1030,14 +1030,14 @@ export default function AssignmentsContent() {
                       <p className="text-xs text-gray-500 truncate mt-0.5">{inq.event_name || '-'}</p>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                      <span className={`text-2xs px-1.5 py-0.5 rounded-full font-medium ${
                         inq.status === '배정완료' ? 'bg-green-100 text-green-700' :
                         inq.status === '진행중' ? 'bg-blue-100 text-blue-700' :
                         'bg-yellow-100 text-yellow-700'
                       }`}>{inq.status}</span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3 mt-1.5 text-[11px] text-gray-400">
+                  <div className="flex items-center gap-3 mt-1.5 text-xs text-gray-400">
                     {inq.event_start && (
                       <span className="flex items-center gap-0.5">
                         <CalendarDays className="h-3 w-3" />
@@ -1078,7 +1078,7 @@ export default function AssignmentsContent() {
               <PanelLeftClose className="h-4 w-4" />
             </button>
           </div>
-          <p className="text-[10px] text-gray-400 px-2.5 py-1.5 bg-indigo-50 border-b border-indigo-100">
+          <p className="text-2xs text-gray-400 px-2.5 py-1.5 bg-indigo-50 border-b border-indigo-100">
             슬롯으로 드래그해서 배정
           </p>
           <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
@@ -1279,7 +1279,7 @@ export default function AssignmentsContent() {
                             <button
                               key={s.id}
                               onClick={() => handleCompanyQuickAssign(s, group.jobType)}
-                              className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-white border border-purple-200 rounded-full text-[10px] font-medium text-purple-700 hover:bg-purple-50 hover:border-purple-400 transition-colors"
+                              className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-white border border-purple-200 rounded-full text-2xs font-medium text-purple-700 hover:bg-purple-50 hover:border-purple-400 transition-colors"
                               title={`[본사] ${s.name} 즉시 배정 (지급 없음)`}
                             >
                               <span className="font-bold">B</span>{s.name}
@@ -1337,19 +1337,19 @@ export default function AssignmentsContent() {
                                   </span>
                                   {/* 팀장/팀원 뱃지 */}
                                   {asgn.role_type === '팀장' && (
-                                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-bold">팀장</span>
+                                    <span className="text-2xs px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-bold">팀장</span>
                                   )}
                                   {asgn.role_type === '팀원' && (
-                                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">팀원</span>
+                                    <span className="text-2xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">팀원</span>
                                   )}
                                   {/* 현장 불참 뱃지 */}
                                   {!asgn.is_present && (
-                                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-600 flex items-center gap-0.5 font-medium">
+                                    <span className="text-2xs px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-600 flex items-center gap-0.5 font-medium">
                                       <UserX className="h-2.5 w-2.5" />현장불참
                                     </span>
                                   )}
                                   {asgn.staff_type !== '본사' && asgn.role_type !== '팀장' && asgn.role_type !== '팀원' && (
-                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-600">외부</span>
+                                    <span className="text-2xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-600">외부</span>
                                   )}
                                 </div>
                                 {/* 단가 × 일수 표시 (팀내역 / 구간 / 단순) */}
@@ -1361,10 +1361,10 @@ export default function AssignmentsContent() {
                                   // 팀장 → 팀 내역 표시
                                   if (teamBreakdown) {
                                     return (
-                                      <div className="mt-1 text-[11px] text-gray-500 space-y-0.5">
+                                      <div className="mt-1 text-xs text-gray-500 space-y-0.5">
                                         {teamBreakdown.map((item, i) => (
                                           <div key={i} className="flex items-center gap-1">
-                                            <span className={`text-[10px] px-1 py-0.5 rounded font-medium ${item.role === '팀장' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'}`}>
+                                            <span className={`text-2xs px-1 py-0.5 rounded font-medium ${item.role === '팀장' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'}`}>
                                               {item.role}
                                             </span>
                                             <span className="text-gray-600">{item.name}</span>
@@ -1397,12 +1397,12 @@ export default function AssignmentsContent() {
                                   // 구간 모드
                                   if (segs) {
                                     return (
-                                      <div className="mt-0.5 text-[11px] text-gray-500">
+                                      <div className="mt-0.5 text-xs text-gray-500">
                                         <div className="flex items-center gap-1 flex-wrap">
                                           {segs.map((seg, i) => (
                                             <span key={i} className="flex items-center gap-0.5">
                                               {i > 0 && <span className="text-gray-300">+</span>}
-                                              <span className="bg-indigo-50 text-indigo-700 px-1 py-0.5 rounded text-[10px] font-medium">
+                                              <span className="bg-indigo-50 text-indigo-700 px-1 py-0.5 rounded text-2xs font-medium">
                                                 {formatKRW(seg.rate)}×{seg.days}일
                                               </span>
                                             </span>
@@ -1410,7 +1410,7 @@ export default function AssignmentsContent() {
                                           <span className="font-semibold text-gray-700">= {formatKRW(segmentTotal(segs))}</span>
                                           <button
                                             onClick={() => setEditingSegmentsId(asgn.id)}
-                                            className="text-[10px] text-indigo-500 hover:underline ml-0.5"
+                                            className="text-2xs text-indigo-500 hover:underline ml-0.5"
                                           >수정</button>
                                         </div>
                                       </div>
@@ -1422,7 +1422,7 @@ export default function AssignmentsContent() {
                                   // 두 칸을 동시에 열어두면 어느 쪽이 맞는 값인지 알 수 없다.
                                   const asgnDates = Array.isArray(asgn.work_dates) ? asgn.work_dates : []
                                   return (
-                                    <div className="mt-0.5 text-[11px] text-gray-400">
+                                    <div className="mt-0.5 text-xs text-gray-400">
                                       <div className="flex items-center gap-2 flex-wrap">
                                         <PayRateEditor
                                           value={asgn.pay_rate}
@@ -1447,7 +1447,7 @@ export default function AssignmentsContent() {
                                         />
                                         <button
                                           onClick={() => setEditingSegmentsId(asgn.id)}
-                                          className="text-[10px] text-indigo-400 hover:text-indigo-600 hover:underline border border-indigo-200 px-1 py-0.5 rounded"
+                                          className="text-2xs text-indigo-400 hover:text-indigo-600 hover:underline border border-indigo-200 px-1 py-0.5 rounded"
                                           title="날짜별 다른 단가 설정"
                                         >구간설정</button>
                                       </div>

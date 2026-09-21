@@ -1,5 +1,24 @@
 @import "tailwindcss";
 
+/* ─── 글자 크기 척도 ──────────────────────────────────────
+   ERP는 글자가 많을 수밖에 없다. 그래서 작게 눌러 담다 보니 화면 대부분이
+   9~12px이 되어 있었다(실측: text-xs 1040곳, 10px 349곳, 11px 137곳, 9px 39곳).
+   많이 담는 것과 읽히는 것은 다른 문제다.
+
+   여기서 척도를 한 단계씩 올린다. 컴포넌트를 하나하나 고치지 않고
+   토큰만 바꾸면 화면 전체가 같은 비율로 커진다 — 화면마다 크기가
+   제각각이 되는 것을 막는 유일한 방법이다.
+
+   11px(--text-2xs)이 이 시스템의 바닥이다. 그보다 작은 글자는 쓰지 않는다. */
+@theme {
+  --text-2xs: 0.6875rem;              /* 11px — 보조 설명, 배지. 최소 크기 */
+  --text-2xs--line-height: 1.45;
+  --text-xs: 0.8125rem;               /* 13px (기본 12px) — 표·카드 본문 */
+  --text-xs--line-height: 1.5;
+  --text-sm: 0.9375rem;               /* 15px (기본 14px) — 일반 본문 */
+  --text-sm--line-height: 1.55;
+}
+
 :root {
   --background: #f9fafb;
   --foreground: #111827;
@@ -37,7 +56,7 @@ body {
 .erp-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.875rem;
+  font-size: 0.9375rem;   /* text-sm과 같은 크기 */
 }
 
 .erp-table thead {
@@ -50,7 +69,7 @@ body {
   background-color: #f3f4f6;   /* gray-100 */
   color: #374151;               /* gray-700 */
   font-weight: 700;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;   /* text-xs와 같은 크기 */
   letter-spacing: 0.03em;
   padding: 11px 16px;
   text-align: left;
@@ -105,9 +124,9 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 0.7rem;
+  font-size: 0.75rem;     /* 12px — 배지는 굵어서 한 단계 아래로 둬도 읽힌다 */
   font-weight: 700;
-  padding: 3px 8px;
+  padding: 3px 9px;
   border-radius: 9999px;
   border: 1.5px solid transparent;
   white-space: nowrap;
@@ -131,13 +150,13 @@ body {
 }
 
 .erp-empty p {
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
   font-weight: 500;
 }
 
 /* ─── 섹션 헤더 공통 ─────────────────────────────────── */
 .erp-section-header {
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 700;
   color: #6b7280;
   text-transform: uppercase;
@@ -150,7 +169,7 @@ body {
 /* ─── 폼 레이블 공통 ─────────────────────────────────── */
 .label-xs {
   display: block;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: #4b5563;
   margin-bottom: 4px;

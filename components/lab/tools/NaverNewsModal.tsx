@@ -138,7 +138,7 @@ export default function NaverNewsModal({ onClose }: { onClose: () => void }) {
                 <ExternalLink className="h-3.5 w-3.5 shrink-0 mt-0.5 opacity-60" />
               </a>
               <p className="text-xs text-gray-500 leading-relaxed line-clamp-2">{strip(item.description)}</p>
-              <p className="text-[10px] text-gray-300 mt-1.5">{new Date(item.pubDate).toLocaleString('ko-KR')}</p>
+              <p className="text-2xs text-gray-300 mt-1.5">{new Date(item.pubDate).toLocaleString('ko-KR')}</p>
             </div>
           ))
         )}

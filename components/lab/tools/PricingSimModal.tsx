@@ -698,7 +698,7 @@ export default function PricingSimModal({ onClose }: Props) {
                   >
                     <span>{m?.emoji || '👤'}</span>
                     <span className="flex-1 truncate">{r.role_name}</span>
-                    {!r.is_published && <span className="text-[10px] bg-gray-200 text-gray-500 rounded px-1.5 py-0.5">초안</span>}
+                    {!r.is_published && <span className="text-2xs bg-gray-200 text-gray-500 rounded px-1.5 py-0.5">초안</span>}
                   </button>
                 )
               })}
@@ -818,9 +818,9 @@ export default function PricingSimModal({ onClose }: Props) {
                                       {isExpanded ? <ChevronDown className="h-3 w-3 shrink-0" /> : <ChevronRight className="h-3 w-3 shrink-0" />}
                                       {f.factor_name}
                                     </button>
-                                    {f.role_id === null && <span className="ml-1.5 text-[10px] bg-violet-100 text-violet-600 rounded px-1.5 py-0.5">공통</span>}
-                                    {f.rule_type === 'percent' && <span className="ml-1.5 text-[10px] bg-blue-100 text-blue-600 rounded px-1.5 py-0.5">정률</span>}
-                                    {f.alert && <span className="ml-1.5 text-[10px] bg-red-100 text-red-600 rounded px-1.5 py-0.5">{f.alert}</span>}
+                                    {f.role_id === null && <span className="ml-1.5 text-2xs bg-violet-100 text-violet-600 rounded px-1.5 py-0.5">공통</span>}
+                                    {f.rule_type === 'percent' && <span className="ml-1.5 text-2xs bg-blue-100 text-blue-600 rounded px-1.5 py-0.5">정률</span>}
+                                    {f.alert && <span className="ml-1.5 text-2xs bg-red-100 text-red-600 rounded px-1.5 py-0.5">{f.alert}</span>}
                                   </td>
                                   <td className="text-right py-1.5 font-semibold text-gray-700">{amount < 0 ? '' : '+'}{fmt(amount)}원</td>
                                   <td className={`text-right pr-3 py-1.5 text-xs ${delta === 0 ? 'text-gray-300' : delta > 0 ? 'text-emerald-600' : 'text-red-500'}`}>
@@ -871,7 +871,7 @@ export default function PricingSimModal({ onClose }: Props) {
                         <Row label="최종 청구가 (VAT 별도, 1인 기준)" val={P.client} bold big />
                       </div>
                     </div>
-                    <p className="text-[11px] text-gray-400">수치는 팀이 스마트연구소에서 직접 입력·관리하는 참고값입니다. 1인 단가 기준이며 VAT 별도.</p>
+                    <p className="text-xs text-gray-400">수치는 팀이 스마트연구소에서 직접 입력·관리하는 참고값입니다. 1인 단가 기준이며 VAT 별도.</p>
                   </div>
                 )}
 
@@ -885,13 +885,13 @@ export default function PricingSimModal({ onClose }: Props) {
 
                     <div className="bg-white border border-gray-200 rounded-xl p-4">
                       <h4 className="text-sm font-bold text-gray-700 mb-2">준비사항 체크리스트</h4>
-                      <p className="text-[11px] text-gray-400 mb-2"><span className="bg-red-100 text-red-600 rounded px-1.5 py-0.5 mr-1">필수</span>는 반드시 확인, 나머지는 권장</p>
+                      <p className="text-xs text-gray-400 mb-2"><span className="bg-red-100 text-red-600 rounded px-1.5 py-0.5 mr-1">필수</span>는 반드시 확인, 나머지는 권장</p>
                       <ul className="space-y-2">
                         {meta.prep.map((p, i) => (
                           <li key={i} className="flex gap-2 text-sm">
                             <span>{p.i}</span>
                             <span>
-                              {p.m && <span className="bg-red-100 text-red-600 text-[10px] rounded px-1.5 py-0.5 mr-1">필수</span>}
+                              {p.m && <span className="bg-red-100 text-red-600 text-2xs rounded px-1.5 py-0.5 mr-1">필수</span>}
                               {p.t}
                               <br /><span className="text-xs text-gray-400">{p.n}</span>
                             </span>
@@ -1075,7 +1075,7 @@ export default function PricingSimModal({ onClose }: Props) {
 
                 {tab === 'history' && (
                   <div className={historyViewMode === 'matrix' && matrixScope === 'all' ? 'max-w-full space-y-4' : 'max-w-3xl space-y-4'}>
-                    <p className="text-[11px] text-gray-400 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                    <p className="text-xs text-gray-400 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
                       실제 ERP 견적 데이터에서 품목명 텍스트로 근사 매칭한 참고 자료입니다. 완전히 정확하지 않을 수 있으니 아래 목록의 원문 품목명으로 직접 확인해 주세요.
                     </p>
                     <div className="flex items-center justify-between">
@@ -1387,7 +1387,7 @@ function DashboardView({ roles, factors, guides, onSelectRole, onViewHistory, hi
 function StatCard({ label, value, display, accent = 'text-gray-800' }: { label: string; value: number; display?: string; accent?: string }) {
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-3 text-center">
-      <div className="text-[11px] text-gray-400">{label}</div>
+      <div className="text-xs text-gray-400">{label}</div>
       <div className={`text-xl font-extrabold ${accent}`}>{display ?? value}</div>
     </div>
   )
@@ -1630,7 +1630,7 @@ function AllRolesMatrixView({ roles, items, onSelectRole }: {
                       {rate === null ? <span className="text-gray-300 text-xs">—</span> : (
                         <span className={`inline-block text-xs px-1.5 py-0.5 rounded-full font-bold ${winRateColor(rate)}`}>{rate}%</span>
                       )}
-                      <div className="text-[9px] text-gray-400">{c.total}건</div>
+                      <div className="text-2xs text-gray-400">{c.total}건</div>
                     </td>
                   )
                 })}
@@ -1658,7 +1658,7 @@ function TabBtn({ active, onClick, icon, label }: { active: boolean; onClick: ()
 
 function LevelBadge({ level }: { level: string }) {
   const cls = level === '★★' ? 'bg-red-100 text-red-600' : level === '★' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'
-  return <span className={`text-[11px] font-bold rounded px-1.5 py-0.5 ${cls}`}>{level}</span>
+  return <span className={`text-xs font-bold rounded px-1.5 py-0.5 ${cls}`}>{level}</span>
 }
 
 function Row({ label, val, bold = false, big = false }: { label: string; val: number; bold?: boolean; big?: boolean }) {
@@ -1681,7 +1681,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
   return (
     <div>
-      <div className="text-[11px] text-gray-400 mb-1">{label}</div>
+      <div className="text-xs text-gray-400 mb-1">{label}</div>
       <input
         type="number"
         value={value}

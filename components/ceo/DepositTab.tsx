@@ -378,11 +378,11 @@ export default function DepositTab({ data }: { data: CeoData }) {
                           {/* 행사 기본 정보 */}
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                             <div className="bg-white rounded-lg p-3 border border-amber-100">
-                              <p className="text-[10px] text-gray-400 font-semibold uppercase mb-1">행사명</p>
+                              <p className="text-2xs text-gray-400 font-semibold uppercase mb-1">행사명</p>
                               <p className="text-sm font-bold text-gray-900">{s.inquiry?.event_name || '-'}</p>
                             </div>
                             <div className="bg-white rounded-lg p-3 border border-amber-100">
-                              <p className="text-[10px] text-gray-400 font-semibold uppercase mb-1">행사일</p>
+                              <p className="text-2xs text-gray-400 font-semibold uppercase mb-1">행사일</p>
                               <p className="text-sm font-semibold text-gray-800">
                                 {s.inquiry?.event_start
                                   ? s.inquiry.event_end && s.inquiry.event_end !== s.inquiry.event_start
@@ -392,11 +392,11 @@ export default function DepositTab({ data }: { data: CeoData }) {
                               </p>
                             </div>
                             <div className="bg-white rounded-lg p-3 border border-amber-100">
-                              <p className="text-[10px] text-gray-400 font-semibold uppercase mb-1 flex items-center gap-1"><MapPin className="h-2.5 w-2.5" />현장</p>
+                              <p className="text-2xs text-gray-400 font-semibold uppercase mb-1 flex items-center gap-1"><MapPin className="h-2.5 w-2.5" />현장</p>
                               <p className="text-sm text-gray-700">{s.site_address || s.inquiry?.location || '-'}</p>
                             </div>
                             <div className="bg-white rounded-lg p-3 border border-amber-100">
-                              <p className="text-[10px] text-gray-400 font-semibold uppercase mb-1 flex items-center gap-1"><User className="h-2.5 w-2.5" />담당자</p>
+                              <p className="text-2xs text-gray-400 font-semibold uppercase mb-1 flex items-center gap-1"><User className="h-2.5 w-2.5" />담당자</p>
                               <p className="text-sm text-gray-700">{s.manager || s.inquiry?.contact_name || '-'}</p>
                             </div>
                           </div>
@@ -410,7 +410,7 @@ export default function DepositTab({ data }: { data: CeoData }) {
                               { label: '잔액',      value: balance > 0 ? formatKRW(balance) : '없음', color: balance > 0 ? 'text-red-600 font-bold' : 'text-green-600 font-bold' },
                             ].map(({ label, value, color }) => (
                               <div key={label} className="bg-white rounded-lg p-3 border border-amber-100 text-center">
-                                <p className="text-[10px] text-gray-400 font-semibold uppercase mb-1">{label}</p>
+                                <p className="text-2xs text-gray-400 font-semibold uppercase mb-1">{label}</p>
                                 <p className={`text-sm ${color}`}>{value}</p>
                               </div>
                             ))}
@@ -435,7 +435,7 @@ export default function DepositTab({ data }: { data: CeoData }) {
                                   {inqItems.map((it, idx) => (
                                     <tr key={it.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                                       <td className="px-3 py-1.5 font-medium text-gray-800">
-                                        {it.is_leader && <span className="text-[10px] text-amber-600 font-bold mr-1">[팀장]</span>}
+                                        {it.is_leader && <span className="text-2xs text-amber-600 font-bold mr-1">[팀장]</span>}
                                         {it.role_name || '-'}
                                       </td>
                                       <td className="px-3 py-1.5 text-right text-gray-600">{it.days}{daysUnit(it.days_unit)}</td>

@@ -193,19 +193,19 @@ export default function StaffSearchModal({ open, onClose, jobType, defaultPayRat
                       <div className="flex items-center gap-1.5">
                         <span className="text-sm font-medium">{s.name}</span>
                         <span className="text-xs text-gray-400">{s.gender} {s.age ? `${s.age}세` : ''}</span>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${recommendBadge(s.recommend)}`}>
+                        <span className={`text-2xs px-1.5 py-0.5 rounded-full font-medium ${recommendBadge(s.recommend)}`}>
                           {s.recommend}
                         </span>
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">
                         <ScoreDots score={s.total_score || 0} />
                         {s.region && (
-                          <span className="text-[10px] text-gray-500 flex items-center gap-0.5">
+                          <span className="text-2xs text-gray-500 flex items-center gap-0.5">
                             <MapPin className="h-2.5 w-2.5" />{s.region.split(',')[0]}
                           </span>
                         )}
                         {Array.isArray(s.available_jobs) && s.available_jobs.length > 0 && (
-                          <span className="text-[10px] text-gray-500">
+                          <span className="text-2xs text-gray-500">
                             {s.available_jobs.slice(0, 3).join('/')}
                           </span>
                         )}
@@ -302,7 +302,7 @@ export default function StaffSearchModal({ open, onClose, jobType, defaultPayRat
                     <label className="text-xs font-medium text-gray-600 mb-1 block">
                       지급 단가 (일)
                       {defaultPayRate > 0 && (
-                        <span className="text-gray-400 ml-1 text-[10px]">견적: {formatKRW(defaultPayRate)}</span>
+                        <span className="text-gray-400 ml-1 text-2xs">견적: {formatKRW(defaultPayRate)}</span>
                       )}
                     </label>
                     <Input
@@ -317,7 +317,7 @@ export default function StaffSearchModal({ open, onClose, jobType, defaultPayRat
                     <label className="text-xs font-medium text-gray-600 mb-1 block">
                       참여 일수
                       {defaultDays > 0 && (
-                        <span className="text-gray-400 ml-1 text-[10px]">전체: {defaultDays}일</span>
+                        <span className="text-gray-400 ml-1 text-2xs">전체: {defaultDays}일</span>
                       )}
                     </label>
                     <Input

@@ -328,7 +328,7 @@ export default function PayoutsContent() {
           >
             처리 필요
             {pendingGroups.length > 0 && (
-              <span className="ml-1.5 bg-red-500 text-white text-[10px] rounded-full px-1.5 py-0.5">{pendingGroups.length}</span>
+              <span className="ml-1.5 bg-red-500 text-white text-2xs rounded-full px-1.5 py-0.5">{pendingGroups.length}</span>
             )}
           </button>
           <button
@@ -339,7 +339,7 @@ export default function PayoutsContent() {
           >
             지급완료
             {doneGroups.length > 0 && (
-              <span className="ml-1.5 bg-green-100 text-green-700 text-[10px] rounded-full px-1.5 py-0.5">{doneGroups.length}</span>
+              <span className="ml-1.5 bg-green-100 text-green-700 text-2xs rounded-full px-1.5 py-0.5">{doneGroups.length}</span>
             )}
           </button>
         </div>
@@ -374,34 +374,34 @@ export default function PayoutsContent() {
                       {/* 행사명 + 상태 뱃지 */}
                       <div className="flex items-start justify-between gap-1 mb-1.5">
                         <p className="text-xs font-bold text-gray-800 leading-snug line-clamp-2 flex-1">{inq.event_name || '(행사명 없음)'}</p>
-                        {allDone && !isHqOnly && <span className="text-[9px] bg-green-500 text-white rounded-full px-1.5 py-0.5 font-bold shrink-0">완료</span>}
-                        {isHqOnly && <span className="text-[9px] bg-purple-500 text-white rounded-full px-1.5 py-0.5 font-bold shrink-0">본사</span>}
-                        {needsAction && <span className="text-[9px] bg-red-500 text-white rounded-full px-1.5 py-0.5 font-bold shrink-0">처리필요</span>}
+                        {allDone && !isHqOnly && <span className="text-2xs bg-green-500 text-white rounded-full px-1.5 py-0.5 font-bold shrink-0">완료</span>}
+                        {isHqOnly && <span className="text-2xs bg-purple-500 text-white rounded-full px-1.5 py-0.5 font-bold shrink-0">본사</span>}
+                        {needsAction && <span className="text-2xs bg-red-500 text-white rounded-full px-1.5 py-0.5 font-bold shrink-0">처리필요</span>}
                       </div>
                       {/* 의뢰처 */}
-                      <p className="text-[10px] text-gray-500 font-medium truncate">{inq.company_name}</p>
+                      <p className="text-2xs text-gray-500 font-medium truncate">{inq.company_name}</p>
                       {/* 날짜 */}
                       {inq.event_start && (
-                        <p className="text-[10px] text-gray-400 mt-0.5">
+                        <p className="text-2xs text-gray-400 mt-0.5">
                           {formatDate(inq.event_start)}{inq.event_end && inq.event_end !== inq.event_start ? ` ~ ${formatDate(inq.event_end)}` : ''}
                         </p>
                       )}
                       {/* 장소 */}
-                      {inq.location && <p className="text-[10px] text-gray-400 truncate mt-0.5">📍 {inq.location}</p>}
+                      {inq.location && <p className="text-2xs text-gray-400 truncate mt-0.5">📍 {inq.location}</p>}
 
                       {/* 인원 구성 */}
                       <div className="flex gap-1 mt-2 flex-wrap">
-                        {isHqOnly && <span className="text-[9px] bg-purple-100 text-purple-700 rounded-full px-1.5 py-0.5">🏢 본사 전원</span>}
-                        {leaders.length > 0 && <span className="text-[9px] bg-gray-100 text-gray-600 rounded-full px-1.5 py-0.5">외부 {leaders.length}명</span>}
-                        {hq.length > 0 && !isHqOnly && <span className="text-[9px] bg-purple-50 text-purple-600 rounded-full px-1.5 py-0.5">본사 {hq.length}</span>}
+                        {isHqOnly && <span className="text-2xs bg-purple-100 text-purple-700 rounded-full px-1.5 py-0.5">🏢 본사 전원</span>}
+                        {leaders.length > 0 && <span className="text-2xs bg-gray-100 text-gray-600 rounded-full px-1.5 py-0.5">외부 {leaders.length}명</span>}
+                        {hq.length > 0 && !isHqOnly && <span className="text-2xs bg-purple-50 text-purple-600 rounded-full px-1.5 py-0.5">본사 {hq.length}</span>}
                       </div>
 
                       {/* 지급 상태 */}
                       <div className="flex gap-1 mt-1 flex-wrap">
-                        {unreg > 0 && <span className="text-[9px] bg-orange-100 text-orange-700 rounded-full px-1.5 py-0.5 font-bold">⚠ {unreg}미등록</span>}
-                        {pendingCount > 0 && <span className="text-[9px] bg-amber-100 text-amber-700 rounded-full px-1.5 py-0.5">대기 {pendingCount}</span>}
-                        {confirmedCount > 0 && <span className="text-[9px] bg-blue-100 text-blue-700 rounded-full px-1.5 py-0.5">검토 {confirmedCount}</span>}
-                        {paidCount > 0 && <span className="text-[9px] bg-green-100 text-green-700 rounded-full px-1.5 py-0.5">완료 {paidCount}</span>}
+                        {unreg > 0 && <span className="text-2xs bg-orange-100 text-orange-700 rounded-full px-1.5 py-0.5 font-bold">⚠ {unreg}미등록</span>}
+                        {pendingCount > 0 && <span className="text-2xs bg-amber-100 text-amber-700 rounded-full px-1.5 py-0.5">대기 {pendingCount}</span>}
+                        {confirmedCount > 0 && <span className="text-2xs bg-blue-100 text-blue-700 rounded-full px-1.5 py-0.5">검토 {confirmedCount}</span>}
+                        {paidCount > 0 && <span className="text-2xs bg-green-100 text-green-700 rounded-full px-1.5 py-0.5">완료 {paidCount}</span>}
                       </div>
 
                       {/* 금액 */}
@@ -538,16 +538,16 @@ export default function PayoutsContent() {
                               {assign?.role_type === '팀장' && <span className="text-indigo-600 text-xs">[팀장] </span>}
                               {payout.staff_name}
                             </span>
-                            <span className={`text-[10px] rounded-full px-2 py-0.5 font-semibold ${STATUS_STYLE[payout.status] || 'bg-gray-100 text-gray-500'}`}>
+                            <span className={`text-2xs rounded-full px-2 py-0.5 font-semibold ${STATUS_STYLE[payout.status] || 'bg-gray-100 text-gray-500'}`}>
                               {STATUS_LABEL[payout.status] || payout.status}
                             </span>
-                            {assign?.job_type && <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{assign.job_type}</span>}
+                            {assign?.job_type && <span className="text-2xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{assign.job_type}</span>}
                           </div>
                           {teamMembers.length > 0 && (
                             <div className="mt-1 flex flex-wrap gap-1 items-center">
-                              <span className="text-[10px] text-indigo-500 font-semibold">팀원:</span>
+                              <span className="text-2xs text-indigo-500 font-semibold">팀원:</span>
                               {teamMembers.map(m => (
-                                <span key={m.id} className="text-[10px] bg-indigo-50 text-indigo-600 rounded-full px-2 py-0.5">
+                                <span key={m.id} className="text-2xs bg-indigo-50 text-indigo-600 rounded-full px-2 py-0.5">
                                   {m.staff_name}{!m.is_present && <span className="text-gray-400 ml-0.5">(불참)</span>}
                                 </span>
                               ))}
@@ -561,7 +561,7 @@ export default function PayoutsContent() {
                                 return (
                                   <span className="flex items-center gap-1 flex-wrap">
                                     {segs.map((seg, i) => (
-                                      <span key={i} className="bg-indigo-50 text-indigo-700 px-1 py-0.5 rounded text-[10px] font-medium">
+                                      <span key={i} className="bg-indigo-50 text-indigo-700 px-1 py-0.5 rounded text-2xs font-medium">
                                         {formatKRW(seg.rate)}×{seg.days}일
                                       </span>
                                     ))}
@@ -585,7 +585,7 @@ export default function PayoutsContent() {
                           {(() => {
                             const memoText = parseNotesMemo(payout.notes)
                             return memoText ? (
-                              <p className="mt-1 text-[10px] text-gray-400 bg-gray-50 rounded-lg px-2 py-1">{memoText}</p>
+                              <p className="mt-1 text-2xs text-gray-400 bg-gray-50 rounded-lg px-2 py-1">{memoText}</p>
                             ) : null
                           })()}
                         </div>
@@ -606,13 +606,13 @@ export default function PayoutsContent() {
                             )}
                             {payout.status === '대기' && (
                               <button onClick={() => db.update('payouts', payout.id, { status: '확인완료' }).then(load)}
-                                className="text-[10px] bg-blue-600 text-white rounded-lg px-2.5 py-1 hover:bg-blue-700 whitespace-nowrap font-semibold transition-colors">
+                                className="text-2xs bg-blue-600 text-white rounded-lg px-2.5 py-1 hover:bg-blue-700 whitespace-nowrap font-semibold transition-colors">
                                 검토완료 →
                               </button>
                             )}
                             {(payout.status === '검토완료' || payout.status === '확인완료') && (
                               <button onClick={() => handleSinglePaid(payout.id)}
-                                className="text-[10px] bg-green-600 text-white rounded-lg px-2.5 py-1 hover:bg-green-700 whitespace-nowrap font-semibold transition-colors">
+                                className="text-2xs bg-green-600 text-white rounded-lg px-2.5 py-1 hover:bg-green-700 whitespace-nowrap font-semibold transition-colors">
                                 입금완료 →
                               </button>
                             )}
@@ -647,13 +647,13 @@ export default function PayoutsContent() {
                       className="flex items-start justify-between bg-white border border-orange-200 rounded-lg px-3 py-2.5 gap-2">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          {assign.role_type === '팀장' && <span className="text-[10px] text-indigo-600 font-bold bg-indigo-50 px-1.5 py-0.5 rounded">[팀장]</span>}
+                          {assign.role_type === '팀장' && <span className="text-2xs text-indigo-600 font-bold bg-indigo-50 px-1.5 py-0.5 rounded">[팀장]</span>}
                           <span className="text-sm font-semibold text-gray-800">{assign.staff_name}</span>
                           {assign.job_type && <span className="text-xs text-gray-400">{assign.job_type}</span>}
                           {segsAmt ? (
                             <span className="text-xs text-gray-600 flex items-center gap-1 flex-wrap">
                               {segsAmt.map((seg, i) => (
-                                <span key={i} className="bg-indigo-50 text-indigo-700 px-1 py-0.5 rounded text-[10px] font-medium">
+                                <span key={i} className="bg-indigo-50 text-indigo-700 px-1 py-0.5 rounded text-2xs font-medium">
                                   {formatKRW(seg.rate)}×{seg.days}일
                                 </span>
                               ))}
@@ -667,9 +667,9 @@ export default function PayoutsContent() {
                         </div>
                         {teamMembers.length > 0 && (
                           <div className="mt-1 flex flex-wrap gap-1">
-                            <span className="text-[10px] text-indigo-500 font-semibold">팀원:</span>
+                            <span className="text-2xs text-indigo-500 font-semibold">팀원:</span>
                             {teamMembers.map(m => (
-                              <span key={m.id} className="text-[10px] bg-indigo-50 text-indigo-600 rounded-full px-2 py-0.5">
+                              <span key={m.id} className="text-2xs bg-indigo-50 text-indigo-600 rounded-full px-2 py-0.5">
                                 {m.staff_name}{!m.is_present && <span className="text-gray-400 ml-0.5">(불참)</span>}
                               </span>
                             ))}
@@ -707,7 +707,7 @@ export default function PayoutsContent() {
                     <div key={assign.id}
                       className="flex items-center gap-1.5 bg-white border-2 border-purple-200 rounded-full px-3 py-1.5 shadow-sm">
                       <span className="text-xs font-bold text-purple-700">{assign.staff_name}</span>
-                      {assign.job_type && <span className="text-[10px] text-gray-400">{assign.job_type}</span>}
+                      {assign.job_type && <span className="text-2xs text-gray-400">{assign.job_type}</span>}
                     </div>
                   ))}
                 </div>

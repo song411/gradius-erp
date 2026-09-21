@@ -78,14 +78,14 @@ export default function ExpensesSection({ inquiryId, expenses, ready, onChanged 
           <Database className="h-4 w-4" />
           부대비용 기능 — 준비 한 단계 남았습니다
         </p>
-        <p className="text-[11px] text-amber-700 leading-relaxed">
+        <p className="text-xs text-amber-700 leading-relaxed">
           행사별 지출(교통비·숙박비 등)을 적어 수익률에 반영하는 기능입니다.
           쓰려면 Supabase에 표를 한 번 만들어야 합니다.
           <br />
           <strong className="font-semibold">Supabase 대시보드 → SQL Editor → 아래 SQL 붙여넣기 → Run</strong>
           {' '}한 번이면 끝이고, 실행 후 이 화면을 새로고침하면 이 안내는 사라집니다.
         </p>
-        <pre className="bg-white border border-amber-200 rounded-lg p-2 text-[10px] text-gray-600 overflow-x-auto leading-relaxed">
+        <pre className="bg-white border border-amber-200 rounded-lg p-2 text-2xs text-gray-600 overflow-x-auto leading-relaxed">
 {SETUP_SQL}
         </pre>
         <div className="flex items-center gap-2">
@@ -93,7 +93,7 @@ export default function ExpensesSection({ inquiryId, expenses, ready, onChanged 
             className="h-7 bg-amber-600 hover:bg-amber-700 text-xs gap-1">
             <Copy className="h-3.5 w-3.5" />SQL 복사
           </Button>
-          <span className="text-[10px] text-amber-600">
+          <span className="text-2xs text-amber-600">
             파일 위치: supabase/migrations/010_event_expenses.sql
           </span>
         </div>
@@ -216,7 +216,7 @@ export default function ExpensesSection({ inquiryId, expenses, ready, onChanged 
       </div>
 
       {expenses.length === 0 && !adding && (
-        <p className="text-[11px] text-rose-400 py-1">
+        <p className="text-xs text-rose-400 py-1">
           교통비·숙박비처럼 이 행사에 <strong className="font-semibold">실제로 나간 돈</strong>을 적어두면 수익률에 반영됩니다.
           견적에 잡힌 금액은 자동으로 들어오지 않습니다.
         </p>
@@ -228,12 +228,12 @@ export default function ExpensesSection({ inquiryId, expenses, ready, onChanged 
         ) : (
           <div key={e.id}
             className="flex items-center gap-2 bg-white border border-rose-200 rounded-lg px-3 py-2">
-            <span className={`text-[10px] rounded-full px-2 py-0.5 font-semibold shrink-0 ${CATEGORY_STYLE[e.category] || CATEGORY_STYLE['기타']}`}>
+            <span className={`text-2xs rounded-full px-2 py-0.5 font-semibold shrink-0 ${CATEGORY_STYLE[e.category] || CATEGORY_STYLE['기타']}`}>
               {e.category}
             </span>
             <div className="min-w-0 flex-1">
               {e.memo && <p className="text-xs text-gray-700 truncate">{e.memo}</p>}
-              {e.spent_on && <p className="text-[10px] text-gray-400">{e.spent_on} 지출</p>}
+              {e.spent_on && <p className="text-2xs text-gray-400">{e.spent_on} 지출</p>}
             </div>
             <p className="text-sm font-bold text-rose-700 shrink-0">-{formatKRW(e.amount)}</p>
             <div className="flex gap-1 shrink-0">

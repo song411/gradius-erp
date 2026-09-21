@@ -66,7 +66,7 @@ export default function Sidebar() {
         </div>
         {!collapsed && (
           <div className="min-w-0">
-            <p className="text-gray-300 text-[10px] font-medium leading-tight">주식회사 가디어스</p>
+            <p className="text-gray-300 text-2xs font-medium leading-tight">주식회사 가디어스</p>
             <span className="text-white font-extrabold text-sm tracking-wide leading-tight">GUARDIUS ERP</span>
           </div>
         )}

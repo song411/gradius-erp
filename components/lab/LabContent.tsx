@@ -315,10 +315,10 @@ export default function LabContent() {
                   <div className="flex items-start justify-between mb-3">
                     <span className="text-4xl leading-none filter drop-shadow-sm">{tool.emoji}</span>
                     <div className="flex flex-col items-end gap-1.5">
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${meta.cls}`}>
+                      <span className={`text-2xs font-bold px-2 py-0.5 rounded-full border ${meta.cls}`}>
                         {meta.label}
                       </span>
-                      <span className="text-[10px] text-gray-500 bg-gray-700 px-2 py-0.5 rounded-full">{tool.category}</span>
+                      <span className="text-2xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded-full">{tool.category}</span>
                     </div>
                   </div>
 

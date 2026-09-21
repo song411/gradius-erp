@@ -118,7 +118,7 @@ export default function CheckinClient({
                   <div className="flex items-center gap-1.5">
                     <span className="text-base font-semibold text-gray-900">{item.name}</span>
                     {item.isLeader && (
-                      <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">팀장</span>
+                      <span className="text-2xs font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">팀장</span>
                     )}
                   </div>
                   <p className="text-xs text-gray-400 mt-0.5">

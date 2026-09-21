@@ -84,7 +84,7 @@ const STAGE_STYLE: Record<PayoutStage, string> = {
 function StageBadge({ stage }: { stage: PayoutStage }) {
   return (
     <span
-      className={`inline-block text-[9px] leading-none px-1 py-0.5 rounded border ${STAGE_STYLE[stage]}`}
+      className={`inline-block text-2xs leading-none px-1 py-0.5 rounded border ${STAGE_STYLE[stage]}`}
       title={
         stage === 'paid'      ? '전액 송금 완료' :
         stage === 'partial'   ? '일부만 송금됨' :
@@ -236,7 +236,7 @@ export default function ProfitTab({ data }: { data: CeoData }) {
       </div>
 
       {(estRows.length > 0 || pendingAmount > 0) && (
-        <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 leading-relaxed">
+        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 leading-relaxed">
           {estRows.length > 0 && (
             <>지급 기록이 아직 없어 추정으로 잡은 행사 <strong>{estRows.length}건</strong>
             ({formatKRW(estAmount)}). 지급관리에 등록되면 자동으로 확정값이 됩니다. </>
@@ -342,7 +342,7 @@ export default function ProfitTab({ data }: { data: CeoData }) {
                           <span>{formatKRW(r.totalPayout)}</span>
                           <StageBadge stage={r.payoutStage} />
                           {r.payoutStage === 'partial' && (
-                            <span className="text-[9px] text-gray-400">
+                            <span className="text-2xs text-gray-400">
                               완료 {formatKRW(r.paidAmount)} · 남음 {formatKRW(r.pendingAmount)}
                             </span>
                           )}
@@ -369,7 +369,7 @@ export default function ProfitTab({ data }: { data: CeoData }) {
                       {r.payoutCase === 'none'    && <span className="text-gray-300 text-xs">-</span>}
                     </td>
                     <td className="px-3 py-3 text-center">
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                      <span className={`text-2xs px-2 py-0.5 rounded-full font-medium ${
                         r.inquiry.status === '정산완료' ? 'bg-gray-100 text-gray-500' :
                         r.inquiry.status === '완료'    ? 'bg-blue-100 text-blue-700' :
                         r.inquiry.status === '진행중'  ? 'bg-green-100 text-green-700' :
@@ -384,7 +384,7 @@ export default function ProfitTab({ data }: { data: CeoData }) {
                       <td colSpan={10} className="bg-slate-50 px-8 py-4 border-t border-dashed border-slate-200">
                         {r.payoutCase === 'normal' && (
                           <>
-                            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">지급 내역</p>
+                            <p className="text-2xs font-semibold text-gray-400 uppercase tracking-wider mb-2">지급 내역</p>
                             <div className="flex flex-wrap gap-2">
                               {r.payouts.map(p => (
                                 <div key={p.id} className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-xs">
@@ -405,7 +405,7 @@ export default function ProfitTab({ data }: { data: CeoData }) {
                             <div className="bg-slate-100 rounded-lg px-3 py-2 flex items-center gap-2">
                               <Users className="h-4 w-4 text-slate-500" />
                               <div>
-                                <p className="text-[10px] text-slate-500 font-semibold">본사 인원 투입</p>
+                                <p className="text-2xs text-slate-500 font-semibold">본사 인원 투입</p>
                                 <p className="text-xs font-bold text-slate-700">{r.hqNames.join(', ')}</p>
                               </div>
                             </div>
@@ -426,7 +426,7 @@ export default function ProfitTab({ data }: { data: CeoData }) {
                         {/* 부대비용 내역 — 수익이 낮은 이유를 여기서 바로 보게 한다 */}
                         {r.totalExpense > 0 && (
                           <div className="mt-3 pt-3 border-t border-dashed border-slate-200">
-                            <p className="text-[10px] font-semibold text-rose-400 uppercase tracking-wider mb-2">부대비용 (실제 지출)</p>
+                            <p className="text-2xs font-semibold text-rose-400 uppercase tracking-wider mb-2">부대비용 (실제 지출)</p>
                             <div className="flex flex-wrap gap-2">
                               {expenses.filter(e => e.inquiry_id === r.inquiry.id).map(e => (
                                 <div key={e.id} className="bg-white border border-rose-200 rounded-lg px-3 py-2 text-xs">
@@ -481,7 +481,7 @@ function SummaryCard({ label, value, sub, color }: {
     <div className={`rounded-xl p-4 backdrop-blur-sm ${styles[color]}`}>
       <p className="text-xs opacity-70 mb-1">{label}</p>
       <p className="text-xl font-bold leading-tight">{value}</p>
-      {sub && <p className="text-[10px] opacity-50 mt-0.5">{sub}</p>}
+      {sub && <p className="text-2xs opacity-50 mt-0.5">{sub}</p>}
     </div>
   )
 }

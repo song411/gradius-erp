@@ -23,15 +23,15 @@ function calcDDay(eventEnd?: string): number | null {
 
 function DDayBadge({ dday }: { dday: number | null }) {
   if (dday === null) return null
-  if (dday < 0)   return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-600 text-white">D+{Math.abs(dday)} 초과</span>
-  if (dday <= 3)  return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500 text-white">D-{dday}</span>
-  if (dday <= 7)  return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-500 text-white">D-{dday}</span>
-  if (dday <= 14) return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-yellow-500 text-white">D-{dday}</span>
-  return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-200 text-gray-600">D-{dday}</span>
+  if (dday < 0)   return <span className="text-2xs font-bold px-2 py-0.5 rounded-full bg-red-600 text-white">D+{Math.abs(dday)} 초과</span>
+  if (dday <= 3)  return <span className="text-2xs font-bold px-2 py-0.5 rounded-full bg-red-500 text-white">D-{dday}</span>
+  if (dday <= 7)  return <span className="text-2xs font-bold px-2 py-0.5 rounded-full bg-orange-500 text-white">D-{dday}</span>
+  if (dday <= 14) return <span className="text-2xs font-bold px-2 py-0.5 rounded-full bg-yellow-500 text-white">D-{dday}</span>
+  return <span className="text-2xs font-bold px-2 py-0.5 rounded-full bg-gray-200 text-gray-600">D-{dday}</span>
 }
 
 function StatusBadge({ status, isHQ }: { status: string; isHQ: boolean }) {
-  if (isHQ) return <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">[본사] 지급없음</span>
+  if (isHQ) return <span className="text-2xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">[본사] 지급없음</span>
   const s: Record<string, string> = {
     '대기':    'bg-gray-100 text-gray-600',
     '검토완료': 'bg-blue-100 text-blue-700',
@@ -41,7 +41,7 @@ function StatusBadge({ status, isHQ }: { status: string; isHQ: boolean }) {
     '보류':    'bg-orange-100 text-orange-700',
     '미지급':  'bg-red-100 text-red-600',
   }
-  return <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${s[status] || 'bg-gray-100 text-gray-600'}`}>{status}</span>
+  return <span className={`text-2xs font-semibold px-2 py-0.5 rounded-full ${s[status] || 'bg-gray-100 text-gray-600'}`}>{status}</span>
 }
 
 // 구간별 단가 파싱 유틸
@@ -562,7 +562,7 @@ function GroupRow({ g, asgMap, openGroups, toggleGroup, processing, handleMarkPa
               <span className="text-xs text-gray-400">{g.inquiry.company_name}</span>
             )}
             {!done && <DDayBadge dday={g.dday} />}
-            {done && <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold">✓ 완료</span>}
+            {done && <span className="text-2xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold">✓ 완료</span>}
           </div>
           <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-400 flex-wrap">
             {g.inquiry?.event_start && (
@@ -577,14 +577,14 @@ function GroupRow({ g, asgMap, openGroups, toggleGroup, processing, handleMarkPa
           {jobTypes.length > 0 && (
             <div className="flex gap-1 mt-1 flex-wrap">
               {jobTypes.map(jt => (
-                <span key={jt} className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-medium">{jt}</span>
+                <span key={jt} className="text-2xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-medium">{jt}</span>
               ))}
             </div>
           )}
         </div>
         <div className="text-right shrink-0 space-y-1">
           <p className="text-sm font-bold text-gray-800">{formatKRW(g.totalFinalPay)}</p>
-          <p className="text-[10px] text-gray-400">
+          <p className="text-2xs text-gray-400">
             {hqCount > 0 && <span className="text-slate-400">[본사]{hqCount} </span>}
             {!done && <span>대기 {g.pendingCount}명 · </span>}
             완료 {paidCount}명
@@ -635,10 +635,10 @@ function GroupRow({ g, asgMap, openGroups, toggleGroup, processing, handleMarkPa
                     <td className="px-4 py-2.5">
                       <div className="font-medium text-gray-800">
                         {p.staff_name || '-'}
-                        {hq && <span className="ml-1 text-[10px] text-slate-400 font-normal">[본사]</span>}
+                        {hq && <span className="ml-1 text-2xs text-slate-400 font-normal">[본사]</span>}
                       </div>
                       {!hq && (
-                        <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-0.5 text-[10px] text-gray-400 leading-tight">
+                        <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-0.5 text-2xs text-gray-400 leading-tight">
                           {p.dispatch_period && (
                             <span>📅 {p.dispatch_period} ({p.dispatch_days}일)</span>
                           )}
@@ -734,9 +734,9 @@ function StatCard({ icon, label, sub, count, amount, color, onClick, clickable }
         {icon}
         <div>
           <p className="font-bold text-sm">{label}</p>
-          <p className="text-[10px] opacity-70">{sub}</p>
+          <p className="text-2xs opacity-70">{sub}</p>
         </div>
-        {clickable && <span className="ml-auto text-[10px] opacity-50">클릭 ▶</span>}
+        {clickable && <span className="ml-auto text-2xs opacity-50">클릭 ▶</span>}
       </div>
       <p className="text-2xl font-extrabold">{count}<span className="text-sm font-normal ml-0.5">건</span></p>
       {amount > 0 && <p className="text-xs mt-1 font-semibold opacity-80">{formatKRW(amount)}</p>}

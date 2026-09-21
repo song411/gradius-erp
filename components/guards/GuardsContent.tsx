@@ -95,13 +95,13 @@ function ExpiryBadge({ dateStr }: { dateStr?: string }) {
   const diffDays = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
 
   if (diffDays < 0) return (
-    <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-medium">만료</span>
+    <span className="text-2xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-medium">만료</span>
   )
   if (diffDays <= 30) return (
-    <span className="text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded-full font-medium">D-{diffDays}</span>
+    <span className="text-2xs bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded-full font-medium">D-{diffDays}</span>
   )
   return (
-    <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">유효</span>
+    <span className="text-2xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">유효</span>
   )
 }
 
@@ -310,14 +310,14 @@ export default function GuardsContent() {
                       <span className="text-sm font-semibold text-gray-800 truncate">{g.name}</span>
                       {g.staff_id && <Link2 className="h-3 w-3 text-purple-400 shrink-0" />}
                     </div>
-                    <div className="text-[10px] text-gray-400 truncate">
+                    <div className="text-2xs text-gray-400 truncate">
                       {g.job_category || '미분류'} {g.certificate_number ? `· ${g.certificate_number}` : ''}
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-0.5 shrink-0">
                     {complete
-                      ? <span className="text-[9px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">서류완비</span>
-                      : <span className="text-[9px] bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded-full">서류미비</span>
+                      ? <span className="text-2xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">서류완비</span>
+                      : <span className="text-2xs bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded-full">서류미비</span>
                     }
                     <ExpiryBadge dateStr={g.crime_check_expiry} />
                   </div>
@@ -332,11 +332,11 @@ export default function GuardsContent() {
           <div className="grid grid-cols-2 gap-2 text-center">
             <div className="bg-white rounded-lg p-1.5">
               <div className="text-sm font-bold text-blue-600">{guards.length}</div>
-              <div className="text-[10px] text-gray-400">총 경호원</div>
+              <div className="text-2xs text-gray-400">총 경호원</div>
             </div>
             <div className="bg-white rounded-lg p-1.5">
               <div className="text-sm font-bold text-green-600">{guards.filter(docsComplete).length}</div>
-              <div className="text-[10px] text-gray-400">서류완비</div>
+              <div className="text-2xs text-gray-400">서류완비</div>
             </div>
           </div>
         </div>

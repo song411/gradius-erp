@@ -771,7 +771,7 @@ ${clone.innerHTML}
                         </div>
                         <div>
                           <div className="text-xs font-medium text-gray-800">{g.name}</div>
-                          <div className="text-[10px] text-gray-400">{g.job_category} · {g.certificate_number || '이수증 미등록'}</div>
+                          <div className="text-2xs text-gray-400">{g.job_category} · {g.certificate_number || '이수증 미등록'}</div>
                         </div>
                         <div className="ml-auto flex gap-0.5">
                           {g.id_doc_url && <span className="w-1.5 h-1.5 rounded-full bg-green-400" title="신분증" />}
@@ -812,7 +812,7 @@ ${clone.innerHTML}
                     className="w-full text-left px-3 py-2.5 hover:bg-indigo-50 flex items-center gap-2 border-b border-gray-50 last:border-0">
                     <div className="flex-1 min-w-0">
                       <div className="text-xs font-medium text-gray-800 truncate">{r.title || '제목 없음'}</div>
-                      <div className="text-[10px] text-gray-400 mt-0.5">
+                      <div className="text-2xs text-gray-400 mt-0.5">
                         {r.created_at ? new Date(r.created_at).toLocaleDateString('ko-KR') : ''}
                         {r.id === currentReportId && <span className="ml-1 text-indigo-500 font-semibold">· 현재 편집 중</span>}
                       </div>
@@ -851,7 +851,7 @@ ${clone.innerHTML}
                 onClick={e => e.stopPropagation()}>
                 {/* 이메일 제목 */}
                 <div className="px-3 pt-2.5 pb-2 border-b border-gray-100">
-                  <p className="text-[10px] text-gray-500 font-semibold mb-1.5">이메일 제목</p>
+                  <p className="text-2xs text-gray-500 font-semibold mb-1.5">이메일 제목</p>
                   <input
                     value={emailSubject}
                     onChange={e => setEmailSubject(e.target.value)}
@@ -859,28 +859,28 @@ ${clone.innerHTML}
                     className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-violet-400"
                   />
                   {emailSubject && (
-                    <button onClick={() => setEmailSubject('')} className="text-[9px] text-gray-400 hover:text-violet-500 mt-1">
+                    <button onClick={() => setEmailSubject('')} className="text-2xs text-gray-400 hover:text-violet-500 mt-1">
                       자동생성으로 초기화
                     </button>
                   )}
                 </div>
                 {/* PDF 첨부 */}
                 <div className="px-3 pt-2.5 pb-2 border-b border-gray-100">
-                  <p className="text-[10px] text-gray-500 font-semibold mb-1.5">PDF 첨부 (선택)</p>
+                  <p className="text-2xs text-gray-500 font-semibold mb-1.5">PDF 첨부 (선택)</p>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <div className={`flex-1 text-xs px-2.5 py-1.5 rounded-lg border truncate ${attachedFile ? 'border-violet-400 text-violet-700 bg-violet-50' : 'border-gray-200 text-gray-400'}`}>
                       {attachedFile ? attachedFile.name : '파일 선택...'}
                     </div>
                     {attachedFile
-                      ? <button onClick={() => setAttachedFile(null)} className="text-[10px] text-gray-400 hover:text-red-400 shrink-0">제거</button>
-                      : <span className="text-[10px] text-violet-600 shrink-0">찾아보기</span>
+                      ? <button onClick={() => setAttachedFile(null)} className="text-2xs text-gray-400 hover:text-red-400 shrink-0">제거</button>
+                      : <span className="text-2xs text-violet-600 shrink-0">찾아보기</span>
                     }
                     <input type="file" accept=".pdf,application/pdf" className="hidden"
                       onChange={e => setAttachedFile(e.target.files?.[0] ?? null)} />
                   </label>
                 </div>
                 <div className="px-3 pt-2.5 pb-1.5 border-b border-gray-100">
-                  <p className="text-[10px] text-gray-500 font-semibold mb-1.5">직접 입력</p>
+                  <p className="text-2xs text-gray-500 font-semibold mb-1.5">직접 입력</p>
                   <input
                     value={directName}
                     onChange={e => setDirectName(e.target.value)}
@@ -906,7 +906,7 @@ ${clone.innerHTML}
                   </div>
                 </div>
                 <div className="px-3 pt-2 pb-1.5 border-b border-gray-100">
-                  <p className="text-[10px] text-gray-400 mb-1.5">경찰서 목록</p>
+                  <p className="text-2xs text-gray-400 mb-1.5">경찰서 목록</p>
                   <div className="relative">
                     <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
                     <input
@@ -925,11 +925,11 @@ ${clone.innerHTML}
                     <button key={i} onClick={() => { if (window.confirm(`${s.region} ${s.name}(${s.email})으로 발송할까요?`)) handleSendEmail(s) }} disabled={emailSending}
                       className="w-full text-left px-3 py-2 hover:bg-violet-50 border-b border-gray-50 last:border-0 flex items-start gap-2 disabled:opacity-50">
                       <div className="shrink-0 mt-0.5">
-                        <span className="inline-block text-[9px] bg-violet-100 text-violet-700 rounded px-1 py-0.5 font-semibold">{s.region}</span>
+                        <span className="inline-block text-2xs bg-violet-100 text-violet-700 rounded px-1 py-0.5 font-semibold">{s.region}</span>
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="text-xs font-medium text-gray-800">{s.name}</div>
-                        <div className="text-[10px] text-gray-400 truncate">{s.email}</div>
+                        <div className="text-2xs text-gray-400 truncate">{s.email}</div>
                       </div>
                       <Mail className="h-3 w-3 text-violet-400 shrink-0 mt-1" />
                     </button>
@@ -938,7 +938,7 @@ ${clone.innerHTML}
                 {/* 발송 이력 */}
                 {emailLogs.length > 0 && (
                   <div className="border-t border-gray-100">
-                    <div className="px-3 py-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">발송 이력</div>
+                    <div className="px-3 py-1.5 text-2xs font-semibold text-gray-400 uppercase tracking-wide">발송 이력</div>
                     <div className="max-h-40 overflow-y-auto">
                       {emailLogs.map(log => (
                         <div key={log.id} className="px-3 py-2 flex items-start gap-2 border-b border-gray-50 last:border-0">
@@ -946,11 +946,11 @@ ${clone.innerHTML}
                             ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0 mt-0.5" />
                             : <AlertCircle className="h-3.5 w-3.5 text-red-400 shrink-0 mt-0.5" />}
                           <div className="flex-1 min-w-0">
-                            <div className="text-[10px] font-medium text-gray-700">{log.station_region} {log.station_name}</div>
-                            <div className="text-[10px] text-gray-400 truncate">{log.recipient_email}</div>
-                            {log.error_msg && <div className="text-[9px] text-red-400 mt-0.5">{log.error_msg}</div>}
+                            <div className="text-2xs font-medium text-gray-700">{log.station_region} {log.station_name}</div>
+                            <div className="text-2xs text-gray-400 truncate">{log.recipient_email}</div>
+                            {log.error_msg && <div className="text-2xs text-red-400 mt-0.5">{log.error_msg}</div>}
                           </div>
-                          <div className="text-[9px] text-gray-300 shrink-0 mt-0.5">
+                          <div className="text-2xs text-gray-300 shrink-0 mt-0.5">
                             {log.created_at ? new Date(log.created_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}
                           </div>
                         </div>
@@ -983,7 +983,7 @@ ${clone.innerHTML}
             <h4 className="text-xs font-bold text-gray-600 mb-3 uppercase tracking-wide">신고서 설정</h4>
             <div className="grid grid-cols-4 gap-3">
               <div>
-                <label className="text-[10px] text-gray-500 mb-1.5 block">신고 구분</label>
+                <label className="text-2xs text-gray-500 mb-1.5 block">신고 구분</label>
                 <div className="flex flex-col gap-1">
                   <label className="flex items-center gap-1.5 cursor-pointer">
                     <input type="checkbox" checked={isBaechi} onChange={e => setIsBaechi(e.target.checked)}
@@ -998,17 +998,17 @@ ${clone.innerHTML}
                 </div>
               </div>
               <div>
-                <label className="text-[10px] text-gray-500 mb-0.5 block">제출 경찰서</label>
+                <label className="text-2xs text-gray-500 mb-0.5 block">제출 경찰서</label>
                 <Input value={policeStation} onChange={e => setPoliceStation(e.target.value)}
                   placeholder="혜화" className="h-8 text-xs" />
               </div>
               <div>
-                <label className="text-[10px] text-gray-500 mb-0.5 block">신고 날짜</label>
+                <label className="text-2xs text-gray-500 mb-0.5 block">신고 날짜</label>
                 <Input type="date" value={reportDate} onChange={e => setReportDate(e.target.value)}
                   className="h-8 text-xs" />
               </div>
               <div>
-                <label className="text-[10px] text-gray-500 mb-0.5 block">접수번호</label>
+                <label className="text-2xs text-gray-500 mb-0.5 block">접수번호</label>
                 <Input value={receiptNo} onChange={e => setReceiptNo(e.target.value)}
                   placeholder="(기재 불요)" className="h-8 text-xs" />
               </div>

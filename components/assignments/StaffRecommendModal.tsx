@@ -163,7 +163,7 @@ export default function StaffRecommendModal({ inquiry, onClose, onSelect }: Prop
         <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
           <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
         </div>
-        <span className="text-[10px] font-bold text-gray-500 w-8 text-right">{score}점</span>
+        <span className="text-2xs font-bold text-gray-500 w-8 text-right">{score}점</span>
       </div>
     )
   }
@@ -186,26 +186,26 @@ export default function StaffRecommendModal({ inquiry, onClose, onSelect }: Prop
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-semibold text-gray-800 text-sm">{r.staff.name}</span>
             {r.staff.recommend === '우선투입' && (
-              <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-medium">우선투입</span>
+              <span className="text-2xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-medium">우선투입</span>
             )}
             {r.staff.recommend === '보류' && (
-              <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-medium">보류</span>
+              <span className="text-2xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-medium">보류</span>
             )}
             {showConflict && (
-              <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium flex items-center gap-0.5">
+              <span className="text-2xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium flex items-center gap-0.5">
                 <AlertTriangle className="h-2.5 w-2.5" />일정 겹침
               </span>
             )}
           </div>
 
           {/* 추천 이유 */}
-          <p className="text-[11px] text-gray-500 mt-0.5">
+          <p className="text-xs text-gray-500 mt-0.5">
             {r.reasons.length > 0 ? r.reasons.join(' · ') : '데이터 부족'}
           </p>
 
           {/* 겹치는 행사 안내 */}
           {showConflict && r.conflict && (
-            <p className="text-[10px] text-amber-600 mt-0.5 flex items-center gap-1">
+            <p className="text-2xs text-amber-600 mt-0.5 flex items-center gap-1">
               <AlertTriangle className="h-2.5 w-2.5 shrink-0" />
               {r.conflict.event_name || '(행사명 없음)'}
               {r.conflict.start_date && ` (${r.conflict.start_date}${r.conflict.end_date ? ` ~ ${r.conflict.end_date}` : ''})`}
@@ -294,7 +294,7 @@ export default function StaffRecommendModal({ inquiry, onClose, onSelect }: Prop
 
         {/* 푸터 */}
         <div className="px-4 py-3 border-t border-gray-100 bg-gray-50 shrink-0">
-          <p className="text-[10px] text-gray-400 text-center">
+          <p className="text-2xs text-gray-400 text-center">
             점수 기준: 지역·직무 경험·평점·고객사 이력·활동 여부 종합 산정
           </p>
         </div>

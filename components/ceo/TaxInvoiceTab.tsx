@@ -194,7 +194,7 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
             </p>
           </div>
           {viewTab === 'unissued' && (
-            <span className="ml-auto text-[10px] text-red-500 font-bold self-end">▶ 보는 중</span>
+            <span className="ml-auto text-2xs text-red-500 font-bold self-end">▶ 보는 중</span>
           )}
         </button>
 
@@ -217,7 +217,7 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
             </p>
           </div>
           {viewTab === 'issued' && (
-            <span className="ml-auto text-[10px] text-green-600 font-bold self-end">▶ 보는 중</span>
+            <span className="ml-auto text-2xs text-green-600 font-bold self-end">▶ 보는 중</span>
           )}
         </button>
 
@@ -240,7 +240,7 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
             </p>
           </div>
           {viewTab === 'all' && (
-            <span className="ml-auto text-[10px] text-blue-600 font-bold self-end">▶ 보는 중</span>
+            <span className="ml-auto text-2xs text-blue-600 font-bold self-end">▶ 보는 중</span>
           )}
         </button>
       </div>
@@ -434,7 +434,7 @@ function TaxRow({
                   <div className="flex items-start gap-1.5 bg-blue-50 rounded-lg px-3 py-2">
                     <MapPin className="h-3.5 w-3.5 text-blue-400 mt-0.5 shrink-0" />
                     <div>
-                      <span className="text-[10px] text-blue-400 font-semibold block">현장주소</span>
+                      <span className="text-2xs text-blue-400 font-semibold block">현장주소</span>
                       <span className="text-xs text-gray-700">{siteAddr}</span>
                     </div>
                   </div>
@@ -443,7 +443,7 @@ function TaxRow({
                   <div className="flex items-start gap-1.5 bg-purple-50 rounded-lg px-3 py-2">
                     <Building2 className="h-3.5 w-3.5 text-purple-400 mt-0.5 shrink-0" />
                     <div>
-                      <span className="text-[10px] text-purple-400 font-semibold block">사업장주소</span>
+                      <span className="text-2xs text-purple-400 font-semibold block">사업장주소</span>
                       <span className="text-xs text-gray-700">{bizAddr}</span>
                     </div>
                   </div>
@@ -464,12 +464,12 @@ function TaxRow({
             {/* 견적 변경 이력 */}
             {row.finalEstimate?.prev_total_price != null && (
               <div className="mt-3 pt-3 border-t border-dashed border-gray-200 space-y-1">
-                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">견적 변경 이력</p>
+                <p className="text-2xs font-semibold text-gray-400 uppercase tracking-wider">견적 변경 이력</p>
                 <div className="flex items-center gap-2 text-xs flex-wrap">
                   <span className="text-gray-400 line-through">{formatKRW(row.finalEstimate.prev_total_price)}</span>
                   <span className="text-gray-400">→</span>
                   <span className="font-bold text-blue-700">{formatKRW(row.invoice_amount || row.supply_price + row.vat)}</span>
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                  <span className={`text-2xs px-1.5 py-0.5 rounded font-semibold ${
                     (row.invoice_amount || row.supply_price + row.vat) > row.finalEstimate.prev_total_price
                       ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'
                   }`}>
@@ -478,7 +478,7 @@ function TaxRow({
                   </span>
                 </div>
                 {row.finalEstimate.prev_items_summary && (
-                  <p className="text-[10px] text-gray-400">
+                  <p className="text-2xs text-gray-400">
                     이전 품목: <span className="line-through">{row.finalEstimate.prev_items_summary}</span>
                     {' → '}
                     <span className="text-gray-600 font-medium">{itemSummary || '(현재 품목)'}</span>
@@ -505,7 +505,7 @@ function InfoItem({ label, value, className = '' }: { label: string; value?: str
   if (!value) return null
   return (
     <div className={className}>
-      <span className="text-[10px] text-gray-500 font-bold block mb-0.5">{label}</span>
+      <span className="text-2xs text-gray-500 font-bold block mb-0.5">{label}</span>
       <span className="text-sm text-gray-800 font-semibold">{value}</span>
     </div>
   )
@@ -516,7 +516,7 @@ function AmountItem({ label, value, highlight, danger }: {
 }) {
   return (
     <div className={`rounded-lg px-3 py-2 ${highlight ? 'bg-indigo-50' : danger && value > 0 ? 'bg-red-50' : 'bg-white border border-gray-100'}`}>
-      <span className="text-[10px] text-gray-400 font-semibold block">{label}</span>
+      <span className="text-2xs text-gray-400 font-semibold block">{label}</span>
       <span className={`text-xs font-bold ${highlight ? 'text-indigo-700' : danger && value > 0 ? 'text-red-600' : 'text-gray-700'}`}>
         {formatKRW(value)}
       </span>

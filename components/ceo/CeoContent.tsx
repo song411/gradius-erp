@@ -118,7 +118,7 @@ export default function CeoContent() {
                 <Icon className="h-4 w-4" />
                 {label}
                 {badge > 0 && (
-                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center ${
+                  <span className={`text-2xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center ${
                     active ? 'bg-amber-200 text-amber-800' : 'bg-red-500 text-white'
                   }`}>
                     {badge}

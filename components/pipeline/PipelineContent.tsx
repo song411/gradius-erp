@@ -251,7 +251,7 @@ export default function PipelineContent() {
             <h2 className="text-sm font-semibold text-blue-900">
               오늘의 후속 {followUps.length}건
             </h2>
-            <span className="text-[11px] text-blue-500">오늘까지 하기로 한 일입니다</span>
+            <span className="text-xs text-blue-500">오늘까지 하기로 한 일입니다</span>
           </div>
           <ul className="flex flex-wrap gap-2">
             {followUps.map(c => {
@@ -295,10 +295,10 @@ export default function PipelineContent() {
               ].join(' ')}
             >
               <div className="flex items-baseline justify-between gap-2">
-                <span className="text-sm font-bold whitespace-nowrap">{t.label}</span>
-                <span className="text-2xl font-extrabold leading-none tabular-nums">{n}</span>
+                <span className="text-base font-bold whitespace-nowrap">{t.label}</span>
+                <span className="text-3xl font-extrabold leading-none tabular-nums">{n}</span>
               </div>
-              <p className={`mt-0.5 text-[11px] ${on ? 'text-white/75' : 'text-gray-400'}`}>
+              <p className={`mt-0.5 text-xs ${on ? 'text-white/75' : 'text-gray-400'}`}>
                 {t.hint}
               </p>
             </button>
@@ -424,13 +424,13 @@ export default function PipelineContent() {
                     </h2>
                     <span className="text-xs font-semibold text-gray-500">{list.length}</span>
                   </div>
-                  <p className="text-[11px] text-gray-400 mt-0.5">
+                  <p className="text-xs text-gray-400 mt-0.5">
                     {done && !showOldConcluded ? `최근 ${RECENT_CONCLUDED_DAYS}일` : STAGE_DESC[stage]}
                   </p>
                 </header>
                 <div className="p-2 space-y-2 min-h-[6rem]">
                   {list.length === 0 ? (
-                    <p className="text-[11px] text-gray-300 text-center py-6">비어 있음</p>
+                    <p className="text-xs text-gray-300 text-center py-6">비어 있음</p>
                   ) : (
                     list.map(c => (
                       <BoardCard key={c.inq.id} card={c} detail={detail}
@@ -542,13 +542,13 @@ function BoardCard({
           {inq.company_name || '고객사 미상'}
         </p>
         {ddayBadge && (
-          <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${ddayBadge.cls}`}>
+          <span className={`shrink-0 rounded px-1.5 py-0.5 text-2xs font-bold ${ddayBadge.cls}`}>
             {ddayBadge.text}
           </span>
         )}
       </div>
 
-      <p className="mt-0.5 text-[11px] text-gray-600 line-clamp-2 break-words">
+      <p className="mt-0.5 text-xs text-gray-600 line-clamp-2 break-words">
         {inq.event_name || '(행사명 없음)'}
       </p>
 
@@ -556,12 +556,12 @@ function BoardCard({
       {(inq.service_type || inq.required_staff) && (
         <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
           {inq.service_type && (
-            <span className="max-w-full truncate rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700">
+            <span className="max-w-full truncate rounded bg-indigo-50 px-1.5 py-0.5 text-2xs font-semibold text-indigo-700">
               {inq.service_type}
             </span>
           )}
           {!!inq.required_staff && (
-            <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-gray-700">
+            <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-gray-700">
               <Users className="h-3 w-3 text-gray-400" />
               {inq.required_staff}명
             </span>
@@ -570,14 +570,14 @@ function BoardCard({
       )}
 
       {/* 언제 — 야간은 크루 구하기와 단가가 달라지므로 눈에 띄게 */}
-      <p className="mt-1 flex items-center gap-1 text-[11px] text-gray-500">
+      <p className="mt-1 flex items-center gap-1 text-xs text-gray-500">
         <Clock className="h-3 w-3 shrink-0 text-gray-400" />
         <span className="truncate">
           {whenText}
           {when.time && ` · ${when.time}`}
         </span>
         {when.night && (
-          <span className="inline-flex shrink-0 items-center gap-0.5 rounded bg-amber-50 px-1 text-[10px] font-semibold text-amber-700">
+          <span className="inline-flex shrink-0 items-center gap-0.5 rounded bg-amber-50 px-1 text-2xs font-semibold text-amber-700">
             <Moon className="h-2.5 w-2.5" />야간
           </span>
         )}
@@ -585,7 +585,7 @@ function BoardCard({
 
       {/* 어디서 · 누구와 */}
       {detail && (inq.location || contact) && (
-        <p className="mt-1 flex items-center gap-1 text-[11px] text-gray-400">
+        <p className="mt-1 flex items-center gap-1 text-xs text-gray-400">
           <MapPin className="h-3 w-3 shrink-0" />
           <span className="truncate">{[inq.location, contact].filter(Boolean).join(' · ')}</span>
         </p>
@@ -596,7 +596,7 @@ function BoardCard({
         <a
           href={`tel:${inq.phone.replace(/[^0-9+]/g, '')}`}
           onClick={e => e.stopPropagation()}
-          className="mt-1 inline-flex items-center gap-1 rounded text-[11px] font-medium text-blue-600 hover:underline"
+          className="mt-1 inline-flex items-center gap-1 rounded text-xs font-medium text-blue-600 hover:underline"
         >
           <Phone className="h-3 w-3" />
           {inq.phone}
@@ -604,7 +604,7 @@ function BoardCard({
       )}
 
       {/* 돈 — 얼마 받고 얼마 주는가 */}
-      <p className="mt-1 text-[11px] text-gray-400 truncate">
+      <p className="mt-1 text-xs text-gray-400 truncate">
         {[
           card.amount > 0 ? shortKRW(card.amount) : null,
           detail && card.profitRate != null ? `수익률 ${card.profitRate}%` : null,
@@ -615,7 +615,7 @@ function BoardCard({
       </p>
 
       {card.stallText && (
-        <p className={`mt-1.5 flex items-center gap-1.5 text-[11px] font-medium ${SIGNAL_TEXT[card.signal]}`}>
+        <p className={`mt-1.5 flex items-center gap-1.5 text-xs font-medium ${SIGNAL_TEXT[card.signal]}`}>
           <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${SIGNAL_DOT[card.signal]}`} />
           {card.stallText}
         </p>
@@ -623,7 +623,7 @@ function BoardCard({
 
       {/* 끝난 건은 언제 어떻게 끝났는지 */}
       {!live && (
-        <p className="mt-1.5 text-[11px] text-gray-500">
+        <p className="mt-1.5 text-xs text-gray-500">
           {card.stage === '체결' ? '체결' : inq.status}
           {inq.lost_reason ? ` · ${inq.lost_reason}` : ''}
           {card.concludedOn ? ` · ${card.concludedOn.substring(5).replace('-', '/')}` : ''}
@@ -633,12 +633,12 @@ function BoardCard({
       {/* 적어둔 내용 — 이게 없으면 카드는 그냥 목록일 뿐이다 */}
       {detail && card.lastNote && (
         <div className="mt-1.5 rounded bg-gray-50 px-2 py-1.5">
-          <p className="text-[11px] leading-snug text-gray-700 line-clamp-3 break-words whitespace-pre-line">
+          <p className="text-xs leading-snug text-gray-700 line-clamp-3 break-words whitespace-pre-line">
             <MessageSquare className="mr-1 inline h-3 w-3 -translate-y-px text-gray-400" />
             <span className="text-gray-400">[{card.lastNote.kind}]</span>{' '}
             {card.lastNote.text}
           </p>
-          <p className="mt-0.5 text-[10px] text-gray-400">
+          <p className="mt-0.5 text-2xs text-gray-400">
             {card.lastNote.source === '활동'
               ? [card.lastNote.author, card.lastNote.on?.substring(5)].filter(Boolean).join(' · ')
               // 원문은 고객이 보낸 글이다. 우리가 적은 것처럼 보이면 안 된다.
@@ -652,14 +652,14 @@ function BoardCard({
 
       {/* 간략 모드에서도 기록이 있다는 사실 자체는 알려준다 */}
       {!detail && card.noteCount > 0 && (
-        <p className="mt-1.5 flex items-center gap-1 text-[10px] text-gray-400">
+        <p className="mt-1.5 flex items-center gap-1 text-2xs text-gray-400">
           <MessageSquare className="h-3 w-3" />
           기록 {card.noteCount}건
         </p>
       )}
 
       {inq.next_action && (
-        <p className={`mt-1.5 truncate text-[11px] ${card.overdue ? 'font-semibold text-red-600' : 'text-blue-700'}`}>
+        <p className={`mt-1.5 truncate text-xs ${card.overdue ? 'font-semibold text-red-600' : 'text-blue-700'}`}>
           ▸ {inq.next_action_at ? `${inq.next_action_at.substring(5, 10)} ` : ''}
           {inq.next_action}
         </p>
@@ -667,7 +667,7 @@ function BoardCard({
 
       {/* 현장 준비물 — 체결되면 그대로 크루 모집 공지에 들어간다 */}
       {detail && card.onsite.length > 0 && (
-        <p className="mt-1.5 border-t border-gray-100 pt-1 text-[10px] text-gray-400 line-clamp-2">
+        <p className="mt-1.5 border-t border-gray-100 pt-1 text-2xs text-gray-400 line-clamp-2">
           {card.onsite.join(' · ')}
         </p>
       )}
@@ -700,8 +700,8 @@ function StatCard({
         <div className={`rounded-lg p-2 ${tone}`}>{icon}</div>
         <div className="min-w-0">
           <p className="text-xs text-gray-500">{label}</p>
-          <p className="text-lg font-bold text-gray-900 truncate">{value}</p>
-          {hint && <p className="text-[10px] text-gray-400 truncate">{hint}</p>}
+          <p className="text-2xl font-bold text-gray-900 truncate">{value}</p>
+          {hint && <p className="text-2xs text-gray-400 truncate">{hint}</p>}
         </div>
       </CardContent>
     </Card>

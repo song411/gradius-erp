@@ -49,11 +49,13 @@ export const DENSITY_LABEL: Record<Density, string> = {
   detail:  '상세',
 }
 
-/** 밀도별 날짜 칸 최소 높이 (px) */
+/** 밀도별 날짜 칸 최소 높이 (px).
+ *  2026-09-21 글자 척도를 한 단계 올리면서(11/13/15px) 같은 내용이
+ *  더 높이 차지하게 됐다. 칸 높이를 안 올리면 칩이 잘려 보인다. */
 export const DENSITY_MIN_H: Record<Density, number> = {
-  compact: 92,
-  normal:  132,
-  detail:  200,
+  compact: 104,
+  normal:  148,
+  detail:  224,
 }
 
 // ─── 프리셋 ───────────────────────────────────────────────

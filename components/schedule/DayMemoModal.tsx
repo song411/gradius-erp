@@ -70,7 +70,7 @@ export default function DayMemoModal({ date, api, onClose }: Props) {
           <div className="flex items-center gap-2">
             <span className="text-base font-bold text-gray-900">{md}</span>
             <span className="text-xs text-gray-400">{dowOf(date)}요일</span>
-            <span className="ml-auto text-[11px] text-gray-400">메모 {notes.length}건</span>
+            <span className="ml-auto text-xs text-gray-400">메모 {notes.length}건</span>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-700">
               <X className="h-4 w-4" />
             </button>
@@ -125,7 +125,7 @@ export default function DayMemoModal({ date, api, onClose }: Props) {
                   key={c.key}
                   onClick={() => setColor(c.key)}
                   title={c.label}
-                  className={`text-[10px] px-1.5 py-0.5 rounded border transition ${c.chip}
+                  className={`text-2xs px-1.5 py-0.5 rounded border transition ${c.chip}
                     ${color === c.key ? 'ring-2 ring-offset-1 ring-gray-400' : 'opacity-60 hover:opacity-100'}`}
                 >
                   {c.label}
@@ -135,7 +135,7 @@ export default function DayMemoModal({ date, api, onClose }: Props) {
                 value={author}
                 onChange={e => setAuthor(e.target.value)}
                 placeholder="작성자"
-                className="ml-auto w-20 text-[11px] px-1.5 py-1 rounded border border-gray-200
+                className="ml-auto w-20 text-xs px-1.5 py-1 rounded border border-gray-200
                   focus:border-blue-400 focus:outline-none"
               />
               <button
@@ -150,7 +150,7 @@ export default function DayMemoModal({ date, api, onClose }: Props) {
             </div>
           </div>
 
-          <p className="text-[10px] text-gray-400">
+          <p className="text-2xs text-gray-400">
             이 메모는 달력에서 보기 위한 것입니다. 배정·금액·중복배정 계산에는 들어가지 않습니다.
           </p>
         </div>
@@ -193,7 +193,7 @@ function NoteRow({
             <button
               key={x.key}
               onClick={() => onChangeColor(x.key)}
-              className={`text-[10px] px-1.5 py-0.5 rounded border ${x.chip}
+              className={`text-2xs px-1.5 py-0.5 rounded border ${x.chip}
                 ${editColor === x.key ? 'ring-2 ring-offset-1 ring-gray-400' : 'opacity-60'}`}
             >
               {x.label}
@@ -202,11 +202,11 @@ function NoteRow({
           <button
             onClick={onSave}
             disabled={busy}
-            className="ml-auto text-[11px] px-2 py-0.5 rounded bg-blue-600 text-white font-semibold disabled:opacity-40"
+            className="ml-auto text-xs px-2 py-0.5 rounded bg-blue-600 text-white font-semibold disabled:opacity-40"
           >
             저장
           </button>
-          <button onClick={onCancel} className="text-[11px] px-2 py-0.5 rounded border border-gray-200 text-gray-500">
+          <button onClick={onCancel} className="text-xs px-2 py-0.5 rounded border border-gray-200 text-gray-500">
             취소
           </button>
         </div>
@@ -223,7 +223,7 @@ function NoteRow({
       >
         <div className="text-xs whitespace-pre-wrap break-words">{note.content}</div>
         {note.author && (
-          <div className="text-[10px] opacity-60 mt-0.5">{note.author}</div>
+          <div className="text-2xs opacity-60 mt-0.5">{note.author}</div>
         )}
       </button>
       <button

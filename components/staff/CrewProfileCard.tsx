@@ -77,7 +77,7 @@ function ScoreCircle({ attendance, performance, appearance, teamwork, adaptabili
         <span className="text-2xl font-bold text-gray-800">
           {avg > 0 ? avg.toFixed(1) : '-'}
         </span>
-        <span className="text-[10px] text-gray-400 -mt-0.5">/ 5.0</span>
+        <span className="text-2xs text-gray-400 -mt-0.5">/ 5.0</span>
       </div>
       <span className="mt-10 text-xs font-semibold text-gray-500">평균 점수</span>
     </div>
@@ -235,7 +235,7 @@ export default function CrewProfileCard({ staff, onClose, onEdit }: Props) {
                           <div key={i} className={`rounded-xl p-3 flex items-center gap-2.5 ${card.color}`}>
                             {card.icon}
                             <div>
-                              <p className="text-[10px] opacity-70">{card.label}</p>
+                              <p className="text-2xs opacity-70">{card.label}</p>
                               <p className="text-sm font-bold">{card.value}</p>
                             </div>
                           </div>
@@ -260,7 +260,7 @@ export default function CrewProfileCard({ staff, onClose, onEdit }: Props) {
                             <div className="flex items-center gap-3">
                               <div className="flex-1 min-w-0">
                                 <p className="text-xs font-medium text-gray-800 truncate">{a.event_name || '-'}</p>
-                                <div className="flex items-center gap-2 mt-0.5 text-[10px] text-gray-400">
+                                <div className="flex items-center gap-2 mt-0.5 text-2xs text-gray-400">
                                   <span className="bg-blue-50 text-blue-600 px-1.5 rounded">{a.job_type || '-'}</span>
                                   {a.start_date && <span>{a.start_date.slice(0, 10)}</span>}
                                   {a.work_days && <span>{a.work_days}일</span>}
@@ -281,7 +281,7 @@ export default function CrewProfileCard({ staff, onClose, onEdit }: Props) {
                                 ) : (
                                   <p className="text-xs text-gray-300">미지급</p>
                                 )}
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                                <span className={`text-2xs px-1.5 py-0.5 rounded-full ${
                                   a.status === '확정' ? 'bg-green-100 text-green-600' :
                                   a.status === '배정중' ? 'bg-yellow-100 text-yellow-600' :
                                   a.status === '취소' ? 'bg-gray-100 text-gray-400' :
@@ -292,10 +292,10 @@ export default function CrewProfileCard({ staff, onClose, onEdit }: Props) {
                             {(evaluation?.strengths || evaluation?.improvements) && (
                               <div className="mt-1.5 pt-1.5 border-t border-gray-200/70 grid grid-cols-2 gap-2">
                                 {evaluation.strengths && (
-                                  <p className="text-[10px] text-gray-500"><span className="text-emerald-600 font-medium">장점</span> {evaluation.strengths}</p>
+                                  <p className="text-2xs text-gray-500"><span className="text-emerald-600 font-medium">장점</span> {evaluation.strengths}</p>
                                 )}
                                 {evaluation.improvements && (
-                                  <p className="text-[10px] text-gray-500"><span className="text-orange-600 font-medium">개선점</span> {evaluation.improvements}</p>
+                                  <p className="text-2xs text-gray-500"><span className="text-orange-600 font-medium">개선점</span> {evaluation.improvements}</p>
                                 )}
                               </div>
                             )}
@@ -345,7 +345,7 @@ export default function CrewProfileCard({ staff, onClose, onEdit }: Props) {
               {/* 가능 직무 */}
               {(staff.available_jobs || []).length > 0 && (
                 <div>
-                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">가능 직무</p>
+                  <p className="text-2xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">가능 직무</p>
                   <div className="flex flex-wrap gap-1.5">
                     {staff.available_jobs!.map((job, i) => (
                       <span key={i} className="text-xs bg-blue-50 text-blue-700 border border-blue-100 rounded-full px-2.5 py-0.5 font-medium">
@@ -359,7 +359,7 @@ export default function CrewProfileCard({ staff, onClose, onEdit }: Props) {
               {/* 자격증 */}
               {(staff.certifications || []).filter(c => c !== '본사직원').length > 0 && (
                 <div>
-                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">자격증 · 특기</p>
+                  <p className="text-2xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">자격증 · 특기</p>
                   <div className="flex flex-wrap gap-1.5">
                     {staff.certifications!.filter(c => c !== '본사직원').map((c, i) => (
                       <span key={i} className="text-xs bg-purple-50 text-purple-700 border border-purple-100 rounded-full px-2.5 py-0.5 font-medium">
@@ -386,10 +386,10 @@ export default function CrewProfileCard({ staff, onClose, onEdit }: Props) {
                   <InfoChip icon={<Phone className="h-3.5 w-3.5" />} label="연락처" value={staff.phone} />
                 )}
                 {staff.mbti && (
-                  <InfoChip icon={<span className="text-[10px] font-bold">MB</span>} label="MBTI" value={staff.mbti} />
+                  <InfoChip icon={<span className="text-2xs font-bold">MB</span>} label="MBTI" value={staff.mbti} />
                 )}
                 {staff.weight && (
-                  <InfoChip icon={<span className="text-[10px] font-bold">kg</span>} label="몸무게" value={`${staff.weight}kg`} />
+                  <InfoChip icon={<span className="text-2xs font-bold">kg</span>} label="몸무게" value={`${staff.weight}kg`} />
                 )}
                 {staff.bank_name && staff.account_number && (
                   <InfoChip icon={<CreditCard className="h-3.5 w-3.5" />} label="계좌"
@@ -400,7 +400,7 @@ export default function CrewProfileCard({ staff, onClose, onEdit }: Props) {
                     <div className="flex items-center justify-between mb-0.5">
                       <div className="flex items-center gap-1 text-gray-400">
                         <IdCard className="h-3.5 w-3.5" />
-                        <span className="text-[10px] font-medium">주민등록번호</span>
+                        <span className="text-2xs font-medium">주민등록번호</span>
                       </div>
                       <button
                         type="button"
@@ -421,7 +421,7 @@ export default function CrewProfileCard({ staff, onClose, onEdit }: Props) {
               {/* 메모 */}
               {staff.memo && (
                 <div className="bg-yellow-50 border border-yellow-100 rounded-xl px-3 py-2.5">
-                  <p className="text-[10px] font-semibold text-yellow-600 mb-1 flex items-center gap-1">
+                  <p className="text-2xs font-semibold text-yellow-600 mb-1 flex items-center gap-1">
                     <FileText className="h-3 w-3" />메모
                   </p>
                   <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-line">{staff.memo}</p>
@@ -452,7 +452,7 @@ function InfoChip({
     <div className={`bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 ${className}`}>
       <div className="flex items-center gap-1 text-gray-400 mb-0.5">
         {icon}
-        <span className="text-[10px] font-medium">{label}</span>
+        <span className="text-2xs font-medium">{label}</span>
       </div>
       <p className="text-xs font-semibold text-gray-700 truncate">{value}</p>
     </div>

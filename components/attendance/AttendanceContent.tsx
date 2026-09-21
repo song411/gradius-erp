@@ -205,7 +205,7 @@ function GuideTooltip({ guide }: { guide: string }) {
         <HelpCircle className="h-3.5 w-3.5" />
       </button>
       {show && (
-        <div className="absolute left-5 top-0 z-50 w-56 bg-gray-900 text-white text-[11px] rounded-xl p-3 shadow-xl whitespace-pre-line leading-relaxed">
+        <div className="absolute left-5 top-0 z-50 w-56 bg-gray-900 text-white text-xs rounded-xl p-3 shadow-xl whitespace-pre-line leading-relaxed">
           {guide}
         </div>
       )}
@@ -610,13 +610,13 @@ export default function AttendanceContent() {
                     <p className="text-sm font-semibold text-gray-800 truncate">{inq.company_name || '-'}</p>
                     <p className="text-xs text-gray-500 truncate mt-0.5">{inq.event_name || '-'}</p>
                   </div>
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ${
+                  <span className={`text-2xs px-1.5 py-0.5 rounded-full font-medium shrink-0 ${
                     inq.status === '진행중' ? 'bg-blue-100 text-blue-700' :
                     inq.status === '완료' ? 'bg-gray-100 text-gray-500' :
                     'bg-green-100 text-green-700'
                   }`}>{inq.status}</span>
                 </div>
-                <div className="flex items-center gap-3 mt-1.5 text-[11px] text-gray-400">
+                <div className="flex items-center gap-3 mt-1.5 text-xs text-gray-400">
                   {inq.event_start && (
                     <span className="flex items-center gap-0.5">
                       <CalendarDays className="h-3 w-3" />{formatDate(inq.event_start)}
@@ -685,7 +685,7 @@ export default function AttendanceContent() {
               >
                 <CheckCircle2 className="h-4 w-4" />출석 체크
                 {dirtyCount > 0 && (
-                  <span className="bg-orange-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">{dirtyCount}</span>
+                  <span className="bg-orange-500 text-white text-2xs px-1.5 py-0.5 rounded-full">{dirtyCount}</span>
                 )}
               </button>
               <button
@@ -804,18 +804,18 @@ export default function AttendanceContent() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5">
                               {asgn.staff_type === '본사' && (
-                                <span className="text-purple-600 font-bold text-[10px]">[본사]</span>
+                                <span className="text-purple-600 font-bold text-2xs">[본사]</span>
                               )}
                               {asgn.role_type === '팀장' && (
-                                <span className="text-indigo-600 font-bold text-[10px] bg-indigo-50 px-1 rounded">팀장</span>
+                                <span className="text-indigo-600 font-bold text-2xs bg-indigo-50 px-1 rounded">팀장</span>
                               )}
                               <span className="text-sm font-semibold">{asgn.staff_name}</span>
                               {asgn.job_type && (
-                                <span className="text-[11px] text-gray-400">{asgn.job_type}</span>
+                                <span className="text-xs text-gray-400">{asgn.job_type}</span>
                               )}
                             </div>
                             {asgn.pay_rate > 0 && (
-                              <p className="text-[11px] text-gray-400 mt-0.5">
+                              <p className="text-xs text-gray-400 mt-0.5">
                                 {formatKRW(asgn.pay_rate)} × {asgn.work_days}일
                               </p>
                             )}
@@ -906,19 +906,19 @@ export default function AttendanceContent() {
                               <div className="flex items-center gap-1.5">
                                 <span className="text-sm font-bold text-gray-800">{asgn.staff_name}</span>
                                 {asgn.job_type && (
-                                  <span className="text-[10px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded-full">{asgn.job_type}</span>
+                                  <span className="text-2xs bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded-full">{asgn.job_type}</span>
                                 )}
                               </div>
                               {evalData.scoreSource === 'saved' && existing ? (
-                                <span className="text-[10px] text-purple-500">
+                                <span className="text-2xs text-purple-500">
                                   이 행사 평가 저장됨: {existing.total_score}점 ({existing.grade})
                                 </span>
                               ) : evalData.scoreSource === 'staffAvg' ? (
-                                <span className="text-[10px] text-indigo-500">
+                                <span className="text-2xs text-indigo-500">
                                   과거 누적 평균 {evalData.staffAvgTotal}점 참고 · 이번 행사 평가를 입력하세요
                                 </span>
                               ) : (
-                                <span className="text-[10px] text-gray-400">
+                                <span className="text-2xs text-gray-400">
                                   신규평가자 · 첫 평가 (기본값 3점)
                                 </span>
                               )}
@@ -975,7 +975,7 @@ export default function AttendanceContent() {
                             {/* 장점 / 개선점 */}
                             <div className="grid grid-cols-2 gap-2">
                               <div>
-                                <label className="text-[10px] text-gray-400 mb-0.5 block">장점</label>
+                                <label className="text-2xs text-gray-400 mb-0.5 block">장점</label>
                                 <Input
                                   value={evalData.strengths}
                                   onChange={e => setEvalMap(prev => ({
@@ -987,7 +987,7 @@ export default function AttendanceContent() {
                                 />
                               </div>
                               <div>
-                                <label className="text-[10px] text-gray-400 mb-0.5 block">개선점</label>
+                                <label className="text-2xs text-gray-400 mb-0.5 block">개선점</label>
                                 <Input
                                   value={evalData.improvements}
                                   onChange={e => setEvalMap(prev => ({
@@ -1003,10 +1003,10 @@ export default function AttendanceContent() {
 
                           {/* 크루 프로필 업데이트 (접이식 아님 - 항상 표시) */}
                           <div className="bg-gradient-to-b from-gray-50 to-white px-4 py-3 border-t border-dashed border-gray-200">
-                            <p className="text-[10px] text-gray-400 font-medium mb-2 uppercase tracking-wide">크루 프로필 업데이트</p>
+                            <p className="text-2xs text-gray-400 font-medium mb-2 uppercase tracking-wide">크루 프로필 업데이트</p>
                             <div className="grid grid-cols-3 gap-2">
                               <div>
-                                <label className="text-[10px] text-gray-400 mb-0.5 block">키 (cm)</label>
+                                <label className="text-2xs text-gray-400 mb-0.5 block">키 (cm)</label>
                                 <Input
                                   value={evalData.height}
                                   onChange={e => setEvalMap(prev => ({
@@ -1019,7 +1019,7 @@ export default function AttendanceContent() {
                                 />
                               </div>
                               <div>
-                                <label className="text-[10px] text-gray-400 mb-0.5 block">몸무게 (kg)</label>
+                                <label className="text-2xs text-gray-400 mb-0.5 block">몸무게 (kg)</label>
                                 <Input
                                   value={evalData.weight}
                                   onChange={e => setEvalMap(prev => ({
@@ -1032,7 +1032,7 @@ export default function AttendanceContent() {
                                 />
                               </div>
                               <div>
-                                <label className="text-[10px] text-gray-400 mb-0.5 block">MBTI</label>
+                                <label className="text-2xs text-gray-400 mb-0.5 block">MBTI</label>
                                 <Input
                                   value={evalData.mbti}
                                   onChange={e => setEvalMap(prev => ({
@@ -1158,7 +1158,7 @@ function FieldEvalMode({ assignments, evalMap, staffMap, onScoreChange, onFieldC
       <div className="fixed inset-0 z-[9999] bg-gray-50 flex flex-col">
         <div className="shrink-0 bg-gradient-to-r from-purple-600 to-indigo-600 px-4 py-3 flex items-center justify-between">
           <div className="text-white">
-            <p className="text-[11px] text-purple-100">현장 평가 모드 · 명단</p>
+            <p className="text-xs text-purple-100">현장 평가 모드 · 명단</p>
             <p className="font-bold text-base">{doneCount} <span className="text-purple-200 font-normal">/ {total}명 완료</span></p>
           </div>
           <button onClick={onClose} className="text-purple-100 active:text-white p-2 -mr-2"><X className="h-6 w-6" /></button>
@@ -1199,19 +1199,19 @@ function FieldEvalMode({ assignments, evalMap, staffMap, onScoreChange, onFieldC
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="font-bold text-gray-900 truncate">{a.staff_name}</p>
-                      {a.job_type && <p className="text-[11px] text-gray-400 truncate">{a.job_type}</p>}
+                      {a.job_type && <p className="text-xs text-gray-400 truncate">{a.job_type}</p>}
                     </div>
                   </div>
                   <div className="mt-2 flex items-center gap-1.5">
                     {st === 'done' ? (
-                      <span className="text-[11px] font-bold text-green-600 flex items-center gap-1"><Check className="h-3.5 w-3.5" />완료 {d ? avgOf(d).toFixed(1) : ''}</span>
+                      <span className="text-xs font-bold text-green-600 flex items-center gap-1"><Check className="h-3.5 w-3.5" />완료 {d ? avgOf(d).toFixed(1) : ''}</span>
                     ) : st === 'editing' ? (
-                      <span className="text-[11px] font-bold text-amber-600">✎ 작성중</span>
+                      <span className="text-xs font-bold text-amber-600">✎ 작성중</span>
                     ) : (
-                      <span className="text-[11px] text-gray-400">미평가</span>
+                      <span className="text-xs text-gray-400">미평가</span>
                     )}
-                    {stf?.recommend === '우선투입' && <span className="ml-auto text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">우선</span>}
-                    {stf?.recommend === '보류' && <span className="ml-auto text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">보류</span>}
+                    {stf?.recommend === '우선투입' && <span className="ml-auto text-2xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">우선</span>}
+                    {stf?.recommend === '보류' && <span className="ml-auto text-2xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">보류</span>}
                   </div>
                 </button>
               )
@@ -1265,7 +1265,7 @@ function FieldEvalMode({ assignments, evalMap, staffMap, onScoreChange, onFieldC
           <ChevronLeft className="h-5 w-5" />명단
         </button>
         <div className="text-white text-center min-w-0">
-          <p className="text-[11px] text-purple-100">{idx + 1} / {total}명 · 완료 {doneCount}</p>
+          <p className="text-xs text-purple-100">{idx + 1} / {total}명 · 완료 {doneCount}</p>
           <p className="font-bold text-base leading-tight truncate">{asgn.staff_name}</p>
         </div>
         <button onClick={onClose} className="text-purple-100 active:text-white p-1 -mr-1 shrink-0"><X className="h-6 w-6" /></button>
@@ -1305,7 +1305,7 @@ function FieldEvalMode({ assignments, evalMap, staffMap, onScoreChange, onFieldC
 
           {staff && staff.total_score > 0 && (
             <div className="mt-3 pt-3 border-t border-gray-100">
-              <p className="text-[11px] text-gray-400 mb-1.5 font-semibold">과거 누적 점수</p>
+              <p className="text-xs text-gray-400 mb-1.5 font-semibold">과거 누적 점수</p>
               <div className="grid grid-cols-5 gap-1 text-center">
                 {EVAL_FIELDS.map(f => {
                   const v = staff[f.key] as number
@@ -1323,7 +1323,7 @@ function FieldEvalMode({ assignments, evalMap, staffMap, onScoreChange, onFieldC
           {(Array.isArray(staff?.certifications) && staff!.certifications.length > 0) && (
             <div className="mt-3 flex flex-wrap gap-1.5">
               {staff!.certifications.map((c, i) => (
-                <span key={i} className="text-[11px] bg-amber-50 text-amber-700 border border-amber-100 px-1.5 py-0.5 rounded">🎓 {c}</span>
+                <span key={i} className="text-xs bg-amber-50 text-amber-700 border border-amber-100 px-1.5 py-0.5 rounded">🎓 {c}</span>
               ))}
             </div>
           )}
@@ -1420,7 +1420,7 @@ function FieldEvalMode({ assignments, evalMap, staffMap, onScoreChange, onFieldC
       {/* 하단 고정 네비게이션 */}
       <div className="absolute bottom-0 inset-x-0 bg-white border-t border-gray-200 px-4 py-3 flex items-center gap-3" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
         <div className="shrink-0 text-center px-1">
-          <div className="text-[10px] text-gray-400">평균</div>
+          <div className="text-2xs text-gray-400">평균</div>
           <div className={`text-xl font-black ${scoreColor(avg)}`}>{avg.toFixed(1)}</div>
         </div>
         <button

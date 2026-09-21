@@ -455,7 +455,7 @@ export default function SettlementsContent() {
         <div className="bg-gradient-to-br from-purple-600 to-purple-500 rounded-xl p-4 text-white">
           <p className="text-xs opacity-80">총 수익 (공급가-지급-부대)</p>
           <p className="text-xl font-bold mt-1">{formatKRW(totalProfit)}</p>
-          <p className="text-[10px] opacity-70 mt-0.5">
+          <p className="text-2xs opacity-70 mt-0.5">
             지급 {formatKRW(profitTotals.payout)}
             {profitTotals.pendingAmount > 0 && ` (미지급 ${formatKRW(profitTotals.pendingAmount)})`}
             {profitTotals.estimatedCount > 0 && ` · 추정 ${profitTotals.estimatedCount}건`}
@@ -566,16 +566,16 @@ export default function SettlementsContent() {
                                     placeholder="공급가액"
                                     autoFocus
                                   />
-                                  <span className="text-[10px] text-gray-400">원</span>
+                                  <span className="text-2xs text-gray-400">원</span>
                                 </div>
                                 {Number(amtSupply) > 0 && (
-                                  <p className="text-[10px] text-blue-600 font-semibold">
+                                  <p className="text-2xs text-blue-600 font-semibold">
                                     청구 {formatKRW(previewTotal)} (VAT {formatKRW(previewVat)})
                                   </p>
                                 )}
                                 <div className="flex gap-1">
-                                  <button onClick={() => handleAmtSave(s)} className="text-[10px] bg-blue-600 text-white rounded px-2 py-0.5 hover:bg-blue-700">저장</button>
-                                  <button onClick={() => setAmtEditId(null)} className="text-[10px] bg-gray-100 text-gray-600 rounded px-2 py-0.5">취소</button>
+                                  <button onClick={() => handleAmtSave(s)} className="text-2xs bg-blue-600 text-white rounded px-2 py-0.5 hover:bg-blue-700">저장</button>
+                                  <button onClick={() => setAmtEditId(null)} className="text-2xs bg-gray-100 text-gray-600 rounded px-2 py-0.5">취소</button>
                                 </div>
                               </div>
                             ) : (
@@ -587,7 +587,7 @@ export default function SettlementsContent() {
                                 <span className="font-semibold group-hover:text-blue-600 group-hover:underline transition-colors">
                                   {formatKRW(invoiceAmt)}
                                 </span>
-                                <p className="text-[10px] text-gray-400 mt-0.5">
+                                <p className="text-2xs text-gray-400 mt-0.5">
                                   공급 {formatKRW(s.supply_price)} + VAT {formatKRW(s.vat)}
                                 </p>
                               </button>
@@ -608,11 +608,11 @@ export default function SettlementsContent() {
                               <BadgePercent className="h-3.5 w-3.5 text-gray-300" />
                               <ProfitRateBadge rate={profitRate} />
                             </div>
-                            <p className="text-[10px] text-gray-400 mt-0.5">
+                            <p className="text-2xs text-gray-400 mt-0.5">
                               {formatKRW(s.supply_price - rowPay.amount)}
                               {rowPay.stage !== 'paid' && (
                                 <span
-                                  className={`ml-1 text-[9px] ${
+                                  className={`ml-1 text-2xs ${
                                     rowPay.stage === 'partial'   ? 'text-yellow-700' :
                                     rowPay.stage === 'unpaid'    ? 'text-orange-600' :
                                     rowPay.stage === 'estimated' ? 'text-amber-600'  : 'text-gray-400'
@@ -671,11 +671,11 @@ export default function SettlementsContent() {
                                 <div className="flex gap-1">
                                   <button
                                     onClick={() => handleMemoSave(s.id)}
-                                    className="text-[10px] bg-blue-600 text-white rounded px-2 py-0.5 hover:bg-blue-700"
+                                    className="text-2xs bg-blue-600 text-white rounded px-2 py-0.5 hover:bg-blue-700"
                                   >저장</button>
                                   <button
                                     onClick={() => setMemoEditId(null)}
-                                    className="text-[10px] bg-gray-100 text-gray-600 rounded px-2 py-0.5 hover:bg-gray-200"
+                                    className="text-2xs bg-gray-100 text-gray-600 rounded px-2 py-0.5 hover:bg-gray-200"
                                   >취소</button>
                                 </div>
                               </div>
@@ -705,7 +705,7 @@ export default function SettlementsContent() {
                               {s.deposit_status === '미입금' && (
                                 <button
                                   onClick={() => handleQuickDeposit(s, '50%')}
-                                  className="text-[10px] bg-yellow-50 text-yellow-700 border border-yellow-200 rounded px-2 py-1 hover:bg-yellow-100 whitespace-nowrap"
+                                  className="text-2xs bg-yellow-50 text-yellow-700 border border-yellow-200 rounded px-2 py-1 hover:bg-yellow-100 whitespace-nowrap"
                                 >
                                   50% 입금
                                 </button>
@@ -714,7 +714,7 @@ export default function SettlementsContent() {
                               {s.deposit_status !== '입금완료' && (
                                 <button
                                   onClick={() => handleQuickDeposit(s, '전액')}
-                                  className="text-[10px] bg-green-50 text-green-700 border border-green-200 rounded px-2 py-1 hover:bg-green-100 whitespace-nowrap font-medium"
+                                  className="text-2xs bg-green-50 text-green-700 border border-green-200 rounded px-2 py-1 hover:bg-green-100 whitespace-nowrap font-medium"
                                 >
                                   전액 입금
                                 </button>
@@ -759,11 +759,11 @@ export default function SettlementsContent() {
                                     <div>
                                       <div className="flex items-center gap-2 mb-3">
                                         <span className="text-xs font-bold text-blue-700">인력비 지급 상세</span>
-                                        <span className="text-[10px] bg-blue-100 text-blue-600 rounded-full px-2 py-0.5">{payable.length}명</span>
+                                        <span className="text-2xs bg-blue-100 text-blue-600 rounded-full px-2 py-0.5">{payable.length}명</span>
                                         {s.payout_amount > 0 && (
                                           matches
-                                            ? <span className="text-[10px] bg-green-100 text-green-700 rounded-full px-2 py-0.5 font-semibold">✓ 정산금액 일치</span>
-                                            : <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-semibold">⚠ 금액 불일치</span>
+                                            ? <span className="text-2xs bg-green-100 text-green-700 rounded-full px-2 py-0.5 font-semibold">✓ 정산금액 일치</span>
+                                            : <span className="text-2xs bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-semibold">⚠ 금액 불일치</span>
                                         )}
                                       </div>
                                       <div className="space-y-1.5">
@@ -772,7 +772,7 @@ export default function SettlementsContent() {
                                           return (
                                             <div key={p.id} className="flex items-center gap-3 bg-white rounded-lg px-3 py-2 border border-blue-100">
                                               <span className="font-semibold text-sm text-gray-800 w-14 shrink-0 truncate">{p.staff_name}</span>
-                                              <div className="flex-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] text-gray-500">
+                                              <div className="flex-1 flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-gray-500">
                                                 {segs && segs.length > 0 ? (
                                                   <>
                                                     {segs.map((seg, i) => (
@@ -792,7 +792,7 @@ export default function SettlementsContent() {
                                               <span className={`text-sm font-bold shrink-0 ${['지급완료','완료'].includes(p.status) ? 'text-green-600' : 'text-blue-700'}`}>
                                                 {formatKRW(p.final_pay)}
                                               </span>
-                                              <span className={`text-[10px] shrink-0 px-1.5 py-0.5 rounded-full ${['지급완료','완료'].includes(p.status) ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-500'}`}>
+                                              <span className={`text-2xs shrink-0 px-1.5 py-0.5 rounded-full ${['지급완료','완료'].includes(p.status) ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-500'}`}>
                                                 {p.status}
                                               </span>
                                             </div>
@@ -803,7 +803,7 @@ export default function SettlementsContent() {
                                         <span className="text-xs text-gray-500">
                                           합계 ({payable.length}명)
                                           {s.payout_amount > 0 && (
-                                            <span className="text-[10px] text-gray-400 ml-1.5">
+                                            <span className="text-2xs text-gray-400 ml-1.5">
                                               · 등록 지급액 {formatKRW(s.payout_amount)}
                                             </span>
                                           )}
@@ -896,7 +896,7 @@ export default function SettlementsContent() {
                   </button>
                 </div>
                 {prevBizInfo && (
-                  <p className="text-[11px] text-amber-700">
+                  <p className="text-xs text-amber-700">
                     {[prevBizInfo.biz_number, prevBizInfo.rep_name, prevBizInfo.biz_address].filter(Boolean).join(' · ')}
                   </p>
                 )}
@@ -1042,7 +1042,7 @@ export default function SettlementsContent() {
               <div className="flex items-center justify-between border-t pt-3 mt-1 mb-2">
                 <h4 className="text-xs font-semibold text-gray-700">세금계산서 발행 정보</h4>
               </div>
-              <p className="text-[11px] text-gray-400 mb-3">
+              <p className="text-xs text-gray-400 mb-3">
                 ※ 사업장주소는 세금계산서용 등록 주소입니다. 행사 현장주소와 다를 수 있습니다.
               </p>
             </div>

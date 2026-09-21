@@ -407,10 +407,10 @@ function OverviewTab({
                       D-{dd} {inq.event_name || inq.company_name}
                     </Link>
                     {inq.contact_name && (
-                      <span className="text-[10px] text-orange-600">· {inq.contact_name}</span>
+                      <span className="text-2xs text-orange-600">· {inq.contact_name}</span>
                     )}
                     {inq.phone && (
-                      <a href={`tel:${inq.phone}`} className="text-[10px] font-bold text-orange-700 hover:underline">
+                      <a href={`tel:${inq.phone}`} className="text-2xs font-bold text-orange-700 hover:underline">
                         📞 {inq.phone}
                       </a>
                     )}
@@ -452,19 +452,19 @@ function OverviewTab({
           <div className="bg-white/10 rounded-xl p-4 backdrop-blur-sm">
             <p className="text-xs text-slate-300 mb-1">{year}년 매출</p>
             <p className="text-2xl font-bold text-white leading-tight">{formatKRW(rev2026)}</p>
-            <p className="text-[11px] text-slate-400 mt-1">체결 {settsYearCount}건 공급가액 합계</p>
+            <p className="text-xs text-slate-400 mt-1">체결 {settsYearCount}건 공급가액 합계</p>
           </div>
           {/* VAT 포함 총매출 */}
           <div className="bg-sky-500/20 rounded-xl p-4 border border-sky-500/30">
             <p className="text-xs text-sky-300 mb-1">VAT 포함 총매출</p>
             <p className="text-2xl font-bold text-sky-200 leading-tight">{formatKRW(invoiceTotal2026)}</p>
-            <p className="text-[11px] text-sky-400 mt-1">정산청구 기준 실제 청구금액 합계</p>
+            <p className="text-xs text-sky-400 mt-1">정산청구 기준 실제 청구금액 합계</p>
           </div>
           {/* 매출총이익 */}
           <div className="bg-emerald-500/20 rounded-xl p-4 border border-emerald-500/30">
             <p className="text-xs text-emerald-300 mb-1">매출총이익</p>
             <p className="text-2xl font-bold text-emerald-200 leading-tight">{formatKRW(profit2026)}</p>
-            <p className="text-[11px] text-emerald-400 mt-1">
+            <p className="text-xs text-emerald-400 mt-1">
               {rev2026 > 0 && payout2026 > 0
                 ? `이익률 ${Math.round((profit2026 / rev2026) * 100)}%`
                 : '지급관리 입력 후 정확'}
@@ -476,7 +476,7 @@ function OverviewTab({
             <p className="text-2xl font-bold text-orange-200 leading-tight">{formatKRW(payout2026)}</p>
             {/* 같은 '지급액' 안에 실제 나간 돈과 아직 안 나간 돈, 추정이 섞여 있다.
                 수익은 셋을 다 뺀 값이지만, 어디까지가 실제인지는 밝혀둔다. */}
-            <p className="text-[11px] text-orange-400 mt-1 leading-relaxed">
+            <p className="text-xs text-orange-400 mt-1 leading-relaxed">
               {!hasRealPayoutData ? '* 지급관리 미입력' : (
                 <>
                   지급완료 {formatKRW(yearPaidAmount)}
@@ -490,7 +490,7 @@ function OverviewTab({
           <div className="bg-purple-500/20 rounded-xl p-4 border border-purple-500/30">
             <p className="text-xs text-purple-300 mb-1">문의 체결율</p>
             <p className="text-2xl font-bold text-purple-200 leading-tight">{contractRate}%</p>
-            <p className="text-[11px] text-purple-400 mt-1">체결↑ / 전체 {inquiries.length}건</p>
+            <p className="text-xs text-purple-400 mt-1">체결↑ / 전체 {inquiries.length}건</p>
           </div>
         </div>
       </div>
@@ -533,7 +533,7 @@ function OverviewTab({
                     <div className="rounded-xl px-4 py-3 text-center min-w-[78px] text-white cursor-pointer transition-all hover:-translate-y-1 hover:shadow-lg"
                       style={{ backgroundColor: stage.color }}>
                       <div className="text-2xl font-bold">{cnt}</div>
-                      <div className="text-[11px] font-medium opacity-90 mt-0.5">{stage.status}</div>
+                      <div className="text-xs font-medium opacity-90 mt-0.5">{stage.status}</div>
                     </div>
                   </Link>
                   {idx < ALL_PIPELINE.length - 1 && <ArrowRight className="h-3 w-3 text-gray-300 shrink-0" />}
@@ -556,7 +556,7 @@ function OverviewTab({
                       <div className="rounded-xl px-3 py-3 text-center min-w-[68px] text-white cursor-pointer transition-all hover:-translate-y-1 hover:shadow-md opacity-75 hover:opacity-100"
                         style={{ backgroundColor: stage.color }}>
                         <div className="text-2xl font-bold">{cnt}</div>
-                        <div className="text-[11px] font-medium opacity-90 mt-0.5">{stage.status}</div>
+                        <div className="text-xs font-medium opacity-90 mt-0.5">{stage.status}</div>
                       </div>
                     </Link>
                     {idx < DEAD_STATUSES.length - 1 && (
@@ -634,7 +634,7 @@ function OverviewTab({
                     </div>
                     <div className="text-right shrink-0">
                       <p className="text-sm font-bold text-red-600">{formatKRW(s.balance || 0)}</p>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${s.deposit_status==='부분입금' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-600'}`}>
+                      <span className={`text-2xs px-1.5 py-0.5 rounded-full ${s.deposit_status==='부분입금' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-600'}`}>
                         {s.deposit_status}
                       </span>
                     </div>
@@ -664,7 +664,7 @@ function OverviewTab({
                     <tr key={inq.id}>
                       <td className="font-medium text-xs">{inq.company_name || '-'}</td>
                       <td><Link href={`/inquiries/${inq.id}`} className="hover:text-blue-600 text-xs truncate block max-w-[110px]">{inq.event_name || '-'}</Link></td>
-                      <td><span className={`text-[10px] px-1.5 py-0.5 rounded-full ${STATUS_COLORS[inq.status]||'bg-gray-100 text-gray-500'}`}>{inq.status}</span></td>
+                      <td><span className={`text-2xs px-1.5 py-0.5 rounded-full ${STATUS_COLORS[inq.status]||'bg-gray-100 text-gray-500'}`}>{inq.status}</span></td>
                       <td className="text-gray-400 text-xs">{inq.event_start?.substring(0,10)||'-'}</td>
                       <td className="text-center text-xs">
                         {['체결','배정완료','진행중','완료'].includes(inq.status)
@@ -780,14 +780,14 @@ function CalendarTab({ inquiries }: { inquiries: Inquiry[] }) {
                       <div className="flex flex-col gap-0.5 flex-1">
                         {events.slice(0,3).map(inq => (
                           <Link key={inq.id} href={`/inquiries/${inq.id}`}>
-                            <div className={`text-[10px] rounded px-1 py-0.5 leading-tight truncate text-white
+                            <div className={`text-2xs rounded px-1 py-0.5 leading-tight truncate text-white
                               ${STATUS_DOT[inq.status] || 'bg-gray-400'}`}>
                               {inq.event_name || inq.company_name || '-'}
                             </div>
                           </Link>
                         ))}
                         {events.length > 3 && (
-                          <span className="text-[10px] text-gray-400">+{events.length-3}건</span>
+                          <span className="text-2xs text-gray-400">+{events.length-3}건</span>
                         )}
                       </div>
                     </>
@@ -1107,7 +1107,7 @@ function StatCard({ label, value, sub, highlight }: {
     <div className="bg-white rounded-xl border border-gray-200 p-4 text-center shadow-sm">
       <p className="text-xs text-gray-500 font-medium">{label}</p>
       <p className={`text-xl font-bold mt-1 ${valColor}`}>{value}</p>
-      {sub && <p className="text-[10px] text-gray-400 mt-0.5">{sub}</p>}
+      {sub && <p className="text-2xs text-gray-400 mt-0.5">{sub}</p>}
     </div>
   )
 }
@@ -1132,7 +1132,7 @@ function AnnualCard({ label, value, sub, color }: {
     <div className={`rounded-xl border p-4 ${bg[color]} ${border[color]}`}>
       <p className="text-xs font-medium opacity-70">{label}</p>
       <p className="text-xl font-bold mt-1">{value}</p>
-      {sub && <p className="text-[10px] mt-0.5 opacity-60">{sub}</p>}
+      {sub && <p className="text-2xs mt-0.5 opacity-60">{sub}</p>}
     </div>
   )
 }

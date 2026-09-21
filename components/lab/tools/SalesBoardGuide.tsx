@@ -243,7 +243,7 @@ export default function SalesBoardGuide() {
           <div key={n.label} className="rounded-xl border border-gray-200 bg-white p-3.5 shadow-sm">
             <p className="text-xl font-extrabold text-gray-900">{n.value}</p>
             <p className="text-xs font-semibold text-gray-700">{n.label}</p>
-            <p className="mt-1 text-[11px] leading-relaxed text-gray-500">{n.note}</p>
+            <p className="mt-1 text-xs leading-relaxed text-gray-500">{n.note}</p>
           </div>
         ))}
       </div>
@@ -271,7 +271,7 @@ export default function SalesBoardGuide() {
 
               {open && (
                 <div className="border-t border-gray-100 px-3.5 pb-3.5 pt-3">
-                  <p className="mb-2 inline-block rounded-md bg-gray-100 px-2 py-1 text-[11px] font-medium text-gray-600">
+                  <p className="mb-2 inline-block rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600">
                     {r.where}
                   </p>
                   {r.body.map((line, i) => (
@@ -305,7 +305,7 @@ export default function SalesBoardGuide() {
             <ol className="space-y-1">
               {r.steps.map((st, i) => (
                 <li key={i} className="flex gap-2 text-xs leading-relaxed text-gray-700">
-                  <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-gray-100 text-[10px] font-bold text-gray-500">
+                  <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-gray-100 text-2xs font-bold text-gray-500">
                     {i + 1}
                   </span>
                   <span>
@@ -334,7 +334,7 @@ export default function SalesBoardGuide() {
               ))}
             </dl>
             {r.note && (
-              <p className="mt-2 rounded-lg bg-gray-50 px-3 py-2 text-[11px] leading-relaxed text-gray-500">
+              <p className="mt-2 rounded-lg bg-gray-50 px-3 py-2 text-xs leading-relaxed text-gray-500">
                 {r.note}
               </p>
             )}
@@ -373,7 +373,7 @@ export default function SalesBoardGuide() {
         {DONTS.map(d => (
           <div key={d.do} className="rounded-xl border border-red-100 bg-red-50/60 p-3">
             <p className="text-xs font-bold text-red-800">✕ {d.do}</p>
-            <p className="mt-0.5 text-[11px] leading-relaxed text-red-700/80">→ {d.why}</p>
+            <p className="mt-0.5 text-xs leading-relaxed text-red-700/80">→ {d.why}</p>
           </div>
         ))}
       </div>

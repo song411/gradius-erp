@@ -71,7 +71,7 @@ export default function AssignmentDatesPicker({ eventDates, value, onSave }: Pro
         <button
           type="button"
           onClick={begin}
-          className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded
+          className="inline-flex items-center gap-1 text-2xs px-1.5 py-0.5 rounded
             border border-blue-200 bg-blue-50 text-blue-700 hover:border-blue-400 transition-colors"
           title="근무일 바꾸기"
         >
@@ -84,7 +84,7 @@ export default function AssignmentDatesPicker({ eventDates, value, onSave }: Pro
       <button
         type="button"
         onClick={begin}
-        className="inline-flex items-center gap-0.5 text-[10px] px-1 py-0.5 rounded
+        className="inline-flex items-center gap-0.5 text-2xs px-1 py-0.5 rounded
           border border-gray-200 text-gray-400 hover:border-blue-400 hover:text-blue-600 transition-colors"
         title="며칠인지 말고 '어느 날'인지 정합니다"
       >
@@ -98,12 +98,12 @@ export default function AssignmentDatesPicker({ eventDates, value, onSave }: Pro
   return (
     <div className="mt-1 w-full rounded-lg border border-blue-200 bg-blue-50/40 p-2 space-y-2">
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-[11px] font-semibold text-gray-700">
+        <span className="text-xs font-semibold text-gray-700">
           근무일 {draft.length}일
           <span className="font-normal text-gray-400"> / 운영일 {eventDates.length}일</span>
         </span>
         {draft.length > 0 && (
-          <span className="text-[11px] text-blue-700 tabular-nums">{compressDates(draft)}</span>
+          <span className="text-xs text-blue-700 tabular-nums">{compressDates(draft)}</span>
         )}
       </div>
 
@@ -122,8 +122,8 @@ export default function AssignmentDatesPicker({ eventDates, value, onSave }: Pro
                   ? 'border-blue-400 bg-blue-100 text-blue-800'
                   : 'border-gray-200 bg-white text-gray-400 hover:border-gray-400'}`}
             >
-              <div className="text-[11px] font-bold tabular-nums leading-tight">{md(d)}</div>
-              <div className={`text-[9px] ${isWeekend(d) ? 'text-blue-400' : 'opacity-60'}`}>
+              <div className="text-xs font-bold tabular-nums leading-tight">{md(d)}</div>
+              <div className={`text-2xs ${isWeekend(d) ? 'text-blue-400' : 'opacity-60'}`}>
                 {dowOf(d)}
               </div>
             </button>
@@ -131,7 +131,7 @@ export default function AssignmentDatesPicker({ eventDates, value, onSave }: Pro
         })}
       </div>
 
-      <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
+      <div className="flex items-center gap-1.5 flex-wrap text-xs">
         <button type="button" onClick={() => setDraft([...eventDates])}
           className="px-2 py-0.5 rounded border border-gray-200 bg-white text-gray-600 hover:border-blue-400">
           전체
@@ -159,13 +159,13 @@ export default function AssignmentDatesPicker({ eventDates, value, onSave }: Pro
         </div>
       </div>
 
-      <p className="text-[10px] text-gray-400">
+      <p className="text-2xs text-gray-400">
         {draft.length > 0
           ? '고른 날짜 수가 참여 일수가 됩니다. 인원배정 표·출석부·중복배정 판정에 그대로 쓰입니다.'
           : '날짜를 비우면 일수는 지금 값 그대로 두고, 전 기간 투입으로 봅니다 (예전 동작).'}
       </p>
       {draft.length === 0 && hasDates && (
-        <p className="text-[10px] text-amber-600 flex items-center gap-1">
+        <p className="text-2xs text-amber-600 flex items-center gap-1">
           <X className="h-2.5 w-2.5" />
           이대로 저장하면 지금 잡혀 있는 {compressDates(value)} 가 지워집니다.
         </p>

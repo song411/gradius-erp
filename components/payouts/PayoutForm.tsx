@@ -305,7 +305,7 @@ export default function PayoutForm({ open, onClose, assignment, payout, onSaved 
                   onChange={e => setDayLinked(e.target.checked)}
                   className="w-3 h-3 rounded"
                 />
-                <span className="text-[10px] text-blue-600">일당 자동계산</span>
+                <span className="text-2xs text-blue-600">일당 자동계산</span>
               </label>
             </div>
             <Input
@@ -321,7 +321,7 @@ export default function PayoutForm({ open, onClose, assignment, payout, onSaved 
               className="h-8 text-sm"
             />
             {dayLinked && assignment.pay_rate && (
-              <p className="text-[10px] text-blue-500 mt-0.5">
+              <p className="text-2xs text-blue-500 mt-0.5">
                 {formatKRW(assignment.pay_rate)} × {dispatchDays || 1}일 = <strong>{formatKRW((assignment.pay_rate || 0) * (Number(dispatchDays) || 1))}</strong>
               </p>
             )}
@@ -339,7 +339,7 @@ export default function PayoutForm({ open, onClose, assignment, payout, onSaved 
                 <button
                   type="button"
                   onClick={() => setUseSegments(!useSegments)}
-                  className="text-[10px] text-indigo-600 hover:underline"
+                  className="text-2xs text-indigo-600 hover:underline"
                 >
                   {useSegments ? '단일 금액 입력' : '구간별 단가 설정'}
                 </button>
@@ -348,7 +348,7 @@ export default function PayoutForm({ open, onClose, assignment, payout, onSaved 
                 <div className="bg-indigo-50 rounded-lg p-2 border border-indigo-200 space-y-1.5">
                   {segments.map((seg, i) => (
                     <div key={i} className="flex items-center gap-1.5">
-                      <span className="text-[10px] text-gray-500 w-8 shrink-0">{i + 1}구간</span>
+                      <span className="text-2xs text-gray-500 w-8 shrink-0">{i + 1}구간</span>
                       <Input
                         type="number"
                         value={seg.rate || ''}
@@ -356,7 +356,7 @@ export default function PayoutForm({ open, onClose, assignment, payout, onSaved 
                         placeholder="단가"
                         className="w-24 h-7 text-xs px-1"
                       />
-                      <span className="text-[10px] text-gray-400">원 ×</span>
+                      <span className="text-2xs text-gray-400">원 ×</span>
                       <Input
                         type="number"
                         value={seg.days || ''}
@@ -365,18 +365,18 @@ export default function PayoutForm({ open, onClose, assignment, payout, onSaved 
                         className="w-12 h-7 text-xs px-1"
                         min={1}
                       />
-                      <span className="text-[10px] text-gray-400">일 =</span>
-                      <span className="text-[10px] font-semibold text-indigo-700 w-16 shrink-0">
+                      <span className="text-2xs text-gray-400">일 =</span>
+                      <span className="text-2xs font-semibold text-indigo-700 w-16 shrink-0">
                         {formatKRW(seg.rate * seg.days)}
                       </span>
                       {segments.length > 1 && (
-                        <button type="button" onClick={() => removeSeg(i)} className="text-red-400 hover:text-red-600 text-[10px]">✕</button>
+                        <button type="button" onClick={() => removeSeg(i)} className="text-red-400 hover:text-red-600 text-2xs">✕</button>
                       )}
                     </div>
                   ))}
                   <div className="flex items-center justify-between border-t border-indigo-200 pt-1">
-                    <button type="button" onClick={addSeg} className="text-[10px] text-indigo-600 hover:underline">+ 구간 추가</button>
-                    <span className="text-[10px] text-gray-500">
+                    <button type="button" onClick={addSeg} className="text-2xs text-indigo-600 hover:underline">+ 구간 추가</button>
+                    <span className="text-2xs text-gray-500">
                       합계: {segments.reduce((s, seg) => s + (seg.days || 1), 0)}일 / <strong className="text-indigo-700">{formatKRW(segmentTotal(segments))}</strong>
                     </span>
                   </div>
@@ -434,7 +434,7 @@ export default function PayoutForm({ open, onClose, assignment, payout, onSaved 
               {formatKRW(nonTaxableAmt)}
             </span>
           </div>
-          <p className="text-[10px] text-amber-500 mt-1">이 금액은 세금 공제 없이 그대로 지급됩니다.</p>
+          <p className="text-2xs text-amber-500 mt-1">이 금액은 세금 공제 없이 그대로 지급됩니다.</p>
         </div>
 
         {/* 공제 + 합계 */}
@@ -480,25 +480,25 @@ export default function PayoutForm({ open, onClose, assignment, payout, onSaved 
           <div className="flex items-center gap-1 mb-2">
             <CreditCard className="h-3.5 w-3.5 text-gray-400" />
             <p className="text-xs font-semibold text-gray-600">계좌 정보</p>
-            {staffLoaded && <span className="text-[10px] text-green-600 bg-green-50 rounded px-1">스탭 DB 자동입력</span>}
+            {staffLoaded && <span className="text-2xs text-green-600 bg-green-50 rounded px-1">스탭 DB 자동입력</span>}
             {noAccountInfo && (
-              <span className="text-[10px] text-orange-500 flex items-center gap-0.5">
+              <span className="text-2xs text-orange-500 flex items-center gap-0.5">
                 <AlertCircle className="h-3 w-3" />계좌 미입력
               </span>
             )}
           </div>
           <div className="grid grid-cols-3 gap-2">
             <div>
-              <label className="text-[10px] text-gray-500 mb-1 block">은행</label>
+              <label className="text-2xs text-gray-500 mb-1 block">은행</label>
               <Input value={bankName} onChange={e => setBankName(e.target.value)} placeholder="국민은행" className="h-8 text-sm" />
             </div>
             <div className="col-span-2">
-              <label className="text-[10px] text-gray-500 mb-1 block">계좌번호</label>
+              <label className="text-2xs text-gray-500 mb-1 block">계좌번호</label>
               <Input value={accountNumber} onChange={e => setAccountNumber(e.target.value)} placeholder="000-000-000000" className="h-8 text-sm" />
             </div>
           </div>
           <div className="mt-2">
-            <label className="text-[10px] text-gray-500 mb-1 block">주민등록번호 (공제 신고용)</label>
+            <label className="text-2xs text-gray-500 mb-1 block">주민등록번호 (공제 신고용)</label>
             <Input value={idNumber} onChange={e => setIdNumber(e.target.value)} placeholder="000000-0000000" className="h-8 text-sm" />
           </div>
         </div>
@@ -518,7 +518,7 @@ export default function PayoutForm({ open, onClose, assignment, payout, onSaved 
 
       {/* 버튼 안내 문구 */}
       <div className="px-4 pb-1">
-        <p className="text-[10px] text-gray-400 leading-relaxed">
+        <p className="text-2xs text-gray-400 leading-relaxed">
           <span className="font-medium text-gray-500">💾 임시저장</span> — 금액 입력 후 나중에 검토 (대기 상태) &nbsp;→&nbsp;
           <span className="font-medium text-gray-500">✓ 금액검토 완료</span> — HR 검토 확인 (검토완료 상태) &nbsp;→&nbsp;
           <span className="font-medium text-gray-600">입금완료</span> — 실제 입금 시 목록에서 처리

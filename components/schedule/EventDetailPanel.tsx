@@ -39,7 +39,7 @@ interface Loaded {
 function Field({ label, value }: { label: string; value?: string | number | null }) {
   return (
     <div className="min-w-0">
-      <div className="text-[10px] font-semibold text-gray-400 tracking-wide">{label}</div>
+      <div className="text-2xs font-semibold text-gray-400 tracking-wide">{label}</div>
       <div className="text-xs text-gray-800 break-words">{value === 0 ? 0 : (value || '-')}</div>
     </div>
   )
@@ -57,7 +57,7 @@ function Money({ label, value, suffix = '원', tone }: {
     <div className={`rounded-lg border px-3 py-2 ${
       tone === 'warn' ? 'border-amber-200 bg-amber-50/50' : 'border-gray-200 bg-white'
     }`}>
-      <div className="text-[10px] font-semibold text-gray-400 tracking-wide">{label}</div>
+      <div className="text-2xs font-semibold text-gray-400 tracking-wide">{label}</div>
       <div className={`text-sm font-bold tabular-nums ${color}`}>
         {value === null ? '-' : `${fmt(value)}${value ? suffix : ''}`}
       </div>
@@ -72,7 +72,7 @@ function Section({ title, note, children }: {
     <section className="space-y-2">
       <div className="flex items-baseline gap-2 flex-wrap">
         <h3 className="text-xs font-extrabold text-gray-700 tracking-wide">{title}</h3>
-        {note && <span className="text-[10px] text-gray-400">{note}</span>}
+        {note && <span className="text-2xs text-gray-400">{note}</span>}
       </div>
       {children}
     </section>
@@ -232,11 +232,11 @@ export default function EventDetailPanel({ inquiry, onClose }: Props) {
             <h2 className="text-base font-extrabold text-gray-900 truncate">
               {inquiry.event_name || '(행사명 없음)'}
             </h2>
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-semibold">
+            <span className="text-2xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-semibold">
               {inquiry.status}
             </span>
             {inquiry.inquiry_code && (
-              <span className="text-[10px] text-gray-400 font-mono">{inquiry.inquiry_code}</span>
+              <span className="text-2xs text-gray-400 font-mono">{inquiry.inquiry_code}</span>
             )}
           </div>
           <p className="text-xs text-gray-500 mt-0.5">
@@ -294,7 +294,7 @@ export default function EventDetailPanel({ inquiry, onClose }: Props) {
                 : '확정(최종) 견적이 없어 청구 금액을 산출할 수 없습니다'}
             >
               {discountLabel && (
-                <div className="flex items-start gap-1.5 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+                <div className="flex items-start gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
                   <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-px" />
                   <span>
                     이 견적에는 <b>{discountLabel}</b>이 적용되어 있습니다.
@@ -320,7 +320,7 @@ export default function EventDetailPanel({ inquiry, onClose }: Props) {
                 />
               </div>
               {laborThin && (
-                <div className="flex items-start gap-1.5 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+                <div className="flex items-start gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
                   <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-px" />
                   <span>
                     <b>실제 인건비가 덜 집계돼 실이익·실이익률이 실제보다 높게 나옵니다.</b>{' '}
@@ -332,7 +332,7 @@ export default function EventDetailPanel({ inquiry, onClose }: Props) {
                   </span>
                 </div>
               )}
-              <div className="flex flex-wrap gap-3 text-[11px] text-gray-500">
+              <div className="flex flex-wrap gap-3 text-xs text-gray-500">
                 {est?.profit_rate != null && (
                   <span className="font-semibold text-gray-700">견적 이익률 {est.profit_rate.toFixed(1)}%</span>
                 )}
@@ -354,17 +354,17 @@ export default function EventDetailPanel({ inquiry, onClose }: Props) {
                   <table className="w-full border-collapse text-xs">
                     <thead>
                       <tr className="bg-gray-100">
-                        <th className="px-2 py-2 text-left font-bold text-[11px] text-gray-600">구분</th>
-                        <th className="px-2 py-2 text-left font-bold text-[11px] text-gray-600">품목 / 직무</th>
-                        <th className="px-2 py-2 text-left font-bold text-[11px] text-gray-600">스펙</th>
-                        <th className="px-2 py-2 text-center font-bold text-[11px] text-gray-600">수량</th>
-                        <th className="px-2 py-2 text-center font-bold text-[11px] text-gray-600">
+                        <th className="px-2 py-2 text-left font-bold text-xs text-gray-600">구분</th>
+                        <th className="px-2 py-2 text-left font-bold text-xs text-gray-600">품목 / 직무</th>
+                        <th className="px-2 py-2 text-left font-bold text-xs text-gray-600">스펙</th>
+                        <th className="px-2 py-2 text-center font-bold text-xs text-gray-600">수량</th>
+                        <th className="px-2 py-2 text-center font-bold text-xs text-gray-600">
                           {data.items.every(it => daysUnit(it.days_unit) === '일') ? '일수' : '단위'}
                         </th>
-                        <th className="px-2 py-2 text-right font-bold text-[11px] text-gray-600">청구단가</th>
-                        <th className="px-2 py-2 text-right font-bold text-[11px] text-gray-600">지급단가</th>
-                        <th className="px-2 py-2 text-right font-bold text-[11px] text-gray-600">청구 소계</th>
-                        <th className="px-2 py-2 text-right font-bold text-[11px] text-gray-600">마진</th>
+                        <th className="px-2 py-2 text-right font-bold text-xs text-gray-600">청구단가</th>
+                        <th className="px-2 py-2 text-right font-bold text-xs text-gray-600">지급단가</th>
+                        <th className="px-2 py-2 text-right font-bold text-xs text-gray-600">청구 소계</th>
+                        <th className="px-2 py-2 text-right font-bold text-xs text-gray-600">마진</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -376,8 +376,8 @@ export default function EventDetailPanel({ inquiry, onClose }: Props) {
                             <td className="px-2 py-1.5 text-gray-500">{it.item_type || '-'}</td>
                             <td className="px-2 py-1.5 font-semibold text-gray-800">
                               {it.role_name || '-'}
-                              {it.is_leader && <span className="ml-1 text-[9px] text-indigo-500 font-bold">팀장</span>}
-                              {it.vat_exempt && <span className="ml-1 text-[9px] text-gray-400">면세</span>}
+                              {it.is_leader && <span className="ml-1 text-2xs text-indigo-500 font-bold">팀장</span>}
+                              {it.vat_exempt && <span className="ml-1 text-2xs text-gray-400">면세</span>}
                             </td>
                             <td className="px-2 py-1.5 text-gray-500">{it.spec || '-'}</td>
                             <td className="px-2 py-1.5 text-center tabular-nums">
@@ -432,7 +432,7 @@ export default function EventDetailPanel({ inquiry, onClose }: Props) {
                     <thead>
                       <tr>
                         <th className="sticky left-0 z-10 bg-gray-100 border border-gray-200 px-2 py-2 text-left
-                          font-bold text-[11px] text-gray-600 min-w-[130px]">
+                          font-bold text-xs text-gray-600 min-w-[130px]">
                           직무 / 필요
                         </th>
                         {dates.map(d => {
@@ -442,7 +442,7 @@ export default function EventDetailPanel({ inquiry, onClose }: Props) {
                             <th key={d} className={`border border-gray-200 px-1.5 py-1.5 text-center min-w-[110px]
                               ${we ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-700'}`}>
                               <div className="font-bold">{dt.getMonth() + 1}/{dt.getDate()}</div>
-                              <div className="text-[10px] font-normal text-gray-400">{DOW[dt.getDay()]}</div>
+                              <div className="text-2xs font-normal text-gray-400">{DOW[dt.getDay()]}</div>
                             </th>
                           )
                         })}
@@ -453,7 +453,7 @@ export default function EventDetailPanel({ inquiry, onClose }: Props) {
                         <tr key={job.jobType}>
                           <td className="sticky left-0 z-10 bg-gray-50 border border-gray-200 px-2 py-1.5 align-top min-w-[130px]">
                             <div className="font-semibold text-gray-700">{job.label}</div>
-                            <div className="text-[10px] text-gray-400">
+                            <div className="text-2xs text-gray-400">
                               {job.required > 0 ? `필요 ${job.required}명` : '견적 외'}
                               {job.billRate ? ` · 청구 ${fmt(job.billRate)}` : ''}
                             </div>
@@ -466,11 +466,11 @@ export default function EventDetailPanel({ inquiry, onClose }: Props) {
                             return (
                               <td key={d} className="border border-gray-100 px-1.5 py-1.5 align-top min-w-[110px]">
                                 <div className="flex items-center justify-between mb-1 gap-1">
-                                  <span className={`text-[10px] font-bold px-1 py-0.5 rounded border leading-none ${sty.chip}`}>
+                                  <span className={`text-2xs font-bold px-1 py-0.5 rounded border leading-none ${sty.chip}`}>
                                     {job.required > 0 ? `${c.total}/${job.required}` : `${c.total}명`}
                                   </span>
                                   {act.value > 0 && (
-                                    <span className={`text-[9px] tabular-nums ${
+                                    <span className={`text-2xs tabular-nums ${
                                       payRateSuspicious(job.billRate, act) ? 'text-amber-600 font-bold' : 'text-gray-400'
                                     }`}
                                       title={payRateSuspicious(job.billRate, act)
@@ -480,7 +480,7 @@ export default function EventDetailPanel({ inquiry, onClose }: Props) {
                                     </span>
                                   )}
                                   {act.mixed && (
-                                    <span className="text-[9px] text-orange-500" title={act.list.map(v => fmt(v)).join(' / ')}>
+                                    <span className="text-2xs text-orange-500" title={act.list.map(v => fmt(v)).join(' / ')}>
                                       혼재
                                     </span>
                                   )}
@@ -488,16 +488,16 @@ export default function EventDetailPanel({ inquiry, onClose }: Props) {
                                 <div className="flex flex-wrap gap-0.5">
                                   {c.pinned.map(a => (
                                     <span key={a.id}
-                                      className={`text-[10px] leading-none px-1 py-0.5 rounded border
+                                      className={`text-2xs leading-none px-1 py-0.5 rounded border
                                         ${STATUS_CHIP[a.status] ?? 'bg-gray-50 text-gray-600 border-gray-200'}`}>
                                       {cleanStaffName(a.staff_name)}
                                     </span>
                                   ))}
                                   {c.allPeriod.map(a => (
                                     <span key={a.id}
-                                      className="text-[10px] leading-none px-1 py-0.5 rounded border border-dashed border-gray-300 text-gray-500"
+                                      className="text-2xs leading-none px-1 py-0.5 rounded border border-dashed border-gray-300 text-gray-500"
                                       title="날짜 미지정 = 전체기간 투입">
-                                      {cleanStaffName(a.staff_name)}<span className="text-[9px] text-gray-400 ml-0.5">전</span>
+                                      {cleanStaffName(a.staff_name)}<span className="text-2xs text-gray-400 ml-0.5">전</span>
                                     </span>
                                   ))}
                                 </div>
@@ -526,7 +526,7 @@ export default function EventDetailPanel({ inquiry, onClose }: Props) {
                       <tr className="bg-gray-100">
                         {['이름', '직무', '역할', '배정상태', '지급단가', '일수', '총 지급액',
                           '지급상태', '연락처', '은행 / 계좌', '주민번호', '투입일'].map(h => (
-                          <th key={h} className="px-2 py-2 text-left font-bold text-[11px] text-gray-600 whitespace-nowrap">
+                          <th key={h} className="px-2 py-2 text-left font-bold text-xs text-gray-600 whitespace-nowrap">
                             {h}
                           </th>
                         ))}
@@ -542,7 +542,7 @@ export default function EventDetailPanel({ inquiry, onClose }: Props) {
                             <td className="px-2 py-1.5 font-semibold text-gray-800 whitespace-nowrap">
                               {cleanStaffName(a.staff_name)}
                               {a.is_payable === false && (
-                                <span className="ml-1 text-[9px] text-purple-500 font-bold">무급</span>
+                                <span className="ml-1 text-2xs text-purple-500 font-bold">무급</span>
                               )}
                             </td>
                             <td className="px-2 py-1.5 text-gray-600">{a.job_type || '-'}</td>
@@ -550,7 +550,7 @@ export default function EventDetailPanel({ inquiry, onClose }: Props) {
                               {a.role_type || a.staff_type || '-'}
                             </td>
                             <td className="px-2 py-1.5">
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded border
+                              <span className={`text-2xs px-1.5 py-0.5 rounded border
                                 ${STATUS_CHIP[a.status] ?? 'bg-gray-50 text-gray-600 border-gray-200'}`}>
                                 {a.status}
                               </span>
@@ -560,13 +560,13 @@ export default function EventDetailPanel({ inquiry, onClose }: Props) {
                             <td className="px-2 py-1.5 text-right tabular-nums font-semibold">{fmt(total)}</td>
                             <td className="px-2 py-1.5">
                               {po ? (
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded border
+                                <span className={`text-2xs px-1.5 py-0.5 rounded border
                                   ${PAY_COLOR[po.status] ?? 'bg-gray-50 text-gray-500 border-gray-200'}`}>
                                   {po.status}
                                   {po.final_pay ? ` ${fmt(po.final_pay)}` : ''}
                                 </span>
                               ) : (
-                                <span className="text-[10px] text-gray-300">지급건 없음</span>
+                                <span className="text-2xs text-gray-300">지급건 없음</span>
                               )}
                             </td>
                             <td className="px-2 py-1.5 text-gray-600 whitespace-nowrap">{a.phone || '-'}</td>
@@ -575,10 +575,10 @@ export default function EventDetailPanel({ inquiry, onClose }: Props) {
                                 ? `${a.bank_name || '-'} ${a.account_number || ''}`
                                 : '-'}
                             </td>
-                            <td className="px-2 py-1.5 text-gray-400 whitespace-nowrap font-mono text-[10px]">
+                            <td className="px-2 py-1.5 text-gray-400 whitespace-nowrap font-mono text-2xs">
                               {maskId(a.id_number)}
                             </td>
-                            <td className="px-2 py-1.5 text-gray-500 text-[10px] max-w-[220px]">
+                            <td className="px-2 py-1.5 text-gray-500 text-2xs max-w-[220px]">
                               {wd.length > 0
                                 ? wd.map(d => d.substring(5)).join(', ')
                                 : <span className="text-gray-400">전체기간 (날짜 미지정)</span>}
@@ -591,7 +591,7 @@ export default function EventDetailPanel({ inquiry, onClose }: Props) {
                 </div>
               )}
               {data.cancelled.length > 0 && (
-                <p className="text-[11px] text-gray-400">
+                <p className="text-xs text-gray-400">
                   취소된 배정: {data.cancelled.map(a => cleanStaffName(a.staff_name)).join(', ')}
                 </p>
               )}
@@ -609,7 +609,7 @@ export default function EventDetailPanel({ inquiry, onClose }: Props) {
                       <span className="tabular-nums font-semibold text-gray-900 min-w-[90px] text-right">
                         {fmt(x.amount)}원
                       </span>
-                      <span className="text-gray-400 text-[11px]">{x.spent_on || '-'}</span>
+                      <span className="text-gray-400 text-xs">{x.spent_on || '-'}</span>
                       <span className="text-gray-500 truncate">{x.memo || ''}</span>
                     </div>
                   ))}
@@ -631,7 +631,7 @@ export default function EventDetailPanel({ inquiry, onClose }: Props) {
                         <div className="flex flex-wrap gap-1">
                           {rows.map(r => (
                             <span key={r.id}
-                              className={`text-[10px] px-1.5 py-0.5 rounded border
+                              className={`text-2xs px-1.5 py-0.5 rounded border
                                 ${ATT_COLOR[r.status] ?? 'bg-gray-50 text-gray-600 border-gray-200'}`}
                               title={[r.clock_in, r.clock_out].filter(Boolean).join(' ~ ') || undefined}>
                               {cleanStaffName(r.staff_name)} {r.status}

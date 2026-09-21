@@ -163,7 +163,7 @@ export default function TeamAssignModal({ open, onClose, defaultJobType, default
                         {isCompany && <span className="text-purple-600 font-bold">[본사] </span>}
                         {s.name}
                       </p>
-                      <p className="text-[10px] text-gray-400">{s.gender} · ★{s.total_score || 0}</p>
+                      <p className="text-2xs text-gray-400">{s.gender} · ★{s.total_score || 0}</p>
                     </div>
                     {leader?.id === s.id && <UserCheck className="h-3.5 w-3.5 text-blue-600 shrink-0" />}
                   </div>
@@ -216,7 +216,7 @@ export default function TeamAssignModal({ open, onClose, defaultJobType, default
                   {/* 팀장 단가 + 일수 */}
                   <div className="grid grid-cols-3 gap-2">
                     <div>
-                      <label className="text-[10px] text-gray-500 mb-1 block">직무</label>
+                      <label className="text-2xs text-gray-500 mb-1 block">직무</label>
                       <Input
                         value={leaderJobType}
                         onChange={e => setLeaderJobType(e.target.value)}
@@ -225,7 +225,7 @@ export default function TeamAssignModal({ open, onClose, defaultJobType, default
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] text-gray-500 mb-1 block">일급 (원)</label>
+                      <label className="text-2xs text-gray-500 mb-1 block">일급 (원)</label>
                       <Input
                         type="number"
                         value={leaderRate}
@@ -236,7 +236,7 @@ export default function TeamAssignModal({ open, onClose, defaultJobType, default
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] text-gray-500 mb-1 block">참여 일수</label>
+                      <label className="text-2xs text-gray-500 mb-1 block">참여 일수</label>
                       <Input
                         type="number"
                         value={leaderDays}
@@ -257,7 +257,7 @@ export default function TeamAssignModal({ open, onClose, defaultJobType, default
                     </div>
                   )}
                   {!leaderPresent && (
-                    <p className="text-[11px] text-orange-600 bg-orange-50 rounded px-2 py-1">
+                    <p className="text-xs text-orange-600 bg-orange-50 rounded px-2 py-1">
                       팀장 불참 — 지급액은 팀원 합산 후 팀장 명의로 일괄 지급됩니다.
                     </p>
                   )}
@@ -274,9 +274,9 @@ export default function TeamAssignModal({ open, onClose, defaultJobType, default
 
               {/* 헤더 */}
               <div className="grid grid-cols-[1fr_90px_60px_20px] gap-1.5 mb-1 px-1">
-                <span className="text-[10px] text-gray-400">이름</span>
-                <span className="text-[10px] text-gray-400">일급 (원)</span>
-                <span className="text-[10px] text-gray-400">일수</span>
+                <span className="text-2xs text-gray-400">이름</span>
+                <span className="text-2xs text-gray-400">일급 (원)</span>
+                <span className="text-2xs text-gray-400">일수</span>
                 <span />
               </div>
 

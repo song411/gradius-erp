@@ -281,7 +281,7 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
               <Send className="w-4 h-4" />
             </button>
           </div>
-          <p className="text-[10px] text-gray-300 mt-1.5 text-center">
+          <p className="text-2xs text-gray-300 mt-1.5 text-center">
             AI 답변은 참고용입니다. 중요한 의사결정은 ERP 데이터를 직접 확인하세요.
           </p>
         </div>

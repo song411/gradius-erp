@@ -303,7 +303,7 @@ export default function TarotModal({ onClose }: Props) {
                     <div className="h-full rounded-xl bg-black/20 flex flex-col items-center justify-center gap-3 p-4">
                       <span className="text-5xl">{drawnCard.emoji}</span>
                       <div className="text-center">
-                        <p className="text-white/70 text-[10px] font-semibold tracking-widest uppercase">Major Arcana</p>
+                        <p className="text-white/70 text-2xs font-semibold tracking-widest uppercase">Major Arcana</p>
                         <p className="text-white font-extrabold text-lg leading-tight">{drawnCard.name}</p>
                         <p className="text-white/80 text-xs mt-1">{drawnCard.keyword}</p>
                       </div>

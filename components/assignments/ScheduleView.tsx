@@ -109,9 +109,9 @@ function StaffChip({
     : 'bg-white text-gray-400 border-dashed border-gray-200'
 
   return (
-    <div className={`group flex items-center gap-0.5 text-[10px] px-1 py-0.5 rounded border mb-0.5 ${cls}`}>
+    <div className={`group flex items-center gap-0.5 text-2xs px-1 py-0.5 rounded border mb-0.5 ${cls}`}>
       <span className="truncate max-w-[62px]">{asgn.staff_name}</span>
-      {!pinned && <span className="text-[9px] text-gray-300 ml-0.5 shrink-0">전</span>}
+      {!pinned && <span className="text-2xs text-gray-300 ml-0.5 shrink-0">전</span>}
       {editMode && pinned && (
         <button
           onClick={onRemove}
@@ -207,7 +207,7 @@ function AvailabilityMemoPanel({ inquiryId }: { inquiryId: string }) {
         )}
       </div>
       <div className="flex-1 p-3 flex flex-col gap-2 min-h-0">
-        <p className="text-[10px] text-gray-400 shrink-0">인력별 가용 날짜·특이사항</p>
+        <p className="text-2xs text-gray-400 shrink-0">인력별 가용 날짜·특이사항</p>
         {editing ? (
           <textarea
             value={text}
@@ -222,7 +222,7 @@ function AvailabilityMemoPanel({ inquiryId }: { inquiryId: string }) {
         )}
       </div>
       <div className="px-4 py-3 border-t border-gray-100 space-y-1.5 bg-gray-50 shrink-0">
-        <p className="text-[10px] font-semibold text-gray-500 mb-1.5">범례</p>
+        <p className="text-2xs font-semibold text-gray-500 mb-1.5">범례</p>
         {[
           { dot: 'bg-green-400',  label: '확정' },
           { dot: 'bg-yellow-400', label: '배정중' },
@@ -230,10 +230,10 @@ function AvailabilityMemoPanel({ inquiryId }: { inquiryId: string }) {
         ].map(({ dot, label }) => (
           <div key={label} className="flex items-center gap-1.5">
             <span className={`w-2 h-2 rounded-full ${dot} shrink-0`} />
-            <span className="text-[10px] text-gray-500">{label}</span>
+            <span className="text-2xs text-gray-500">{label}</span>
           </div>
         ))}
-        <p className="text-[10px] text-gray-400 pt-1 border-t border-gray-100">
+        <p className="text-2xs text-gray-400 pt-1 border-t border-gray-100">
           "전" = 전기간 배정<br />
           편집 모드에서 × 클릭 → 해당 날짜 제거
         </p>
@@ -417,7 +417,7 @@ export default function ScheduleView({
               <button
                 key={j}
                 onClick={() => restoreJob(j)}
-                className="text-[10px] px-1.5 py-0.5 border border-dashed border-gray-300 text-gray-400 rounded hover:border-blue-400 hover:text-blue-500 transition-colors"
+                className="text-2xs px-1.5 py-0.5 border border-dashed border-gray-300 text-gray-400 rounded hover:border-blue-400 hover:text-blue-500 transition-colors"
               >
                 + {config.labelOverrides[j] ?? j} 복원
               </button>
@@ -455,7 +455,7 @@ export default function ScheduleView({
                       }`}
                     >
                       <div className="font-bold text-xs">{md}</div>
-                      <div className="text-[10px] text-gray-400 font-normal">{dow}</div>
+                      <div className="text-2xs text-gray-400 font-normal">{dow}</div>
                     </th>
                   )
                 })}
@@ -481,7 +481,7 @@ export default function ScheduleView({
                           {jobCfg.label !== jobCfg.jobType && (
                             <button
                               onClick={() => resetJobLabel(jobCfg.jobType)}
-                              className="shrink-0 text-[9px] text-gray-300 hover:text-blue-500 transition-colors"
+                              className="shrink-0 text-2xs text-gray-300 hover:text-blue-500 transition-colors"
                               title={`원래 이름(${jobCfg.jobType})으로 되돌리기`}
                             >
                               ↺
@@ -499,10 +499,10 @@ export default function ScheduleView({
                             type="number"
                             value={jobCfg.required}
                             onChange={e => updateRequired(jobCfg.jobType, Number(e.target.value))}
-                            className="w-9 text-[10px] border border-gray-200 rounded px-1 py-0.5 text-center focus:outline-none focus:ring-1 focus:ring-blue-300"
+                            className="w-9 text-2xs border border-gray-200 rounded px-1 py-0.5 text-center focus:outline-none focus:ring-1 focus:ring-blue-300"
                             min={0}
                           />
-                          <span className="text-[10px] text-gray-400">명</span>
+                          <span className="text-2xs text-gray-400">명</span>
                           <button
                             onClick={() => hideJob(jobCfg.jobType, jobCfg.isCustom)}
                             className="ml-auto text-gray-300 hover:text-red-400 transition-colors"
@@ -513,7 +513,7 @@ export default function ScheduleView({
                         </div>
                       ) : (
                         jobCfg.required > 0 && (
-                          <div className="text-[10px] text-gray-400 mt-0.5">필요 {jobCfg.required}명</div>
+                          <div className="text-2xs text-gray-400 mt-0.5">필요 {jobCfg.required}명</div>
                         )
                       )}
                     </td>
@@ -543,7 +543,7 @@ export default function ScheduleView({
                         >
                           {/* 카운트 뱃지 + 추가 버튼 */}
                           <div className="flex items-center justify-between mb-1">
-                            <span className={`text-[10px] font-bold px-1 py-0.5 rounded-full leading-none ${
+                            <span className={`text-2xs font-bold px-1 py-0.5 rounded-full leading-none ${
                               isEmpty  ? 'bg-gray-100 text-gray-400' :
                               isOver   ? 'bg-orange-100 text-orange-700' :
                               isFull   ? 'bg-green-100 text-green-700' :
@@ -560,7 +560,7 @@ export default function ScheduleView({
                                       e.stopPropagation()
                                       setOpenQuickCell(openQuickCell === cellId ? null : cellId)
                                     }}
-                                    className="text-[9px] font-bold leading-none px-0.5 py-0.5 rounded text-purple-400 hover:text-purple-600 hover:bg-purple-50 transition-colors"
+                                    className="text-2xs font-bold leading-none px-0.5 py-0.5 rounded text-purple-400 hover:text-purple-600 hover:bg-purple-50 transition-colors"
                                     title="본사인원 빠른 배정"
                                   >
                                     B
@@ -577,9 +577,9 @@ export default function ScheduleView({
                                             onQuickAssignCompany(date, jobCfg.jobType, jobCfg.payRate, s)
                                             setOpenQuickCell(null)
                                           }}
-                                          className="flex w-full items-center gap-1 px-2 py-1 text-[10px] text-purple-700 hover:bg-purple-50 transition-colors whitespace-nowrap"
+                                          className="flex w-full items-center gap-1 px-2 py-1 text-2xs text-purple-700 hover:bg-purple-50 transition-colors whitespace-nowrap"
                                         >
-                                          <span className="font-bold text-[9px] text-purple-400">B</span>
+                                          <span className="font-bold text-2xs text-purple-400">B</span>
                                           {s.name}
                                         </button>
                                       ))}
@@ -620,7 +620,7 @@ export default function ScheduleView({
                           ))}
 
                           {isEmpty && (
-                            <div className="text-[10px] text-gray-200 text-center py-1 border border-dashed border-gray-100 rounded">
+                            <div className="text-2xs text-gray-200 text-center py-1 border border-dashed border-gray-100 rounded">
                               드래그
                             </div>
                           )}

@@ -399,7 +399,7 @@ export default function ContactsModal({ onClose }: Props) {
                 className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <span className={`text-[11px] font-bold text-white px-2.5 py-0.5 rounded-full ${region.color}`}>
+                  <span className={`text-xs font-bold text-white px-2.5 py-0.5 rounded-full ${region.color}`}>
                     {region.region}
                   </span>
                   <span className="text-xs text-gray-500">{region.stations.length}개 경찰서</span>
@@ -418,7 +418,7 @@ export default function ContactsModal({ onClose }: Props) {
                     <div key={st.no} className="px-4 py-2.5 hover:bg-blue-50/40 transition-colors">
                       <div className="flex items-center justify-between gap-3 flex-wrap">
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-[10px] text-gray-400 w-5 shrink-0">{st.no}</span>
+                          <span className="text-2xs text-gray-400 w-5 shrink-0">{st.no}</span>
                           <span className="text-sm font-semibold text-gray-800 truncate">{st.name}</span>
                         </div>
                         <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
@@ -448,10 +448,10 @@ export default function ContactsModal({ onClose }: Props) {
         <p className="text-xs font-bold text-amber-700 mb-1.5">⚖️ 경비업법 핵심 체크포인트</p>
         <div className="space-y-0.5">
           {TIPS.map((tip, i) => (
-            <p key={i} className="text-[11px] text-amber-800 leading-relaxed">• {tip}</p>
+            <p key={i} className="text-xs text-amber-800 leading-relaxed">• {tip}</p>
           ))}
         </div>
-        <p className="text-[10px] text-gray-400 mt-1.5">출처: 2026년 전국 경찰서 경비업 담당자 전화번호 및 전자우편</p>
+        <p className="text-2xs text-gray-400 mt-1.5">출처: 2026년 전국 경찰서 경비업 담당자 전화번호 및 전자우편</p>
       </div>
     </div>
   )

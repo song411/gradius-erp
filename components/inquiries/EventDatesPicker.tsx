@@ -63,14 +63,14 @@ export default function EventDatesPicker({ start, end, value, onChange }: Props)
 
   if (!start || !end) {
     return (
-      <p className="text-[11px] text-gray-400">
+      <p className="text-xs text-gray-400">
         시작일과 종료일을 먼저 넣으면 그 사이 날짜 중에서 고를 수 있습니다.
       </p>
     )
   }
 
   if (all.length === 0) {
-    return <p className="text-[11px] text-amber-600">시작일이 종료일보다 늦습니다.</p>
+    return <p className="text-xs text-amber-600">시작일이 종료일보다 늦습니다.</p>
   }
 
   const toggle = (d: string) => {
@@ -92,7 +92,7 @@ export default function EventDatesPicker({ start, end, value, onChange }: Props)
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg
+        className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg
           border border-gray-200 text-gray-500 hover:border-gray-400"
       >
         <CalendarDays className="h-3.5 w-3.5" />
@@ -104,17 +104,17 @@ export default function EventDatesPicker({ start, end, value, onChange }: Props)
   return (
     <div className="rounded-lg border border-gray-200 bg-gray-50/60 p-2 space-y-2">
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-[11px] font-semibold text-gray-600">
+        <span className="text-xs font-semibold text-gray-600">
           운영일 {value.length}일
           <span className="font-normal text-gray-400"> / 기간 {all.length}일</span>
         </span>
         {value.length > 0 && (
-          <span className="text-[11px] text-blue-700 tabular-nums">{summarize(value)}</span>
+          <span className="text-xs text-blue-700 tabular-nums">{summarize(value)}</span>
         )}
         <button
           type="button"
           onClick={() => { onChange([]); setOpen(false) }}
-          className="ml-auto inline-flex items-center gap-0.5 text-[11px] text-gray-400 hover:text-gray-700"
+          className="ml-auto inline-flex items-center gap-0.5 text-xs text-gray-400 hover:text-gray-700"
           title="운영일을 지우면 기간 전체를 행사일로 봅니다 (기본 동작)"
         >
           <X className="h-3 w-3" />
@@ -139,10 +139,10 @@ export default function EventDatesPicker({ start, end, value, onChange }: Props)
                   ? 'border-blue-400 bg-blue-100 text-blue-800'
                   : 'border-gray-200 bg-white text-gray-400 hover:border-gray-400'}`}
             >
-              <div className="text-[11px] font-bold tabular-nums leading-tight">
+              <div className="text-xs font-bold tabular-nums leading-tight">
                 {dt.getMonth() + 1}/{dt.getDate()}
               </div>
-              <div className={`text-[9px] ${
+              <div className={`text-2xs ${
                 g === 0 ? 'text-red-400' : g === 6 ? 'text-blue-400' : 'opacity-60'
               }`}>
                 {DOW[g]}
@@ -152,7 +152,7 @@ export default function EventDatesPicker({ start, end, value, onChange }: Props)
         })}
       </div>
 
-      <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
+      <div className="flex items-center gap-1.5 flex-wrap text-xs">
         <button type="button" onClick={() => onChange([...all])}
           className="px-2 py-0.5 rounded border border-gray-200 bg-white text-gray-600 hover:border-blue-400">
           전체
@@ -166,7 +166,7 @@ export default function EventDatesPicker({ start, end, value, onChange }: Props)
         </span>
       </div>
 
-      <p className="text-[10px] text-gray-400">
+      <p className="text-2xs text-gray-400">
         비워두면 기간 전체를 행사일로 봅니다. 고른 날짜는 운영 캘린더·인원배정·출석부·
         중복배정 판정에 그대로 쓰입니다.
       </p>

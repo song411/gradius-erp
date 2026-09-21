@@ -827,7 +827,7 @@ function EstimateGroupTable({
                             className="group flex items-center gap-1"
                           >
                             <SendBadge status={est.send_status} method={est.send_method} />
-                            <span className="text-[10px] text-gray-300 group-hover:text-blue-400 transition-colors opacity-0 group-hover:opacity-100">
+                            <span className="text-2xs text-gray-300 group-hover:text-blue-400 transition-colors opacity-0 group-hover:opacity-100">
                               {est.send_status === '발송완료' ? '↩' : '✓'}
                             </span>
                           </button>

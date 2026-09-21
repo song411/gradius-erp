@@ -245,7 +245,7 @@ function ProfileCard({ type, side }: { type: string; side: 'A' | 'B' }) {
   return (
     <div className={`border-2 rounded-xl p-3 ${colors}`}>
       <div className="flex items-center gap-2 mb-2">
-        <span className={`text-[10px] font-bold text-white px-2 py-0.5 rounded-full ${badge}`}>{side}</span>
+        <span className={`text-2xs font-bold text-white px-2 py-0.5 rounded-full ${badge}`}>{side}</span>
         <span className="text-xl">{p.emoji}</span>
         <div>
           <span className="text-sm font-extrabold text-gray-800">{type}</span>
@@ -254,12 +254,12 @@ function ProfileCard({ type, side }: { type: string; side: 'A' | 'B' }) {
       </div>
       <div className="flex flex-wrap gap-1 mb-2">
         {p.keywords.map(k => (
-          <span key={k} className="text-[10px] bg-white border border-gray-200 text-gray-600 px-1.5 py-0.5 rounded-full">{k}</span>
+          <span key={k} className="text-2xs bg-white border border-gray-200 text-gray-600 px-1.5 py-0.5 rounded-full">{k}</span>
         ))}
       </div>
       <p className="text-xs text-gray-600 leading-relaxed">{p.desc}</p>
       <div className="mt-2 pt-2 border-t border-white/60">
-        <p className="text-[10px] font-bold text-gray-500 mb-1">🏢 현장 최적 역할</p>
+        <p className="text-2xs font-bold text-gray-500 mb-1">🏢 현장 최적 역할</p>
         <p className="text-xs font-semibold text-gray-700">{p.bestRole}</p>
       </div>
     </div>
@@ -353,7 +353,7 @@ export default function MbtiModal({ onClose }: Props) {
                 </div>
                 <div className="text-right">
                   <p className={`text-4xl font-extrabold ${meta.accent}`}>{meta.pct}%</p>
-                  <p className="text-[10px] text-gray-500">케미 지수</p>
+                  <p className="text-2xs text-gray-500">케미 지수</p>
                 </div>
               </div>
               <div className="mt-3 w-full bg-white/60 rounded-full h-2.5 overflow-hidden">
@@ -382,16 +382,16 @@ export default function MbtiModal({ onClose }: Props) {
               {[{ type: a, prof: profA, color: 'bg-blue-50/80', border: 'border-r border-white/40' },
                 { type: b, prof: profB, color: 'bg-purple-50/80', border: '' }].map(({ type, prof, color, border }) => (
                 <div key={type} className={`p-3 ${color} ${border}`}>
-                  <p className="text-[10px] font-bold text-gray-500 mb-1.5">{type} {prof.emoji} 강점</p>
+                  <p className="text-2xs font-bold text-gray-500 mb-1.5">{type} {prof.emoji} 강점</p>
                   {prof.strengths.map(s => (
                     <div key={s} className="flex items-start gap-1 mb-1">
                       <Star className="h-2.5 w-2.5 text-amber-400 mt-0.5 shrink-0" />
-                      <p className="text-[10px] text-gray-700 leading-snug">{s}</p>
+                      <p className="text-2xs text-gray-700 leading-snug">{s}</p>
                     </div>
                   ))}
-                  <p className="text-[10px] font-bold text-gray-500 mt-2 mb-1">⚠️ 주의</p>
+                  <p className="text-2xs font-bold text-gray-500 mt-2 mb-1">⚠️ 주의</p>
                   {prof.weaknesses.slice(0,2).map(w => (
-                    <p key={w} className="text-[10px] text-gray-500 mb-0.5">• {w}</p>
+                    <p key={w} className="text-2xs text-gray-500 mb-0.5">• {w}</p>
                   ))}
                 </div>
               ))}
@@ -403,9 +403,9 @@ export default function MbtiModal({ onClose }: Props) {
               <div className="grid grid-cols-2 gap-2">
                 {[{ type: a, prof: profA }, { type: b, prof: profB }].map(({ type, prof }) => (
                   <div key={type} className="bg-gray-50 rounded-lg p-2">
-                    <p className="text-[10px] font-bold text-gray-500">{type} {prof.emoji}</p>
+                    <p className="text-2xs font-bold text-gray-500">{type} {prof.emoji}</p>
                     <p className="text-xs font-semibold text-gray-800 mt-0.5">{prof.bestRole}</p>
-                    <p className="text-[10px] text-gray-500 mt-1 leading-snug">{prof.agencyRole.slice(0,50)}...</p>
+                    <p className="text-2xs text-gray-500 mt-1 leading-snug">{prof.agencyRole.slice(0,50)}...</p>
                   </div>
                 ))}
               </div>

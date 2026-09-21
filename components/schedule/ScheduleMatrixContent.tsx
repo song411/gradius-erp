@@ -46,13 +46,13 @@ function StaffChip({ asgn, whole }: { asgn: Assignment; whole: boolean }) {
 
   return (
     <span
-      className={`inline-flex items-center gap-1 text-[11px] leading-none px-1.5 py-1 rounded border ${cls}`}
+      className={`inline-flex items-center gap-1 text-xs leading-none px-1.5 py-1 rounded border ${cls}`}
       title={tip}
     >
-      {asgn.role_type === '팀장' && <span className="text-[9px] font-bold text-indigo-500">팀</span>}
+      {asgn.role_type === '팀장' && <span className="text-2xs font-bold text-indigo-500">팀</span>}
       {cleanStaffName(asgn.staff_name)}
-      {whole && <span className="text-[9px] text-gray-400">전</span>}
-      {asgn.is_payable === false && <span className="text-[9px] text-purple-400">무</span>}
+      {whole && <span className="text-2xs text-gray-400">전</span>}
+      {asgn.is_payable === false && <span className="text-2xs text-purple-400">무</span>}
     </span>
   )
 }
@@ -93,7 +93,7 @@ function Th({
   return (
     <th
       title={tip}
-      className={`bg-gray-100 px-2 py-2 font-bold text-[11px] text-gray-600 tracking-wide
+      className={`bg-gray-100 px-2 py-2 font-bold text-xs text-gray-600 tracking-wide
         border-b-2 border-gray-300 whitespace-nowrap ${width} ${at}`}
     >
       {children}
@@ -292,7 +292,7 @@ export default function ScheduleMatrixContent({
     <div className="flex flex-col h-full min-h-0">
       {/* ── 표 전용 툴바 ── (월 이동·검색·필터는 상위 워크스페이스에 있다) */}
       <div className="shrink-0 px-4 py-2 border-b border-gray-200 bg-white flex items-center gap-2 flex-wrap">
-        <span className="text-[11px] text-gray-400">
+        <span className="text-xs text-gray-400">
           행사 {new Set(visibleRuns.map(r => r.base.inq.id)).size}건 · {visibleRuns.length}개 구간
         </span>
         <label
@@ -413,7 +413,7 @@ export default function ScheduleMatrixContent({
                             <div className="text-sm font-extrabold tabular-nums leading-tight">
                               {r.days === 1 ? md(r.start) : `${md(r.start)}–${md(r.end)}`}
                             </div>
-                            <div className={`text-[10px] ${
+                            <div className={`text-2xs ${
                               r.hasToday ? 'text-blue-100'
                                 : r.days === 1 && dowOf(r.start) === '일' ? 'text-red-500'
                                 : r.days === 1 && dowOf(r.start) === '토' ? 'text-blue-500'
@@ -422,7 +422,7 @@ export default function ScheduleMatrixContent({
                               {r.days === 1 ? dowOf(r.start) : `${dowOf(r.start)}~${dowOf(r.end)} · ${r.days}일`}
                             </div>
                             {r.hasToday && (
-                              <div className="text-[10px] font-bold text-white mt-0.5">오늘 포함</div>
+                              <div className="text-2xs font-bold text-white mt-0.5">오늘 포함</div>
                             )}
                           </td>
 
@@ -437,21 +437,21 @@ export default function ScheduleMatrixContent({
                             >
                               {r.base.inq.event_name || '(행사명 없음)'}
                             </button>
-                            <div className="text-[11px] text-gray-500 mt-0.5">
+                            <div className="text-xs text-gray-500 mt-0.5">
                               {r.base.inq.company_name || '-'}
                             </div>
                             <div className="flex flex-wrap gap-1 mt-1">
-                              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white border border-gray-200 text-gray-500">
+                              <span className="text-2xs px-1.5 py-0.5 rounded-full bg-white border border-gray-200 text-gray-500">
                                 {r.base.inq.status}
                               </span>
                               {r.base.inq.event_time && (
-                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white border border-gray-200 text-gray-500">
+                                <span className="text-2xs px-1.5 py-0.5 rounded-full bg-white border border-gray-200 text-gray-500">
                                   {r.base.inq.event_time}
                                 </span>
                               )}
                               {!r.base.hasFinalEstimate && (
                                 <span
-                                  className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-50 border border-red-200 text-red-600"
+                                  className="text-2xs px-1.5 py-0.5 rounded-full bg-red-50 border border-red-200 text-red-600"
                                   title="확정(최종) 견적이 없어 청구·지급 단가와 필요인원을 산출할 수 없습니다"
                                 >
                                   확정견적 없음
@@ -459,7 +459,7 @@ export default function ScheduleMatrixContent({
                               )}
                               {r.base.unassignedJob > 0 && (
                                 <span
-                                  className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-600 font-semibold"
+                                  className="text-2xs px-1.5 py-0.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-600 font-semibold"
                                   title="배정은 돼 있으나 job_type이 입력되지 않은 인원입니다. 견적 직무가 여러 개라 어느 직무인지 자동으로 정할 수 없어 아래 '직무 미지정' 줄에 모아 두었습니다. 그래서 다른 직무의 '미배정'은 사람이 아예 없다는 뜻이 아닙니다."
                                 >
                                   직무 미지정 {r.base.unassignedJob}명
@@ -467,7 +467,7 @@ export default function ScheduleMatrixContent({
                               )}
                               {r.base.memoCount > 0 && (
                                 <span
-                                  className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-600 inline-flex items-center gap-0.5"
+                                  className="text-2xs px-1.5 py-0.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-600 inline-flex items-center gap-0.5"
                                   title={r.base.latestMemo ?? undefined}
                                 >
                                   <StickyNote className="h-2.5 w-2.5" />
@@ -476,7 +476,7 @@ export default function ScheduleMatrixContent({
                               )}
                               {r.base.discountLabel && (
                                 <span
-                                  className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700"
+                                  className="text-2xs px-1.5 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700"
                                   title={`견적에 ${r.base.discountLabel}이 적용되어 있어 실제 청구액은 품목 단가 합계와 다릅니다`}
                                 >
                                   {r.base.discountLabel}
@@ -485,7 +485,7 @@ export default function ScheduleMatrixContent({
                             </div>
                             <Link
                               href={`/inquiries/${r.base.inq.id}`}
-                              className="inline-block mt-1 text-[10px] text-blue-500 hover:underline"
+                              className="inline-block mt-1 text-2xs text-blue-500 hover:underline"
                             >
                               문의 상세 →
                             </Link>
@@ -499,7 +499,7 @@ export default function ScheduleMatrixContent({
                           {c.job.label}
                           {c.job.approx && (
                             <span
-                              className="ml-1 text-[9px] font-bold text-indigo-500 align-middle"
+                              className="ml-1 text-2xs font-bold text-indigo-500 align-middle"
                               title="배정 직무명이 견적 직무명과 정확히 같지 않아 기본 직무명으로 묶었습니다"
                             >
                               묶음
@@ -507,7 +507,7 @@ export default function ScheduleMatrixContent({
                           )}
                           {c.job.inferred ? (
                             <span
-                              className="ml-1 text-[9px] font-bold text-teal-600 align-middle"
+                              className="ml-1 text-2xs font-bold text-teal-600 align-middle"
                               title={`직무가 입력되지 않은 ${c.job.inferred}명을 이 직무로 넣었습니다. 이 행사의 견적 직무가 하나뿐이라 다른 직무일 수 없습니다.`}
                             >
                               +{c.job.inferred} 자동
@@ -515,7 +515,7 @@ export default function ScheduleMatrixContent({
                           ) : null}
                           {c.job.unmatched && (
                             <span
-                              className="ml-1 text-[9px] font-bold text-gray-400 align-middle"
+                              className="ml-1 text-2xs font-bold text-gray-400 align-middle"
                               title="배정에 job_type이 입력되지 않았거나 견적 직무명과 달라 어느 직무인지 알 수 없는 인원입니다"
                             >
                               미매칭
@@ -523,12 +523,12 @@ export default function ScheduleMatrixContent({
                           )}
                         </div>
                         {c.job.approx && (
-                          <div className="text-[10px] text-indigo-400 leading-tight">
+                          <div className="text-2xs text-indigo-400 leading-tight">
                             {c.job.approx.sources.map(x => `${x.label} ${x.required}`).join(' · ')}
                           </div>
                         )}
                         {c.job.days > 1 && (
-                          <div className="text-[10px] text-gray-400">견적 {c.job.days}일</div>
+                          <div className="text-2xs text-gray-400">견적 {c.job.days}일</div>
                         )}
                       </td>
 
@@ -542,7 +542,7 @@ export default function ScheduleMatrixContent({
 
                       {/* 상태 */}
                       <td className="px-2 py-2 align-top">
-                        <span className={`inline-block text-[10px] font-semibold px-1.5 py-1 rounded border ${sty.chip}`}>
+                        <span className={`inline-block text-2xs font-semibold px-1.5 py-1 rounded border ${sty.chip}`}>
                           {sty.label(c.total, c.job.required)}
                         </span>
                       </td>
@@ -555,7 +555,7 @@ export default function ScheduleMatrixContent({
                           title={`인원배정 화면에서 '${c.job.label}' 배정을 열어 수정합니다`}
                         >
                           {c.total === 0 ? (
-                            <span className="text-[11px] text-gray-300 group-hover:text-blue-500">
+                            <span className="text-xs text-gray-300 group-hover:text-blue-500">
                               배정된 인원이 없습니다 — 배정하러 가기 →
                             </span>
                           ) : (
@@ -576,12 +576,12 @@ export default function ScheduleMatrixContent({
                               {fmt(mny.billTotal)}
                             </div>
                             {breakdownExact(c.job) ? (
-                              <div className="text-[10px] text-gray-400">
+                              <div className="text-2xs text-gray-400">
                                 {fmt(c.job.billRate)} × {c.job.required}명
                                 {c.job.days > 1 ? ` × ${c.job.days}일` : ''}
                               </div>
                             ) : (
-                              <div className="text-[10px] text-gray-400"
+                              <div className="text-2xs text-gray-400"
                                 title="견적 라인이 여러 개이거나 필요인원을 손으로 고쳐서, 합계가 (단가 × 필요 × 일수)와 맞지 않습니다. 합계는 견적 라인 금액을 그대로 더한 값입니다.">
                                 단가 {fmt(c.job.billRate)}
                                 {c.job.approx && c.job.approx.billRange[0] !== c.job.approx.billRange[1]
@@ -610,7 +610,7 @@ export default function ScheduleMatrixContent({
                             {mny.payTotal ? fmt(mny.payTotal) : '-'}
                           </span>
                         </div>
-                        <div className="text-[10px] text-gray-400">
+                        <div className="text-2xs text-gray-400">
                           계획 {mny.planPayTotal ? fmt(mny.planPayTotal) : '-'}
                           {mny.planPayTotal > 0 && mny.payTotal > 0
                             && mny.payTotal !== mny.planPayTotal && (
@@ -641,7 +641,7 @@ export default function ScheduleMatrixContent({
                             </span>)
                           if (notes.length === 0) return null
                           return (
-                            <div className="text-[10px] text-gray-400 leading-tight">
+                            <div className="text-2xs text-gray-400 leading-tight">
                               {notes.map((n, k) => (
                                 <span key={k}>{k > 0 ? ' · ' : ''}{n}</span>
                               ))}
@@ -663,7 +663,7 @@ export default function ScheduleMatrixContent({
                         ) : mny.trust === 'rough' ? (
                           <span className="font-bold text-gray-400" title={mny.reason}>
                             {mny.margin.toFixed(1)}%
-                            <span className="block text-[9px] font-normal text-amber-600">참고용</span>
+                            <span className="block text-2xs font-normal text-amber-600">참고용</span>
                           </span>
                         ) : (
                           <span className={`font-bold ${
@@ -683,7 +683,7 @@ export default function ScheduleMatrixContent({
 
         {/* 범례 */}
         {!busy && visibleRuns.length > 0 && (
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-gray-400">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-400">
             <span className="font-semibold text-gray-500">범례</span>
             <span><span className="inline-block w-2 h-2 rounded-sm bg-green-400 mr-1" />확정</span>
             <span><span className="inline-block w-2 h-2 rounded-sm bg-yellow-400 mr-1" />배정중</span>

@@ -158,19 +158,19 @@ export default function YoutubeModal({ onClose }: { onClose: () => void }) {
                 </a>
                 <p className="text-xs text-gray-500 mt-0.5">{item.channelTitle}</p>
                 <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                  <span className="flex items-center gap-1 text-[11px] text-gray-500">
+                  <span className="flex items-center gap-1 text-xs text-gray-500">
                     <Eye className="h-3 w-3" />{formatNum(item.viewCount)}
                   </span>
-                  <span className="flex items-center gap-1 text-[11px] text-gray-500">
+                  <span className="flex items-center gap-1 text-xs text-gray-500">
                     <ThumbsUp className="h-3 w-3" />{formatNum(item.likeCount)}
                   </span>
-                  <span className="flex items-center gap-1 text-[11px] text-gray-500">
+                  <span className="flex items-center gap-1 text-xs text-gray-500">
                     <MessageCircle className="h-3 w-3" />{formatNum(item.commentCount)}
                   </span>
-                  <span className="flex items-center gap-1 text-[11px] text-indigo-500 font-medium">
+                  <span className="flex items-center gap-1 text-xs text-indigo-500 font-medium">
                     <Users className="h-3 w-3" />구독자 {formatNum(item.subscriberCount)}
                   </span>
-                  <span className="text-[11px] text-gray-300 ml-auto">
+                  <span className="text-xs text-gray-300 ml-auto">
                     {new Date(item.publishedAt).toLocaleDateString('ko-KR')}
                   </span>
                 </div>

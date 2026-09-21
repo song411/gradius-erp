@@ -279,7 +279,7 @@ export default function StaffContent() {
             <SlidersHorizontal className="h-4 w-4" />
             상세 필터
             {activeFilterCount > 0 && (
-              <span className="bg-red-500 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center font-bold">
+              <span className="bg-red-500 text-white rounded-full w-4 h-4 text-2xs flex items-center justify-center font-bold">
                 {activeFilterCount}
               </span>
             )}
@@ -298,14 +298,14 @@ export default function StaffContent() {
         {filters.showFilters && (
           <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 flex flex-wrap gap-3 items-end">
             <div className="flex flex-col gap-1 min-w-[100px]">
-              <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">추천등급</label>
+              <label className="text-2xs font-semibold text-gray-500 uppercase tracking-wider">추천등급</label>
               <Select value={filters.recommend} onChange={e => setFilter('recommend', e.target.value)} className="h-8 text-sm">
                 <option value="">전체</option>
                 {RECOMMEND_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
               </Select>
             </div>
             <div className="flex flex-col gap-1 min-w-[80px]">
-              <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">성별</label>
+              <label className="text-2xs font-semibold text-gray-500 uppercase tracking-wider">성별</label>
               <Select value={filters.gender} onChange={e => setFilter('gender', e.target.value)} className="h-8 text-sm">
                 <option value="">전체</option>
                 <option value="남">남성</option>
@@ -313,7 +313,7 @@ export default function StaffContent() {
               </Select>
             </div>
             <div className="flex flex-col gap-1 min-w-[120px]">
-              <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">영어 능력</label>
+              <label className="text-2xs font-semibold text-gray-500 uppercase tracking-wider">영어 능력</label>
               <Select value={filters.english} onChange={e => setFilter('english', e.target.value)} className="h-8 text-sm">
                 <option value="">전체</option>
                 <option value="하">하 (기초)</option>
@@ -323,7 +323,7 @@ export default function StaffContent() {
               </Select>
             </div>
             <div className="flex flex-col gap-1 min-w-[100px]">
-              <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">최소 평점</label>
+              <label className="text-2xs font-semibold text-gray-500 uppercase tracking-wider">최소 평점</label>
               <Input
                 type="number" min={0} max={20} placeholder="예: 14"
                 value={filters.minScore}
@@ -332,7 +332,7 @@ export default function StaffContent() {
               />
             </div>
             <div className="flex flex-col gap-1 min-w-[120px]">
-              <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">직무 포함</label>
+              <label className="text-2xs font-semibold text-gray-500 uppercase tracking-wider">직무 포함</label>
               <Input
                 placeholder="예: 도우미"
                 value={filters.job}
@@ -406,7 +406,7 @@ export default function StaffContent() {
                             </div>
                             <span className="font-medium hover:text-blue-700">{s.name}</span>
                             {s.certifications?.includes('본사직원') && (
-                              <span className="text-[10px] bg-slate-100 text-slate-500 px-1 rounded">[본사]</span>
+                              <span className="text-2xs bg-slate-100 text-slate-500 px-1 rounded">[본사]</span>
                             )}
                           </div>
                         </td>
@@ -607,7 +607,7 @@ export default function StaffContent() {
                 { key: 'adaptability_score', label: '상황대응' },
               ].map(({ key, label }) => (
                 <div key={key}>
-                  <label className="text-[10px] text-gray-500 mb-1 block">{label} <span className="text-gray-300">/5</span></label>
+                  <label className="text-2xs text-gray-500 mb-1 block">{label} <span className="text-gray-300">/5</span></label>
                   <Input
                     type="number" min={0} max={5} step={0.5}
                     value={(form as Record<string, string>)[key]}

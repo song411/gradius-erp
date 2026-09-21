@@ -122,7 +122,7 @@ export default function ProjectMemoPanel({ inquiryId, compact = false }: Props) 
           </button>
           <button
             onClick={() => { setShowForm(v => !v); setExpanded(true) }}
-            className="flex items-center gap-1 text-[11px] font-medium text-indigo-600 hover:text-indigo-800 bg-white border border-indigo-200 rounded px-2 py-0.5 transition-colors"
+            className="flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-800 bg-white border border-indigo-200 rounded px-2 py-0.5 transition-colors"
           >
             <Plus className="h-3 w-3" />
             추천메모 추가
@@ -148,10 +148,10 @@ export default function ProjectMemoPanel({ inquiryId, compact = false }: Props) 
                   className="text-xs resize-none"
                 />
                 <div className="flex gap-1.5 justify-end">
-                  <Button size="sm" variant="outline" className="h-6 text-[11px] px-2" onClick={() => { setShowForm(false); setContent(''); setAuthor('') }}>
+                  <Button size="sm" variant="outline" className="h-6 text-xs px-2" onClick={() => { setShowForm(false); setContent(''); setAuthor('') }}>
                     취소
                   </Button>
-                  <Button size="sm" className="h-6 text-[11px] px-2" onClick={handleAdd} disabled={saving}>
+                  <Button size="sm" className="h-6 text-xs px-2" onClick={handleAdd} disabled={saving}>
                     {saving ? '저장 중...' : '저장'}
                   </Button>
                 </div>
@@ -164,13 +164,13 @@ export default function ProjectMemoPanel({ inquiryId, compact = false }: Props) 
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-400" />
               </div>
             ) : recMemos.length === 0 && !showForm ? (
-              <p className="text-[11px] text-indigo-400 text-center py-1">등록된 추천 메모가 없습니다</p>
+              <p className="text-xs text-indigo-400 text-center py-1">등록된 추천 메모가 없습니다</p>
             ) : (
               recMemos.map(m => (
                 <div key={m.id} className="bg-white rounded-lg p-2.5 group">
                   <div className="flex items-center gap-1.5 mb-1">
-                    <span className="text-[11px] font-semibold text-indigo-600">추천인: {m.author}</span>
-                    <span className="text-[10px] text-gray-300 ml-auto">{m.created_at?.slice(0, 10)}</span>
+                    <span className="text-xs font-semibold text-indigo-600">추천인: {m.author}</span>
+                    <span className="text-2xs text-gray-300 ml-auto">{m.created_at?.slice(0, 10)}</span>
                     <button
                       onClick={() => handleDelete(m.id)}
                       className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-300 hover:text-red-400 ml-1"
