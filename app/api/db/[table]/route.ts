@@ -15,6 +15,9 @@ const ALLOWED_TABLES = [
   'sim_roles', 'sim_factors', 'sim_guides',
 ]
 
+/** Supabase REST가 한 번에 돌려주는 최대 행 수. 클라이언트는 이 단위로 나눠 읽는다. */
+const MAX_PAGE = 1000
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ table: string }> }
@@ -46,8 +49,22 @@ export async function GET(
   })
 
   if (orFilter) query = query.or(orFilter)
-  query = query.order(orderBy, { ascending })
-  if (limitStr) query = query.limit(Number(limitStr))
+
+  // 2차 정렬로 id를 항상 붙인다.
+  // sort_order처럼 같은 값이 많은 컬럼으로만 정렬하면 순서가 요청마다 달라질 수 있어,
+  // 페이지를 나눠 읽을 때 같은 행이 두 번 오거나 아예 빠진다.
+  query = query.order(orderBy, { ascending }).order('id', { ascending: true })
+
+  // 페이지 구간. Supabase REST는 한 번에 1000행까지만 주므로
+  // (실측 2026-09-21: estimate_items 1052행 중 1000행만 돌아와 각 견적의
+  //  5번째 이후 품목 — 식비·부대비용 — 이 통째로 사라졌다) 나눠서 읽는다.
+  const offset = Number(searchParams.get('offset') || 0)
+  if (limitStr) {
+    const limit = Number(limitStr)
+    query = query.range(offset, offset + limit - 1)
+  } else if (offset > 0) {
+    query = query.range(offset, offset + MAX_PAGE - 1)
+  }
 
   const { data, error, count } = await query
 

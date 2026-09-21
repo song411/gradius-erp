@@ -14,24 +14,57 @@ type QueryOptions = {
   or?: string                             // Supabase or() 표현식
 }
 
+/** Supabase REST가 한 번에 돌려주는 최대 행 수 */
+const PAGE = 1000
+
+/** 안전장치 — 이보다 많으면 무언가 잘못된 것이다 */
+const MAX_ROWS = 100_000
+
+function buildParams(opts: QueryOptions): URLSearchParams {
+  const params = new URLSearchParams()
+  if (opts.select)  params.set('select', opts.select)
+  if (opts.order)   params.set('order', opts.order)
+  if (opts.asc !== undefined) params.set('asc', String(opts.asc))
+  if (opts.or)      params.set('or', opts.or)
+
+  Object.entries(opts.filters   || {}).forEach(([k, v]) => params.set(`eq_${k}`, v))
+  Object.entries(opts.inFilter  || {}).forEach(([k, v]) => params.set(`in_${k}`, v.join(',')))
+  Object.entries(opts.neqFilter || {}).forEach(([k, v]) => params.set(`neq_${k}`, v))
+  return params
+}
+
+async function fetchPage<T>(
+  table: string, opts: QueryOptions, limit: number, offset: number,
+): Promise<T[]> {
+  const params = buildParams(opts)
+  params.set('limit', String(limit))
+  if (offset > 0) params.set('offset', String(offset))
+
+  const res = await fetch(`${BASE}/${table}?${params}`, { cache: 'no-store' })
+  if (!res.ok) { const e = await res.json(); throw new Error(e.error) }
+  const { data } = await res.json()
+  return (data ?? []) as T[]
+}
+
 export const db = {
   // 다건 조회
+  //
+  // limit을 주지 않으면 '전부 달라'는 뜻이다. 그런데 Supabase REST는 한 번에
+  // 1000행까지만 준다. 그래서 그냥 한 번 부르면 조용히 잘린 목록이 돌아온다 —
+  // 에러도 없고 경고도 없다. 실측(2026-09-21): estimate_items 1052행 중 1000행만
+  // 와서, sort_order 오름차순이라 각 견적의 5번째 이후 품목(식비·부대비용)이
+  // 통째로 사라졌다. 저장은 멀쩡했는데 불러오기가 잘리고 있었다.
+  // assignments도 966행이라 곧 같은 일이 일어난다.
   async list<T>(table: string, opts: QueryOptions = {}): Promise<T[]> {
-    const params = new URLSearchParams()
-    if (opts.select)  params.set('select', opts.select)
-    if (opts.order)   params.set('order', opts.order)
-    if (opts.asc !== undefined) params.set('asc', String(opts.asc))
-    if (opts.limit)   params.set('limit', String(opts.limit))
-    if (opts.or)      params.set('or', opts.or)
+    if (opts.limit) return fetchPage<T>(table, opts, opts.limit, 0)
 
-    Object.entries(opts.filters   || {}).forEach(([k, v]) => params.set(`eq_${k}`, v))
-    Object.entries(opts.inFilter  || {}).forEach(([k, v]) => params.set(`in_${k}`, v.join(',')))
-    Object.entries(opts.neqFilter || {}).forEach(([k, v]) => params.set(`neq_${k}`, v))
-
-    const res = await fetch(`${BASE}/${table}?${params}`, { cache: 'no-store' })
-    if (!res.ok) { const e = await res.json(); throw new Error(e.error) }
-    const { data } = await res.json()
-    return data as T[]
+    const out: T[] = []
+    for (let offset = 0; offset < MAX_ROWS; offset += PAGE) {
+      const page = await fetchPage<T>(table, opts, PAGE, offset)
+      out.push(...page)
+      if (page.length < PAGE) break   // 마지막 장
+    }
+    return out
   },
 
   // 단건 조회 (id로)
