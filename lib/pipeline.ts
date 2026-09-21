@@ -29,18 +29,33 @@ export function isDead(inq: Inquiry): boolean {
   return (DEAD_STATUSES as readonly string[]).includes(inq.status)
 }
 
+/** 계약이 된 건. NON_COUNTABLE(체결 전)의 여집합이므로 목록을 따로 들지 않는다 —
+ *  두 벌로 적어두면 상태가 하나 늘어날 때 한쪽만 고쳐져 갈라진다. */
+export function isWon(inq: Inquiry): boolean {
+  return !isPreContract(inq) && !isDead(inq)
+}
+
 // ─── ② 단계 ───────────────────────────────────────────────
 // 단계는 따로 저장하지 않는다. 이미 있는 데이터(견적 유무, 발송 여부,
 // 상태)에서 끌어낸다. 저장하면 실제 데이터와 어긋나는 순간이 반드시 온다.
-export type PipelineStage = '접수' | '견적작성' | '발송대기' | '결론'
+export type PipelineStage = '접수' | '견적작성' | '체결 전' | '체결' | '미체결'
 
-export const PIPELINE_STAGES: PipelineStage[] = ['접수', '견적작성', '발송대기', '결론']
+export const PIPELINE_STAGES: PipelineStage[] =
+  ['접수', '견적작성', '체결 전', '체결', '미체결']
 
 export const STAGE_DESC: Record<PipelineStage, string> = {
   '접수':     '문의는 들어왔고 견적서는 아직',
   '견적작성': '견적서는 썼고 아직 안 보냄',
-  '발송대기': '보냈고 답을 기다리는 중',
-  '결론':     '미체결 · 보류 · 취소',
+  '체결 전':  '견적을 보냈고 답을 기다리는 중',
+  '체결':     '계약이 된 건',
+  '미체결':   '미체결 · 보류 · 취소',
+}
+
+/** 아직 살아 있는 건 — 집계에서 '진행 중'으로 세는 범위 */
+export const LIVE_STAGES: PipelineStage[] = ['접수', '견적작성', '체결 전']
+
+export function isLiveStage(stage: PipelineStage): boolean {
+  return LIVE_STAGES.includes(stage)
 }
 
 export function isSent(est: Estimate): boolean {
@@ -48,8 +63,9 @@ export function isSent(est: Estimate): boolean {
 }
 
 export function stageOf(inq: Inquiry, ests: Estimate[]): PipelineStage {
-  if (isDead(inq))        return '결론'
-  if (ests.some(isSent))  return '발송대기'
+  if (isWon(inq))         return '체결'
+  if (isDead(inq))        return '미체결'
+  if (ests.some(isSent))  return '체결 전'
   if (ests.length > 0)    return '견적작성'
   return '접수'
 }
@@ -64,8 +80,9 @@ export const STALE_RULES: Record<
 > = {
   '접수':     { warn: 2, alert: 4, label: '견적 없음' },
   '견적작성': { warn: 1, alert: 2, label: '미발송' },
-  '발송대기': { warn: 3, alert: 5, label: '무응답' },
-  '결론':     null,   // 끝난 건은 재촉하지 않는다
+  '체결 전':  { warn: 3, alert: 5, label: '무응답' },
+  '체결':     null,   // 끝난 건은 재촉하지 않는다
+  '미체결':   null,
 }
 
 export type Signal = 'ok' | 'warn' | 'alert'
@@ -110,7 +127,7 @@ function stallFrom(
   if (stage === '견적작성') {
     return { from: latest(ests.map(e => kstDay(e.updated_at || e.created_at))), approx: false }
   }
-  if (stage === '발송대기') {
+  if (stage === '체결 전') {
     const sent = ests.filter(isSent)
     // 여러 안(A안/B안)을 보냈으면 마지막으로 보낸 때부터 센다
     const real = latest(sent.map(e => (e.sent_at ? kstDay(e.sent_at) : null)))
@@ -200,7 +217,87 @@ function pickNote(inq: Inquiry, memos: MemoLike[]): CardNote | null {
   return null
 }
 
-// ─── ⑤ 카드 ───────────────────────────────────────────────
+// ─── ⑤ 언제·무슨 일인가 ──────────────────────────────────
+// 수주 판단은 '얼마 남나'보다 '사람을 넣을 수 있나'에서 갈린다.
+// 직무·인원·시간·지급단가가 한 줄에 같이 보여야 즉답이 된다.
+
+export interface CardWhen {
+  /** 05/05 또는 05/05~05/07 */
+  label: string | null
+  /** 며칠짜리인가 (하루면 1) */
+  days: number
+  /** 자유 입력 그대로 — '18:00 ~ 익일 08:00' */
+  time: string | null
+  /** 밤을 넘기는 일인가. 크루 구하기와 단가가 달라진다 */
+  night: boolean
+  /** 날짜가 아직 없을 때 대신 적어둔 것 ('10월 예정') */
+  memo: string | null
+}
+
+/** 밤일인지 가려낸다. event_time은 자유 입력이라 형식을 믿을 수 없다.
+ *  확실한 단서만 본다 — 애매하면 밤이 아니라고 한다(거짓 경고가 더 나쁘다). */
+export function isNightTime(raw: string | null | undefined): boolean {
+  const t = (raw ?? '').trim()
+  if (!t) return false
+  if (/익일|야간|심야|철야/.test(t)) return true
+
+  const hours = [...t.matchAll(/(\d{1,2})\s*:\s*\d{2}/g)].map(m => Number(m[1]))
+  if (hours.length === 0) return false
+  const [start, ...rest] = hours
+  const end = rest.at(-1)
+
+  // 기준은 '늦게 시작하느냐'가 아니라 '밤을 넘기느냐'다.
+  // 시작 시각만 보면 19:00~22:00 같은 저녁 행사가 야간으로 잡힌다(실측 오판).
+  if (start <= 4) return true                          // 새벽에 시작
+  if (end !== undefined && end < start) return true    // 끝이 시작보다 이르면 자정을 넘긴 것
+  return false
+}
+
+export function cardWhen(inq: Inquiry): CardWhen {
+  const start = inq.event_start ? kstDay(inq.event_start) : null
+  const end   = inq.event_end   ? kstDay(inq.event_end)   : null
+
+  // 운영일을 따로 고른 행사는 그 개수가 진짜 일수다 (event_dates_model 참고)
+  const picked = Array.isArray(inq.event_dates) ? inq.event_dates.filter(Boolean) : []
+  const days = picked.length > 0
+    ? picked.length
+    : start && end ? Math.max(1, dayDiff(start, end) + 1) : start ? 1 : 0
+
+  const short = (d: string) => d.substring(5).replace('-', '/')
+  const label = !start ? null
+    : end && end !== start ? `${short(start)}~${short(end)}`
+    : short(start)
+
+  return {
+    label,
+    days,
+    time: inq.event_time?.trim() || null,
+    night: isNightTime(inq.event_time),
+    // 날짜가 없는 건이 30%다. 그때 date_memo까지 안 보면 카드가 '일정 미정'으로만 남는다.
+    memo: !start ? (inq.date_memo?.trim() || null) : null,
+  }
+}
+
+/** 현장 준비물. '미정'만 적힌 칸은 카드에서 뺀다 — 셋 다 미정이면 줄 자체가 군더더기다.
+ *  'x'는 없다는 뜻으로 쓰고 있어 읽을 수 있게 바꾼다. */
+export function onsiteBits(inq: Inquiry): string[] {
+  const norm = (v?: string | null) => {
+    const t = (v ?? '').trim()
+    if (!t || t === '미정' || t === '-') return null
+    if (/^x$/i.test(t)) return '없음'
+    // 입력이 한 칸씩 밀린 건이 있다 — 식사에 '주차 :', 주차에 '특이사항:'.
+    // 라벨만 남은 값은 내용이 없는 것이니 카드에 올리지 않는다.
+    if (/^[^:]{0,10}:$/.test(t)) return null
+    return t
+  }
+  return [
+    ['복장', norm(inq.attire)],
+    ['식사', norm(inq.meal)],
+    ['주차', norm(inq.parking)],
+  ].filter(([, v]) => v).map(([k, v]) => `${k} ${v}`)
+}
+
+// ─── ⑥ 카드 ───────────────────────────────────────────────
 export interface PipelineCard {
   inq: Inquiry
   stage: PipelineStage
@@ -227,10 +324,16 @@ export interface PipelineCard {
   lastNote: CardNote | null
   /** 이 건에 쌓인 영업활동 기록 수 */
   noteCount: number
+  /** 언제 하는 일인가 */
+  when: CardWhen
+  /** 최신 견적의 수익률 (%). 견적이 없으면 null */
+  profitRate: number | null
+  /** 현장 준비물 — 복장·식사·주차 중 실제로 정해진 것만 */
+  onsite: string[]
 }
 
 const STALL_VERB: Record<PipelineStage, string> = {
-  '접수': '접수', '견적작성': '작성', '발송대기': '발송', '결론': '',
+  '접수': '접수', '견적작성': '작성', '체결 전': '발송', '체결': '', '미체결': '',
 }
 
 export function buildCard(
@@ -277,13 +380,24 @@ export function buildCard(
     overdue: !!inq.next_action_at && dayDiff(kstDay(inq.next_action_at), today()) > 0,
     dday,
     expired,
-    concludedOn: dead ? kstDay(inq.updated_at || inq.created_at) : null,
+    // 체결·미체결 모두 '언제 끝났나'가 필요하다. 최근 것만 펼치고
+    // 이번 달 승률을 세는 기준이 이 날짜다.
+    concludedOn: isLiveStage(stage) ? null : kstDay(inq.updated_at || inq.created_at),
     lastNote: pickNote(inq, memos),
     noteCount: memos.length,
+    when: cardWhen(inq),
+    // 43.18% 같은 소수점은 카드에서 읽히지 않는다. 판단에도 소수점은 필요 없다.
+    profitRate: headline?.profit_rate != null ? Math.round(headline.profit_rate) : null,
+    onsite: onsiteBits(inq),
   }
 }
 
-/** 보드에 올릴 카드 전부. 체결된 건은 여기서 빠진다 (운영 캘린더 몫). */
+/** 보드에 올릴 카드 전부.
+ *
+ *  체결된 건도 올린다. 실패만 쌓이는 화면은 아무도 매일 열지 않는다 —
+ *  딴 건이 보여야 보드가 성과판 노릇을 한다. 대신 금액 집계에서는
+ *  살아 있는 단계만 센다(isLiveStage). 체결 금액이 '진행 중 견적 합계'에
+ *  섞이면 그 숫자는 아무 뜻도 없어진다. */
 export function buildBoard(
   inquiries: Inquiry[], estimates: Estimate[], memos: MemoLike[] = [],
 ): PipelineCard[] {
@@ -298,13 +412,11 @@ export function buildBoard(
   // 최신이 앞으로 (조회 순서를 믿지 않는다)
   byInq.forEach(list => list.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')))
 
-  return inquiries
-    .filter(isPreContract)
-    .map(inq => buildCard(inq, estimates, byInq.get(inq.id) ?? []))
+  return inquiries.map(inq => buildCard(inq, estimates, byInq.get(inq.id) ?? []))
 }
 
 /** 급한 것이 위로. 기한 지난 할 일 → 신호등 → 오래 멈춘 순.
- *  결론 칸만은 최근에 끝난 것이 위로 온다 — 거기선 '오래됨'이 급한 게 아니다. */
+ *  끝난 건(체결·미체결)은 최근 것이 위로 온다 — 거기선 '오래됨'이 급한 게 아니다. */
 export function sortCards(cards: PipelineCard[]): PipelineCard[] {
   const rank: Record<Signal, number> = { alert: 0, warn: 1, ok: 2 }
   return [...cards].sort((a, b) => {
@@ -319,21 +431,50 @@ export function sortCards(cards: PipelineCard[]): PipelineCard[] {
 export function dueToday(cards: PipelineCard[]): PipelineCard[] {
   const t = today()
   return cards
-    .filter(c => !isDead(c.inq) && c.inq.next_action_at && dayDiff(kstDay(c.inq.next_action_at), t) >= 0)
+    .filter(c => isLiveStage(c.stage) && c.inq.next_action_at && dayDiff(kstDay(c.inq.next_action_at), t) >= 0)
     .sort((a, b) => (a.inq.next_action_at || '').localeCompare(b.inq.next_action_at || ''))
 }
 
-// ─── ⑥ 결론 칸 ────────────────────────────────────────────
-/** 끝난 건은 계속 쌓인다 (실측 2026-09-21 기준 108건). 전부 펼치면
- *  결론 칸이 화면을 뒤덮어 살아 있는 세 칸이 안 읽힌다. 최근 것만 펼친다. */
+// ─── ⑦ 끝난 건 ────────────────────────────────────────────
+/** 끝난 건은 계속 쌓인다 (실측 2026-09-21: 체결 178건, 미체결 111건).
+ *  전부 펼치면 살아 있는 칸이 안 읽힌다. 최근 것만 펼친다. */
 export const RECENT_CONCLUDED_DAYS = 30
+
+/** 이번 달 성적. 주간 회의에서 제일 먼저 묻는 숫자다. */
+export function winRate(cards: PipelineCard[], days = RECENT_CONCLUDED_DAYS) {
+  const t = today()
+  const recent = cards.filter(c => c.concludedOn && dayDiff(c.concludedOn, t) <= days)
+  const won  = recent.filter(c => c.stage === '체결')
+  const lost = recent.filter(c => c.stage === '미체결')
+  const total = won.length + lost.length
+  return {
+    won:  won.length,
+    lost: lost.length,
+    wonAmount: won.reduce((s, c) => s + c.amount, 0),
+    rate: total > 0 ? Math.round((won.length / total) * 100) : null,
+  }
+}
+
+/** 좁은 카드에서 149,797,000원은 읽히지 않는다. 읽을 수 있는 자리까지만 줄인다.
+ *  반올림한 값이므로 정확한 금액이 필요한 화면에서는 쓰지 않는다. */
+export function shortKRW(v: number | null | undefined): string {
+  const n = Math.round(v ?? 0)
+  if (n === 0) return '0원'
+  if (n >= 100_000_000) {
+    const eok = Math.floor(n / 100_000_000)
+    const man = Math.round((n % 100_000_000) / 10_000)
+    return man > 0 ? `${eok}억 ${man.toLocaleString('ko-KR')}만` : `${eok}억`
+  }
+  if (n >= 10_000) return `${Math.round(n / 10_000).toLocaleString('ko-KR')}만`
+  return `${n.toLocaleString('ko-KR')}원`
+}
 
 export function isRecentlyConcluded(card: PipelineCard, t = today()): boolean {
   if (!card.concludedOn) return true
   return dayDiff(card.concludedOn, t) <= RECENT_CONCLUDED_DAYS
 }
 
-// ─── ⑦ 미체결 사유 ────────────────────────────────────────
+// ─── ⑧ 미체결 사유 ────────────────────────────────────────
 /** 왜 졌는지를 남겨두면 다음 견적의 근거가 된다.
  *  자유 입력만 두면 아무도 안 적는다 — 고르게 만든다. */
 export const LOST_REASONS = [

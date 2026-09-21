@@ -16,7 +16,7 @@ import { db } from '@/lib/supabase/api'
 import { formatKRW } from '@/lib/utils'
 import {
   LOST_REASONS, DEAD_STATUSES, CONTACT_KINDS, ACTIVITY_TYPE,
-  isDead, splitActivity, type PipelineCard, type ContactKind,
+  isDead, splitActivity, cleanNote, type PipelineCard, type ContactKind,
 } from '@/lib/pipeline'
 import type { InquiryStatus, ProjectMemo } from '@/lib/supabase/types'
 import {
@@ -27,7 +27,7 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import {
-  Phone, Mail, Users, MessageSquare, ExternalLink, Trash2, Flag, CalendarClock,
+  Phone, Mail, Users, MessageSquare, ExternalLink, Trash2, Flag, CalendarClock, FileText,
 } from 'lucide-react'
 
 const KIND_ICON: Record<string, React.ReactNode> = {
@@ -38,6 +38,22 @@ const KIND_ICON: Record<string, React.ReactNode> = {
 }
 
 const AUTHOR_KEY = 'gradius.pipeline.author'
+
+/** 요약표 한 칸. 값이 없으면 줄을 만들지 않는다 — 빈 라벨만 늘어놓으면 표가 시끄럽다. */
+function Field({ label, value, href }: { label: string; value?: string | null; href?: string }) {
+  const v = (value ?? '').trim()
+  if (!v || v === 'null') return null
+  return (
+    <div className="min-w-0">
+      <dt className="text-[10px] text-gray-400">{label}</dt>
+      <dd className="truncate text-xs font-medium text-gray-800" title={v}>
+        {href
+          ? <a href={href} className="text-blue-600 hover:underline">{v}</a>
+          : v}
+      </dd>
+    </div>
+  )
+}
 
 interface Props {
   card: PipelineCard
@@ -183,6 +199,7 @@ export default function CardDrawer({ card, onClose, onChanged }: Props) {
   }
 
   const dead = isDead(inq)
+  const won  = card.stage === '체결'
 
   return (
     <Dialog open onClose={onClose} className="max-w-2xl">
@@ -199,20 +216,106 @@ export default function CardDrawer({ card, onClose, onChanged }: Props) {
       </DialogHeader>
 
       <DialogContent className="space-y-6">
-        {/* 요약 */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-600 bg-gray-50 rounded-lg px-3 py-2">
-          <span className="font-medium text-gray-800">{card.stage}</span>
-          {card.stallText && <span>{card.stallText}</span>}
-          {inq.event_start && <span>{inq.event_start.substring(0, 10)}</span>}
-          {!!inq.required_staff && <span>{inq.required_staff}명</span>}
-          {card.amount > 0 && <span>{formatKRW(card.amount)}</span>}
-          <Link
-            href={`/inquiries/${inq.id}`}
-            className="ml-auto inline-flex items-center gap-1 text-blue-600 hover:underline"
-          >
-            문의 상세 <ExternalLink className="h-3 w-3" />
-          </Link>
+        {/* 요약 — 카드에서 잘린 값까지 여기서는 다 보여준다 */}
+        <div className="rounded-lg bg-gray-50 px-3 py-2.5 text-xs text-gray-600">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="font-semibold text-gray-900">{card.stage}</span>
+            {card.stallText && <span>{card.stallText}</span>}
+            {card.dday != null && (
+              <span className={card.dday >= 0 ? 'font-medium text-orange-600' : 'text-gray-400'}>
+                {card.dday >= 0 ? `행사까지 D-${card.dday}` : `행사일 ${-card.dday}일 지남`}
+              </span>
+            )}
+            <div className="ml-auto flex items-center gap-3">
+              <Link
+                href={`/estimates?search=${encodeURIComponent(inq.company_name || '')}`}
+                className="inline-flex items-center gap-1 text-blue-600 hover:underline"
+              >
+                견적 <ExternalLink className="h-3 w-3" />
+              </Link>
+              <Link
+                href={`/inquiries/${inq.id}`}
+                className="inline-flex items-center gap-1 text-blue-600 hover:underline"
+              >
+                문의 상세 <ExternalLink className="h-3 w-3" />
+              </Link>
+            </div>
+          </div>
+
+          <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 border-t border-gray-200 pt-2 sm:grid-cols-3">
+            <Field label="일정" value={
+              (card.when.label ?? card.when.memo ?? '미정')
+              + (card.when.days > 1 ? ` (${card.when.days}일)` : '')} />
+            <Field label="시간" value={card.when.time + (card.when.night ? ' · 야간' : '')} />
+            <Field label="직무" value={inq.service_type} />
+            <Field label="인원" value={inq.required_staff ? `${inq.required_staff}명` : null} />
+            <Field label="장소" value={inq.location} />
+            <Field label="담당자" value={inq.contact_name} />
+            <Field label="연락처" value={inq.phone} href={
+              inq.phone ? `tel:${inq.phone.replace(/[^0-9+]/g, '')}` : undefined} />
+            <Field label="청구" value={card.amount > 0 ? formatKRW(card.amount) : null} />
+            <Field label="수익률" value={card.profitRate != null ? `${card.profitRate}%` : null} />
+            <Field label="지급단가" value={inq.pay_detail} />
+            {card.onsite.map(bit => {
+              const [k, ...rest] = bit.split(' ')
+              return <Field key={k} label={k} value={rest.join(' ')} />
+            })}
+          </dl>
         </div>
+
+        {/* 견적 — 여러 안을 냈으면 어느 게 최종인지가 중요하다 */}
+        {card.estimates.length > 0 && (
+          <section>
+            <h3 className="mb-2 text-sm font-semibold text-gray-900">
+              견적 {card.estimates.length}건
+            </h3>
+            <ul className="space-y-1">
+              {card.estimates.map(est => (
+                <li key={est.id}
+                  className="flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded-lg bg-gray-50 px-3 py-1.5 text-xs">
+                  <span className="font-semibold text-gray-800">{est.version_label || 'A안'}</span>
+                  {est.is_final && (
+                    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">
+                      최종
+                    </span>
+                  )}
+                  <span className="text-gray-700">{formatKRW(est.total_price)}</span>
+                  <span className="ml-auto text-gray-400">
+                    {est.send_status === '발송완료'
+                      ? `발송 ${est.sent_at?.substring(0, 10) ?? '일자 미상'}${est.send_method ? ` · ${est.send_method}` : ''}`
+                      : '미발송'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {/* 고객이 보낸 원문 — 다시 견적 낼 때 제일 먼저 다시 읽는 글이다 */}
+        {(cleanNote(inq.notes) || cleanNote(inq.consult_notes)) && (
+          <section>
+            <h3 className="flex items-center gap-1.5 text-sm font-semibold text-gray-900 mb-2">
+              <FileText className="h-4 w-4 text-gray-500" />
+              문의 원문
+            </h3>
+            {cleanNote(inq.notes) && (
+              <div className="rounded-lg border border-gray-200 bg-white px-3 py-2">
+                <p className="whitespace-pre-line break-words text-sm leading-relaxed text-gray-800">
+                  {cleanNote(inq.notes)}
+                </p>
+                <p className="mt-1.5 text-[10px] text-gray-400">고객이 보낸 내용</p>
+              </div>
+            )}
+            {cleanNote(inq.consult_notes) && (
+              <div className="mt-2 rounded-lg bg-blue-50 px-3 py-2">
+                <p className="whitespace-pre-line break-words text-sm leading-relaxed text-gray-800">
+                  {cleanNote(inq.consult_notes)}
+                </p>
+                <p className="mt-1.5 text-[10px] text-blue-500">상담 내용 (내부)</p>
+              </div>
+            )}
+          </section>
+        )}
 
         {/* ① 다음 할 일 */}
         <section>
@@ -318,7 +421,11 @@ export default function CardDrawer({ card, onClose, onChanged }: Props) {
             결론
           </h3>
 
-          {dead ? (
+          {won ? (
+            <p className="text-sm text-gray-700">
+              계약된 건입니다. 이후 운영은 운영 캘린더에서 봅니다.
+            </p>
+          ) : dead ? (
             <div className="flex items-center gap-3 text-sm">
               <span className="text-gray-700">
                 {inq.status}

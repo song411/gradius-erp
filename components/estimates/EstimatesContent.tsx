@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { db } from '@/lib/supabase/api'
 import { formatKRW, calcProfitRate } from '@/lib/utils'
@@ -63,12 +64,20 @@ const DEAD_STATUSES = ['미체결', '보류', '취소']
 const SEND_METHODS = ['문자', '이메일', '카카오톡', '이미지', '직접전달', '기타']
 
 export default function EstimatesContent() {
+  // 영업 보드에서 '견적' 링크로 넘어올 때 그 업체만 바로 보이게 한다.
+  // 35개 그룹 속에서 다시 찾아 치게 만들면 링크를 만든 의미가 없다.
+  const searchParams = useSearchParams()
+  const initialSearch = searchParams.get('search') || ''
+  const initialTab = TABS.some(t => t.key === searchParams.get('tab'))
+    ? (searchParams.get('tab') as TabKey)
+    : initialSearch ? 'all' : 'pending_inquiry'
+
   const [estimates, setEstimates] = useState<EstimateRow[]>([])
   // 견적 없는 접수 문의 (견적 대기)
   const [pendingInquiries, setPendingInquiries] = useState<Inquiry[]>([])
   const [loading, setLoading] = useState(true)
-  const [searchText, setSearchText] = useState('')
-  const [activeTab, setActiveTab] = useState<TabKey>('pending_inquiry')
+  const [searchText, setSearchText] = useState(initialSearch)
+  const [activeTab, setActiveTab] = useState<TabKey>(initialTab)
 
   // 빌더 모달
   const [showBuilder, setShowBuilder] = useState(false)

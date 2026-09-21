@@ -109,6 +109,8 @@ export interface Inquiry {
   service_type?: string
   required_staff?: number
   expected_pay?: number
+  /** 지급단가 메모 (예: '팀장 22 / 서브 17'). 숫자가 아니라 사람이 적는 글이다. */
+  pay_detail?: string | null
   status: InquiryStatus
   notes?: string
   memo?: string
