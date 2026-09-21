@@ -8,7 +8,7 @@ import {
   LayoutDashboard, MessageSquare, FileText, Users, UserCheck,
   Calculator, CreditCard, ClipboardList, Search, TrendingUp,
   ChevronLeft, ChevronRight, Building2, Handshake, FlaskConical, ShieldAlert, ShieldCheck,
-  CalendarRange
+  CalendarRange, Target
 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -17,6 +17,7 @@ const navItems = [
   { href: '/', label: '대시보드', icon: LayoutDashboard },
   { href: '/inquiries', label: '문의 관리', icon: MessageSquare },
   { href: '/estimates', label: '견적 관리', icon: FileText },
+  { href: '/pipeline', label: '영업 보드', icon: Target },
   { href: '/closings', label: '체결 관리', icon: Handshake },
   { href: '/assignments', label: '인원 배정', icon: UserCheck },
   { href: '/schedule', label: '운영 캘린더', icon: CalendarRange },

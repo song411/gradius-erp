@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
 import {
-  Plus, Trash2, MessageSquare, Users, Star, ChevronDown, ChevronUp, StickyNote
+  Plus, Trash2, MessageSquare, Users, Star, ChevronDown, ChevronUp, StickyNote, Phone
 } from 'lucide-react'
 
 const MEMO_TYPES: { key: ProjectMemoType; label: string; icon: React.ReactNode; placeholder: string }[] = [
@@ -24,6 +24,14 @@ const MEMO_TYPES: { key: ProjectMemoType; label: string; icon: React.ReactNode; 
     label: '운영메모',
     icon: <StickyNote className="h-3.5 w-3.5" />,
     placeholder: '운영 관련 참고사항, 주의사항 등을 입력하세요',
+  },
+  {
+    key: '영업활동',
+    label: '영업활동',
+    icon: <Phone className="h-3.5 w-3.5" />,
+    // 영업 보드(/pipeline)가 '[통화] ...' 형태로 쌓는 접촉 이력과 같은 자리다.
+    // 여기서도 읽고 쓸 수 있어야 문의 상세만 열어본 사람이 흐름을 놓치지 않는다.
+    placeholder: '예:\n[통화] 담당자 부재, 내일 오전 재연락\n[메일·문자] 수정 견적 발송',
   },
   {
     key: '피드백',

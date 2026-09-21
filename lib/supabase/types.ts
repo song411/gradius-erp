@@ -119,6 +119,11 @@ export interface Inquiry {
   meal?: string
   parking?: string
   consult_notes?: string
+  /** 영업 보드: 다음에 무엇을 하기로 했나. 사람이 적는 값이고 계산에 쓰지 않는다. */
+  next_action?: string | null
+  next_action_at?: string | null
+  /** 영업 보드: 미체결·보류·취소로 끝난 이유 */
+  lost_reason?: string | null
   updated_at: string
 }
 
@@ -381,7 +386,7 @@ export interface EventExpense {
   updated_at?: string
 }
 
-export type ProjectMemoType = '인원추천' | '운영메모' | '피드백'
+export type ProjectMemoType = '인원추천' | '운영메모' | '피드백' | '영업활동'
 
 /** 운영 캘린더의 날짜 메모 — 행사에 딸리지 않고 날짜 자체에 붙는다.
  *  보기 전용이며 어떤 계산에도 들어가지 않는다. */
