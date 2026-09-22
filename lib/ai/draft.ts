@@ -48,7 +48,37 @@ export interface EstimateDraft {
   warnings: string[]
 }
 
-export type Draft = InquiryDraft | EstimateDraft
+export interface AssignmentRow {
+  staff_id?: string
+  staff_name: string
+  job_type: string
+  /** 지급 단가 (원/일) */
+  pay_rate: number
+  /** 며칠. 날짜를 고른 사람만 work_dates.length 로 따라온다 */
+  work_days: number
+  /** 어느 날 — 비우면 '기간 전체'로 본다 */
+  work_dates?: string[]
+  role_type?: string
+  phone?: string
+  /** 이 사람을 왜 넣었는지 */
+  why?: string
+  /** 사람이 확인해야 할 것 */
+  warn?: string
+}
+
+export interface AssignmentDraft {
+  kind: 'assignment'
+  inquiry_id: string
+  company_name: string
+  event_name: string
+  event_start?: string
+  event_end?: string
+  rows: AssignmentRow[]
+  totals: { people: number; payTotal: number }
+  warnings: string[]
+}
+
+export type Draft = InquiryDraft | EstimateDraft | AssignmentDraft
 
 // ─── 견적 초안 ────────────────────────────────────────────
 

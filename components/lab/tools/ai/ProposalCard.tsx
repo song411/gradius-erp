@@ -54,6 +54,8 @@ export default function ProposalCard({ draft }: { draft: Draft }) {
 
   const isInquiry = draft.kind === 'inquiry'
   const f = isInquiry ? (draft.fields as Record<string, unknown>) : null
+  const title = draft.kind === 'inquiry' ? '문의 접수 초안'
+    : draft.kind === 'estimate' ? '견적서 초안' : '배정 초안'
 
   return (
     <motion.div
@@ -63,7 +65,7 @@ export default function ProposalCard({ draft }: { draft: Draft }) {
     >
       <div className="mb-2 flex items-center gap-2">
         <span className="font-mono text-2xs tracking-wider text-amber-300">
-          ▸ {isInquiry ? '문의 접수 초안' : '견적서 초안'}
+          ▸ {title}
         </span>
         {isInquiry && (
           <span className="rounded border border-amber-400/30 px-1.5 py-0.5 font-mono text-2xs text-amber-300/80">
@@ -132,15 +134,64 @@ export default function ProposalCard({ draft }: { draft: Draft }) {
         </div>
       )}
 
+      {/* ── 배정 초안 ── */}
+      {draft.kind === 'assignment' && (
+        <div className="text-xs">
+          <p className="mb-1.5 text-slate-300">
+            {draft.company_name} · {draft.event_name}
+          </p>
+          <div className="overflow-x-auto rounded-lg border border-amber-400/15">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="bg-amber-400/10 text-amber-300/90">
+                  <th className="px-2 py-1 text-left font-medium">이름</th>
+                  <th className="px-2 py-1 text-left font-medium">직무</th>
+                  <th className="px-2 py-1 text-right font-medium">지급단가</th>
+                  <th className="px-2 py-1 text-right font-medium">일수</th>
+                  <th className="px-2 py-1 text-right font-medium">지급예정</th>
+                </tr>
+              </thead>
+              <tbody>
+                {draft.rows.map((r, i) => (
+                  <tr key={i} className="border-t border-amber-400/10 text-slate-300">
+                    <td className="whitespace-nowrap px-2 py-1">
+                      {r.staff_name}{r.role_type === '팀장' && ' (팀장)'}
+                      {r.warn && <span className="ml-1 text-rose-400">⚠</span>}
+                    </td>
+                    <td className="px-2 py-1">{r.job_type}</td>
+                    <td className="px-2 py-1 text-right">{won(r.pay_rate)}</td>
+                    <td className="px-2 py-1 text-right">{r.work_days}일</td>
+                    <td className="px-2 py-1 text-right">{won(r.pay_rate * r.work_days)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-slate-300">
+            <span>인원 <b className="text-slate-100">{draft.totals.people}명</b></span>
+            <span>지급 예정 <b className="text-slate-100">{won(draft.totals.payTotal)}</b></span>
+            <span className="text-slate-500">상태: 배정중</span>
+          </div>
+        </div>
+      )}
+
       {/* 경고 — 비어 있는 칸 / 이익률 미달 */}
       {((isInquiry && draft.missing.length > 0) ||
-        (draft.kind === 'estimate' && draft.warnings.length > 0)) && (
+        (draft.kind === 'estimate' && draft.warnings.length > 0) ||
+        (draft.kind === 'assignment' && (draft.warnings.length > 0 || draft.rows.some(r => r.warn)))) && (
         <div className="mt-2 flex gap-1.5 rounded-lg border border-rose-400/25 bg-rose-400/[0.06] px-2.5 py-1.5 text-2xs text-rose-300">
           <AlertTriangle className="mt-[1px] h-3 w-3 shrink-0" />
           <div>
-            {isInquiry
-              ? `비어 있는 칸: ${draft.missing.join(', ')} — 저장 후 문의 화면에서 채우셔야 합니다.`
-              : draft.kind === 'estimate' && draft.warnings.map((w, i) => <p key={i}>{w}</p>)}
+            {isInquiry && `비어 있는 칸: ${draft.missing.join(', ')} — 저장 후 문의 화면에서 채우셔야 합니다.`}
+            {draft.kind === 'estimate' && draft.warnings.map((w, i) => <p key={i}>{w}</p>)}
+            {draft.kind === 'assignment' && (
+              <>
+                {draft.rows.filter(r => r.warn).map((r, i) => (
+                  <p key={`r${i}`}>{r.staff_name} — {r.warn}</p>
+                ))}
+                {draft.warnings.map((w, i) => <p key={`w${i}`}>{w}</p>)}
+              </>
+            )}
           </div>
         </div>
       )}

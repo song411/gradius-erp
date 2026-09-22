@@ -18,7 +18,8 @@ import {
   GRADE_DESC, STATUS_DESC, type Grade, type PoolStatus,
 } from '@/lib/grading'
 import { parseInquiryText, calcParseConfidence } from '@/lib/inquiryParser'
-import { buildEstimateDraft, buildInquiryDraft, type Draft } from '@/lib/ai/draft'
+import { buildEstimateDraft, buildInquiryDraft, findRole,
+  type Draft, type AssignmentRow } from '@/lib/ai/draft'
 import type {
   Inquiry, Assignment, Staff, Settlement, Payout,
   Estimate, EstimateItem, EventExpense, Evaluation, Role,
@@ -137,6 +138,32 @@ function workDatesOf(a: Assignment, event: Inquiry | undefined): string[] {
   const picked = a.work_dates
   if (Array.isArray(picked) && picked.length > 0) return picked.map(d => d.slice(0, 10))
   return event ? eventDatesOf(event) : []
+}
+
+/** 크루 이름으로 찾는다. 정확히 → 포함 → 한 글자 틀린 것 순.
+ *
+ *  AI가 한글 이름을 흘리는 일이 실제로 있었다('박민재' → '박및재').
+ *  이름은 연락처·계좌·지급과 이어지는 값이라, 못 찾았다고 그 이름 그대로 넣으면
+ *  카드도 계좌도 없는 유령 배정이 생긴다. 그래서 못 찾으면 넣지 않고 되묻는다. */
+function findStaffByName(list: Staff[], name: string): { hit?: Staff; close: Staff[] } {
+  const q = name.trim()
+  if (!q) return { close: [] }
+
+  const exact = list.find(s => s.name === q)
+  if (exact) return { hit: exact, close: [] }
+
+  const contains = list.filter(s => s.name && (s.name.includes(q) || q.includes(s.name)))
+  if (contains.length === 1) return { hit: contains[0], close: [] }
+  if (contains.length > 1) return { close: contains }
+
+  // 글자 수가 같고 한 글자만 다른 이름 — 흘린 글자를 잡아낸다
+  const close = list.filter(s => {
+    if (!s.name || s.name.length !== q.length) return false
+    let diff = 0
+    for (let i = 0; i < q.length; i++) if (s.name[i] !== q[i]) diff++
+    return diff === 1
+  })
+  return { close }
 }
 
 /** 본사 직원은 크루 추천 대상이 아니다.
@@ -323,6 +350,43 @@ export const TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: 'draft_assignment',
+    description:
+      '추천한 크루를 그 행사의 배정표 초안으로 만든다. 저장하지 않는다 — ' +
+      '사장님이 [이대로 입력]을 눌러야 들어간다. ' +
+      'recommend_staff 로 뽑은 뒤 사장님이 "이 사람들로 해줘" 하면 이것을 쓴다. ' +
+      '이름만 주면 크루 카드에서 연락처·계좌를 찾아 채우고, 지급단가는 단가표에서 가져온다. ' +
+      '그날 다른 현장에 잡힌 사람이 섞여 있으면 경고가 함께 온다. ' +
+      '★ 사장님이 누구를 넣을지 고르기 전에는 부르지 마세요. 추천은 추천일 뿐입니다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        event_id: { type: 'string', description: 'search_events 가 준 id' },
+        keyword: { type: 'string', description: 'id 를 모를 때 쓰는 검색어' },
+        staff: {
+          type: 'array',
+          description: '배정할 사람들',
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string', description: '크루 이름 (크루 카드에 있는 그대로)' },
+              job_type: { type: 'string', description: '맡을 직무. 비우면 문의의 직무' },
+              is_leader: { type: 'boolean', description: '팀장이면 true' },
+              pay_rate: { type: 'number', description: '지급단가(원/일). 비우면 단가표 값' },
+              work_days: {
+                type: 'number',
+                description: '며칠 일하는지. ★ 사장님이 말한 값만 넣으세요. ' +
+                  '모르면 비우세요 — 운영일 수로 멋대로 채우면 지급액이 틀어집니다.',
+              },
+            },
+            required: ['name'],
+          },
+        },
+      },
+      required: ['staff'],
+    },
+  },
+  {
     name: 'draft_estimate',
     description:
       '행사 하나에 대한 견적서 초안을 만든다. 단가는 ERP 단가표(roles)에서 가져오고 ' +
@@ -373,6 +437,7 @@ export async function runTool(
     case 'get_summary':      return summary(input, erp)
     case 'draft_inquiry':    return draftInquiry(input, drafts)
     case 'draft_estimate':   return draftEstimate(input, erp, drafts)
+    case 'draft_assignment': return draftAssignment(input, erp, drafts)
     default: return `알 수 없는 도구: ${name}`
   }
 }
@@ -438,6 +503,145 @@ function draftInquiry(input: ToolInput, drafts?: DraftBox): string {
     '※ 아직 저장하지 않았습니다. 화면의 [이대로 입력] 버튼을 눌러야 문의로 등록됩니다.',
     '※ 위 내용을 사장님께 그대로 읽어드리고, 못 읽은 칸이 있으면 무엇인지 짚어주세요.',
   ].filter(Boolean).join('\n')
+}
+
+async function draftAssignment(input: ToolInput, erp: ErpData, drafts?: DraftBox): Promise<string> {
+  const found = resolveEvent(await erp.inquiries(), str(input.event_id), str(input.keyword))
+  if ('error' in found) return found.error
+  const ev = found.event
+
+  const wanted = Array.isArray(input.staff) ? input.staff : []
+  if (wanted.length === 0) return '배정할 사람(staff)이 없습니다.'
+
+  const [staffList, assigns, inquiries, roles] = await Promise.all([
+    erp.staff(), erp.assignments(), erp.inquiries(), erp.roles(),
+  ])
+  const inqById = new Map(inquiries.map(i => [i.id, i]))
+  const eventDates = eventDatesOf(ev)
+  const targetDates = new Set(eventDates)
+
+  // 그날 다른 현장에 잡힌 사람 — 배정 직전에 한 번 더 본다.
+  // 추천을 뽑은 뒤 사장님이 고민하는 사이에 다른 행사가 잡혔을 수 있다.
+  const busy = new Map<string, string>()
+  assigns.forEach(a => {
+    if (!a.inquiry_id || a.inquiry_id === ev.id) return
+    if (!BUSY_STATUSES.includes(a.status)) return
+    const other = inqById.get(a.inquiry_id)
+    if (!workDatesOf(a, other).some(d => targetDates.has(d))) return
+    const key = staffKey(a.staff_id, a.staff_name)
+    if (key) busy.set(key, other?.event_name || other?.company_name || '다른 현장')
+  })
+
+  // 이미 이 행사에 들어가 있는 사람 — 두 번 넣으면 지급이 겹친다
+  const already = new Set(
+    assigns.filter(a => a.inquiry_id === ev.id && a.status !== '취소')
+      .map(a => cleanStaffName(a.staff_name)).filter(Boolean))
+
+  const warnings: string[] = []
+  const rows: AssignmentRow[] = []
+
+  for (const raw of wanted) {
+    const o = raw as Record<string, unknown>
+    const name = String(o.name ?? '').trim()
+    if (!name) continue
+
+    if (already.has(cleanStaffName(name))) {
+      warnings.push(`${name} 은(는) 이미 이 행사에 배정돼 있어 건너뛰었습니다.`)
+      continue
+    }
+
+    const { hit: s, close } = findStaffByName(staffList, name)
+    if (!s) {
+      // 이름 그대로 넣지 않는다 — 카드도 계좌도 없는 유령 배정이 생긴다
+      warnings.push(
+        close.length
+          ? `'${name}' 을(를) 크루 목록에서 못 찾아 넣지 않았습니다. 혹시 이 사람인가요? ` +
+            `${close.slice(0, 5).map(c => c.name).join(' / ')} — 정확한 이름으로 다시 불러주세요.`
+          : `'${name}' 을(를) 크루 목록에서 못 찾아 넣지 않았습니다. 이름을 확인해주세요.`)
+      continue
+    }
+
+    const jobType = str(o.job_type) || ev.service_type || '행사스탭'
+    const role = findRole(roles, jobType)
+    const isLeader = o.is_leader === true
+
+    // 지급단가 — 사장님이 준 값 > 단가표 > 0
+    const payRate = typeof o.pay_rate === 'number' && o.pay_rate > 0
+      ? o.pay_rate
+      : (role?.pay_price ?? 0)
+    if (payRate === 0) {
+      warnings.push(`${name} 의 지급단가를 못 정했습니다(직무 '${jobType}' 가 단가표에 없음). 0원으로 두었습니다.`)
+    }
+
+    // ★ work_days 는 사람이 적는 값이다. 운영일 수로 자동으로 밀면
+    //   2일 일한 사람에게 13일치가 잡히고 지급액이 통째로 틀어진다.
+    //   말해준 값이 없으면 기존 화면과 같은 기본값 1을 쓴다.
+    const givenDays = typeof o.work_days === 'number' && o.work_days > 0 ? o.work_days : undefined
+    const workDays = givenDays ?? 1
+    if (!givenDays && eventDates.length > 1) {
+      warnings.push(
+        `${name} 의 근무 일수를 ${eventDates.length}일 행사인데 1일로 두었습니다. ` +
+        `며칠 일하는지는 사람마다 달라 자동으로 채우지 않습니다 — 다르면 말씀해주세요.`)
+    }
+
+    const conflict = busy.get(staffKey(s.id, s.name))
+
+    rows.push({
+      staff_id: s?.id,
+      staff_name: s?.name ?? name,
+      job_type: jobType,
+      pay_rate: payRate,
+      work_days: workDays,
+      role_type: isLeader ? '팀장' : undefined,
+      phone: s?.phone,
+      why: role ? `단가표 ${role.role_name}` : undefined,
+      warn: [
+        conflict ? `그날 '${conflict}' 에 잡혀 있음` : '',
+        !s.phone ? '연락처 없음' : '',
+      ].filter(Boolean).join(' · ') || undefined,
+    })
+  }
+
+  if (rows.length === 0) {
+    return ['넣을 사람이 없습니다.', ...warnings.map(w => `⚠ ${w}`),
+      '', '※ 이름이 하나라도 틀리면 그 사람은 넣지 않습니다. 배정은 연락처·계좌와 이어지는 값이라, ' +
+      '비슷한 이름으로 넣으면 지급이 엉뚱한 곳으로 갑니다.'].join('\n')
+  }
+
+  const payTotal = rows.reduce((t, r) => t + r.pay_rate * r.work_days, 0)
+  const draft = {
+    kind: 'assignment' as const,
+    inquiry_id: ev.id,
+    company_name: ev.company_name || '',
+    event_name: ev.event_name || '',
+    event_start: ev.event_start ?? undefined,
+    event_end: ev.event_end ?? undefined,
+    rows,
+    totals: { people: rows.length, payTotal },
+    warnings,
+  }
+  drafts?.add(draft)
+
+  const need = ev.required_staff ?? 0
+  return [
+    `[배정 초안] ${draft.company_name} / ${draft.event_name}`,
+    `운영일 ${eventDates.length}일 (${eventDates[0] ?? '미정'}${eventDates.length > 1 ? ` ~ ${eventDates[eventDates.length - 1]}` : ''})` +
+      `${need ? ` | 필요 ${need}명` : ''} | 이번에 넣을 사람 ${rows.length}명`,
+    '',
+    '이름 | 직무 | 지급단가 | 일수 | 지급예정 | 연락처',
+    ...rows.map(r =>
+      `${r.staff_name}${r.role_type === '팀장' ? '(팀장)' : ''} | ${r.job_type} | ${won(r.pay_rate)} | ` +
+      `${r.work_days}일 | ${won(r.pay_rate * r.work_days)} | ${r.phone || '없음'}` +
+      (r.warn ? `  ⚠ ${r.warn}` : '')),
+    '',
+    `지급 예정 합계 ${won(payTotal)}`,
+    ...(need && rows.length < need ? [`※ 필요 ${need}명 중 ${rows.length}명입니다. ${need - rows.length}명이 더 필요합니다.`] : []),
+    ...(warnings.length ? ['', ...warnings.map(w => `⚠ ${w}`)] : []),
+    '',
+    "※ 상태는 '배정중' 으로 넣습니다. 확정은 섭외가 끝난 뒤 배정 화면에서 바꾸세요.",
+    '※ 아직 저장하지 않았습니다. 화면의 [이대로 입력] 버튼을 눌러야 배정표에 들어갑니다.',
+    '※ 근무 일수는 자동으로 채우지 않습니다. 사람마다 다르게 적는 값이라, 멋대로 채우면 지급액이 틀어집니다.',
+  ].join('\n')
 }
 
 async function draftEstimate(input: ToolInput, erp: ErpData, drafts?: DraftBox): Promise<string> {
