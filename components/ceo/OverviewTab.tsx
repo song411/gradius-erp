@@ -13,7 +13,7 @@ import { Activity } from 'lucide-react'
 import type { CeoData } from './CeoContent'
 import {
   buildFinanceIndex, dedupeSettlements, toRows, countableRows, sumRows,
-  inPeriod, unpaidTotal,
+  inPeriod, unpaidTotal, contractStats,
 } from '@/lib/finance'
 
 export default function OverviewTab({ data }: { data: CeoData }) {
@@ -47,7 +47,6 @@ export default function OverviewTab({ data }: { data: CeoData }) {
 
   const yearRows   = countable.filter(r => inPeriod(r, String(selectedYear)))
   const yearTotals = sumRows(yearRows)
-  const yearInqs   = yearRows.map(r => r.inquiry).filter(Boolean) as typeof inquiries
   const yearRevenue  = yearTotals.revenue
   const yearPayout   = yearTotals.payout
   const yearExpense  = yearTotals.expense
@@ -57,8 +56,19 @@ export default function OverviewTab({ data }: { data: CeoData }) {
   // 작년 미수금도 못 받은 건 여전히 못 받은 돈이다.
   const totalUnpaid  = unpaidTotal(settlements)
   const yearProfitRate = yearTotals.profitRate
-  const yearContracted = yearInqs.filter(q => !['접수', '견적', '미체결', '보류', '취소'].includes(q.status)).length
-  const completionRate = yearInqs.length > 0 ? Math.round((yearContracted / yearInqs.length) * 100) : 0
+
+  // 체결율은 문의에서 세야 한다.
+  // 예전에는 yearInqs(정산에서 뽑아낸 목록)로 셌는데, 그 목록은 이미 '체결 이상'만
+  // 남긴 것이라 분자와 분모가 같아져 언제나 100%가 나왔다. 실측 181/181.
+  //
+  // 분모는 '결정이 난 건'만 본다 — 체결됐거나 미체결로 끝난 것.
+  // 아직 접수·견적·보류로 살아 있는 건을 분모에 넣으면, 이번 달에 문의가 많이
+  // 들어올수록 체결율이 떨어지는 이상한 숫자가 된다. 아직 진 게 아니기 때문이다.
+  // (스마트랩 단가 시뮬레이터의 '체결율(결정건 기준)'과 같은 기준)
+  const yearAll = inquiries.filter(q =>
+    (q.event_start || q.created_at || '').startsWith(String(selectedYear)))
+  const contract = contractStats(yearAll)
+  const completionRate = contract.rate
 
   // 고객사별 누적 매출 Top10 — 매출을 세는 대상이 다른 지표와 같아야 한다
   const clientRevenue = Object.entries(
@@ -93,7 +103,15 @@ export default function OverviewTab({ data }: { data: CeoData }) {
         <KPIBox label="수금액" value={formatKRW(yearReceived)} icon="✅" color="cyan" />
         {/* 다른 KPI는 선택 연도 기준이지만 미수금만 전체 기간이라 라벨에 밝힌다 */}
         <KPIBox label="미수금 (전체기간)" value={formatKRW(totalUnpaid)} icon="⚠️" color="red" />
-        <KPIBox label="체결율" value={`${completionRate}%`} icon="🏆" color="orange" />
+        <KPIBox
+          label="체결율"
+          value={`${completionRate}%`}
+          sub={contract.decided > 0
+            ? `체결 ${contract.won} / 결정 ${contract.decided}건` +
+              (contract.pending ? ` · 진행중 ${contract.pending}` : '')
+            : '결정된 건 없음'}
+          icon="🏆" color="orange"
+        />
       </div>
 
       {/* 월별 매출/수익 추이 */}
@@ -258,7 +276,11 @@ export default function OverviewTab({ data }: { data: CeoData }) {
   )
 }
 
-function KPIBox({ label, value, icon, color }: { label: string; value: string; icon: string; color: string }) {
+function KPIBox({ label, value, icon, color, sub }: {
+  label: string; value: string; icon: string; color: string
+  /** 값 아래 한 줄 — 무엇을 무엇으로 나눈 것인지 밝힐 때 쓴다 */
+  sub?: string
+}) {
   const style: Record<string, string> = {
     blue:   'bg-blue-50 border-blue-200 text-blue-700',
     green:  'bg-green-50 border-green-200 text-green-700',
@@ -272,6 +294,7 @@ function KPIBox({ label, value, icon, color }: { label: string; value: string; i
       <p className="text-xl mb-1">{icon}</p>
       <p className="text-xs text-gray-600 font-medium">{label}</p>
       <p className={`text-lg font-bold mt-1 ${style[color].split(' ').find(c => c.startsWith('text-'))}`}>{value}</p>
+      {sub && <p className="text-2xs text-gray-500 mt-0.5">{sub}</p>}
     </div>
   )
 }

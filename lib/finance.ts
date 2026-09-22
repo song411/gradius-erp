@@ -20,6 +20,37 @@ export function isCountable(inq: Inquiry | undefined): boolean {
   return !!inq && !NON_COUNTABLE.includes(inq.status as typeof NON_COUNTABLE[number])
 }
 
+// ─── ①-2 체결율 ──────────────────────────────────────────
+/** 체결율을 세는 한 가지 방법.
+ *
+ *  분모는 '결정이 난 건'만 본다 — 체결됐거나 미체결로 끝난 것.
+ *  아직 접수·견적·보류로 살아 있는 건을 분모에 넣으면, 문의가 많이 들어온 달일수록
+ *  체결율이 떨어지는 이상한 숫자가 된다. 아직 진 게 아니기 때문이다.
+ *  취소는 '없던 일'이라 양쪽 어디에도 넣지 않는다.
+ *
+ *  ★ CEO 경영현황이 한때 언제나 100%를 보여줬다. 정산에서 뽑아낸 목록(이미 체결
+ *    이상만 남은 것)을 분모로 썼기 때문이다 — 실측 181/181. 분모는 문의에서 센다. */
+export interface ContractStats {
+  /** 체결 이상 */
+  won: number
+  /** 미체결로 끝난 것 */
+  lost: number
+  /** 아직 결정 안 난 것 (접수·견적·보류) */
+  pending: number
+  /** 분모 = won + lost */
+  decided: number
+  /** 0~100 */
+  rate: number
+}
+
+export function contractStats(inquiries: Inquiry[]): ContractStats {
+  const won     = inquiries.filter(isCountable).length
+  const lost    = inquiries.filter(i => i.status === '미체결').length
+  const pending = inquiries.filter(i => ['접수', '견적', '보류'].includes(i.status)).length
+  const decided = won + lost
+  return { won, lost, pending, decided, rate: decided > 0 ? Math.round((won / decided) * 100) : 0 }
+}
+
 // ─── ② 기간 기준 날짜 ─────────────────────────────────────
 /** 이 정산을 어느 달·어느 해로 셀 것인가.
  *  행사일이 원칙이지만, 날짜 미정으로 등록된 행사는 행사일이 없다.

@@ -18,7 +18,7 @@ import {
 import type { Inquiry, Settlement, Assignment, Payout, EventExpense } from '@/lib/supabase/types'
 import {
   buildFinanceIndex, dedupeSettlements, toRows, countableRows, sumRows,
-  inPeriod, unpaidTotal,
+  inPeriod, unpaidTotal, contractStats, type ContractStats,
 } from '@/lib/finance'
 
 // 파이프라인 전체 단계
@@ -159,11 +159,14 @@ export default function DashboardContent() {
   const invoiceTotal2026 = yearRows.reduce(
     (s, r) => s + (r.settlement.invoice_amount || r.revenue + (r.settlement.vat || Math.floor(r.revenue * 0.1))), 0)
   const profit2026      = yearTotals.profit
-  // 체결율: 체결 이상 / 전체 문의
-  const contractedStatuses = ['체결', '배정완료', '진행중', '완료', '정산완료']
-  const contractRate = inquiries.length > 0
-    ? Math.round((inquiries.filter(i => contractedStatuses.includes(i.status)).length / inquiries.length) * 100)
-    : 0
+  // 체결율 — 규칙은 lib/finance.ts 한 곳. 분모는 '결정이 난 건'(체결+미체결)만 본다.
+  // 아직 접수·견적·보류로 살아 있는 건까지 분모에 넣으면 문의가 많이 들어온 달일수록
+  // 체결율이 떨어진다. CEO 경영현황과 같은 숫자가 나와야 한다.
+  //
+  // 이 카드는 '{year}년 연간 현황' 안에 있으므로 그 해 것만 센다.
+  // 전에는 전체 기간으로 세면서 연간 제목 아래에 놓여 있었다.
+  const contract = contractStats(
+    inquiries.filter(i => (i.event_start || i.created_at || '').startsWith(YEAR)))
 
   // 오늘 진행중 (체결 이상 + 날짜 기반)
   const happeningToday = inquiries.filter(i => {
@@ -288,7 +291,7 @@ export default function DashboardContent() {
           invoiceTotal2026={invoiceTotal2026}
           payout2026={yearTotals.payout}
           profit2026={profit2026}
-          contractRate={contractRate}
+          contract={contract}
           hasRealPayoutData={hasRealPayoutData}
           settsYearCount={yearRows.length}
           yearEstimatedCount={yearTotals.estimatedCount}
@@ -326,7 +329,7 @@ function OverviewTab({
   monthlySettCount, monthlyNewInquiries,
   unpaidAmount, unpaidTop5, staffCount, customerCount,
   monthlyChart, statusDist, assignCountMap, todayStr,
-  year, rev2026, invoiceTotal2026, payout2026, profit2026, contractRate, hasRealPayoutData, settsYearCount,
+  year, rev2026, invoiceTotal2026, payout2026, profit2026, contract, hasRealPayoutData, settsYearCount,
   yearEstimatedCount, yearEstimatedAmount, yearPaidAmount, yearPendingAmount,
 }: {
   inquiries: Inquiry[]; settlements: Settlement[]
@@ -339,7 +342,7 @@ function OverviewTab({
   monthlyChart: { label: string; revenue: number; profit: number; profitRate: number }[]
   statusDist: { name: string; value: number }[]
   assignCountMap: Map<string, number>; todayStr: string
-  year: string; rev2026: number; invoiceTotal2026: number; payout2026: number; profit2026: number; contractRate: number
+  year: string; rev2026: number; invoiceTotal2026: number; payout2026: number; profit2026: number; contract: ContractStats
   hasRealPayoutData: boolean; settsYearCount: number
   yearEstimatedCount: number; yearEstimatedAmount: number
   yearPaidAmount: number; yearPendingAmount: number
@@ -489,8 +492,11 @@ function OverviewTab({
           {/* 체결율 */}
           <div className="bg-purple-500/20 rounded-xl p-4 border border-purple-500/30">
             <p className="text-xs text-purple-300 mb-1">문의 체결율</p>
-            <p className="text-2xl font-bold text-purple-200 leading-tight">{contractRate}%</p>
-            <p className="text-xs text-purple-400 mt-1">체결↑ / 전체 {inquiries.length}건</p>
+            <p className="text-2xl font-bold text-purple-200 leading-tight">{contract.rate}%</p>
+            <p className="text-xs text-purple-400 mt-1">
+              체결 {contract.won} / 결정 {contract.decided}건
+              {contract.pending > 0 && ` · 진행중 ${contract.pending}`}
+            </p>
           </div>
         </div>
       </div>
