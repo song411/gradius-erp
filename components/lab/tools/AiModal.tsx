@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Send, User, RefreshCw } from 'lucide-react'
 import MarkdownView from './ai/MarkdownView'
+import { MODEL_LABEL } from '@/lib/ai/model'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -289,7 +290,7 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
                 animate={{ opacity: [1, 0.25, 1] }}
                 transition={{ repeat: Infinity, duration: 1.8 }}
               />
-              CLAUDE OPUS 5 · ERP LINK ACTIVE
+              {MODEL_LABEL} · ERP LINK ACTIVE
             </p>
           </div>
           <button

@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { ErpData, TOOLS, runTool } from '@/lib/ai/tools'
 import { BASE_INSTRUCTIONS, TOOL_LABEL } from '@/lib/ai/prompt'
-
-const MODEL = 'claude-opus-5'
+import { MODEL } from '@/lib/ai/model'
 
 // 한 번에 넘기는 대화 길이 상한 (토큰 낭비 방지)
 const MAX_HISTORY = 20
