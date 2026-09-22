@@ -147,6 +147,7 @@ export default function DashboardContent() {
   // 상태로 거르면 '부분입금'인데 상태만 '입금완료'로 바뀐 건 등을 놓친다.
   const unpaidAmount = unpaidTotal(settlements)
 
+
   const activeInquiries = inquiries.filter(i => ['접수','견적','체결','배정완료','진행중'].includes(i.status))
 
   // ── 연간 KPI
@@ -347,6 +348,14 @@ function OverviewTab({
   yearEstimatedCount: number; yearEstimatedAmount: number
   yearPaidAmount: number; yearPendingAmount: number
 }) {
+  // 입금 완료율 — 상태가 아니라 잔액으로 센다. 이 화면 위쪽 미수금과 같은 기준이다.
+  // 상태로 거르면 '부분입금'인데 상태만 '입금완료'로 바뀐 건을 다 받은 것으로 세게 된다.
+  // 문의당 정산 중복도 제거한다 — 매출을 세는 대상과 같아야 한다.
+  const uniqSetts = dedupeSettlements(settlements)
+  const depositRate = uniqSetts.length > 0
+    ? Math.round((uniqSetts.filter(s => (s.balance || 0) <= 0).length / uniqSetts.length) * 100)
+    : null
+
   const thisMonth = todayStr.substring(0, 7)
   const thisMonthCompleted = inquiries.filter(i =>
     ['완료','정산완료'].includes(i.status) && i.updated_at?.startsWith(thisMonth)
@@ -514,10 +523,7 @@ function OverviewTab({
         <StatCard label="등록 직원" value={`${formatNumber(staffCount)}명`} />
         <StatCard label="등록 고객사" value={`${formatNumber(customerCount)}개`} />
         <StatCard label="이번달 완료" value={`${thisMonthCompleted}건`} />
-        <StatCard label="입금 완료율"
-          value={settlements.length > 0
-            ? `${Math.round((settlements.filter(s=>s.deposit_status==='입금완료').length/settlements.length)*100)}%`
-            : '-'} />
+        <StatCard label="입금 완료율" value={depositRate === null ? '-' : `${depositRate}%`} />
       </div>
 
       {/* 파이프라인 */}
