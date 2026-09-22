@@ -113,10 +113,16 @@ export async function POST(req: NextRequest) {
           // 생각한 흔적(thinking)까지 그대로 되돌려줘야 다음 턴이 이어진다
           convo.push({ role: 'assistant', content: final.content })
 
+          // 어디까지 읽었는지 이 턴 전후로 재서, 새로 읽은 것만 화면에 보낸다
+          const scanMark = erp.scans.length
+          const turnStart = Date.now()
+
           const results = await Promise.all(calls.map(async call => {
-            send({ type: 'tool', name: call.name, label: TOOL_LABEL[call.name] || '조회 중' })
+            send({ type: 'tool', id: call.id, name: call.name, label: TOOL_LABEL[call.name] || '조회 중' })
+            const t0 = Date.now()
             try {
               const out = await runTool(call.name, call.input as Record<string, unknown>, erp, drafts)
+              send({ type: 'tool_done', id: call.id, ms: Date.now() - t0, chars: out.length })
               return { type: 'tool_result' as const, tool_use_id: call.id, content: out }
             } catch (err) {
               console.error(`[도구 ${call.name} 오류]`, err)
@@ -128,6 +134,13 @@ export async function POST(req: NextRequest) {
               }
             }
           }))
+
+          // 이 턴에 실제로 읽은 테이블 — 몇 행을 몇 초에 봤는지 그대로 보여준다.
+          // AI가 무엇을 근거로 말하는지가 눈에 보여야 믿을 수 있다.
+          const scanned = erp.scans.slice(scanMark)
+          if (scanned.length > 0) {
+            send({ type: 'scan', tables: scanned, ms: Date.now() - turnStart })
+          }
 
           // 새로 생긴 초안을 화면으로 흘려보낸다. 저장은 하지 않는다 —
           // 사람이 [이대로 입력]을 눌러야 /api/ai/apply 가 저장한다

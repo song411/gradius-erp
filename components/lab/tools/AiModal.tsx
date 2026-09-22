@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { X, Send, User, RefreshCw } from 'lucide-react'
 import MarkdownView from './ai/MarkdownView'
 import ProposalCard from './ai/ProposalCard'
+import ErpScope, { type ScanRow, type TraceStep } from './ai/ErpScope'
 import type { Draft } from '@/lib/ai/draft'
 import { MODEL_LABEL } from '@/lib/ai/model'
 
@@ -13,6 +14,9 @@ interface Message {
   content: string
   /** AI가 만든 초안 — 말풍선 아래 [이대로 입력] 카드로 뜬다 */
   drafts?: Draft[]
+  /** 이 답을 만들며 ERP를 어떻게 훑었는지 */
+  steps?: TraceStep[]
+  scans?: ScanRow[]
 }
 
 const GREETING = `안녕하세요, 대표님. **가디**입니다.
@@ -132,6 +136,9 @@ function MessageWithDrafts({ msg }: { msg: Message }) {
   return (
     <div className="space-y-2">
       <MessageBlock msg={msg} />
+      {msg.steps && msg.steps.length > 0 && (
+        <ErpScope steps={msg.steps} scans={msg.scans ?? []} live={false} />
+      )}
       {msg.drafts?.map((d, i) => <ProposalCard key={i} draft={d} />)}
     </div>
   )
@@ -143,6 +150,8 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
   const [loading, setLoading] = useState(false)      // 요청 시작 ~ 종료 (입력 잠금)
   const [streaming, setStreaming] = useState(false)  // 첫 글자가 도착한 뒤
   const [activity, setActivity] = useState<string | null>(null)  // 지금 무엇을 조회 중인지
+  const [liveSteps, setLiveSteps] = useState<TraceStep[]>([])    // 지금 하고 있는 일
+  const [liveScans, setLiveScans] = useState<ScanRow[]>([])      // 지금까지 읽은 테이블
   const [error, setError] = useState<string | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -165,6 +174,8 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
     setLoading(true)
     setStreaming(false)
     setActivity(null)
+    setLiveSteps([])
+    setLiveScans([])
 
     try {
       const res = await fetch('/api/ai', {
@@ -185,11 +196,14 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
       let answer = ''
       let started = false
       const collected: Draft[] = []   // 도구가 만든 초안 (저장 안 된 상태)
+      let steps: TraceStep[] = []     // ERP를 어떻게 훑었는지
+      const scans: ScanRow[] = []
 
       const paint = () => {
         const msg: Message = {
           role: 'assistant', content: answer,
           ...(collected.length ? { drafts: [...collected] } : {}),
+          ...(steps.length ? { steps: [...steps], scans: [...scans] } : {}),
         }
         if (!started) {
           started = true
@@ -214,7 +228,10 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
 
         for (const line of lines) {
           if (!line.trim()) continue
-          let evt: { type: string; text?: string; error?: string; label?: string; draft?: Draft }
+          let evt: {
+            type: string; text?: string; error?: string; label?: string
+            draft?: Draft; id?: string; ms?: number; tables?: ScanRow[]
+          }
           try { evt = JSON.parse(line) } catch { continue }
 
           if (evt.type === 'text' && evt.text) {
@@ -223,6 +240,16 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
             paint()
           } else if (evt.type === 'tool') {
             setActivity(evt.label || '조회 중')
+            steps = [...steps, { id: evt.id || String(steps.length), label: evt.label || '조회 중', done: false }]
+            setLiveSteps(steps)
+          } else if (evt.type === 'tool_done') {
+            steps = steps.map(st => st.id === evt.id ? { ...st, done: true, ms: evt.ms } : st)
+            setLiveSteps(steps)
+            if (started) paint()
+          } else if (evt.type === 'scan' && Array.isArray(evt.tables)) {
+            scans.push(...evt.tables)
+            setLiveScans([...scans])
+            if (started) paint()
           } else if (evt.type === 'proposal' && evt.draft) {
             collected.push(evt.draft)
             if (started) paint()
@@ -247,6 +274,8 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
       setLoading(false)
       setStreaming(false)
       setActivity(null)
+      setLiveSteps([])
+      setLiveScans([])
       setTimeout(() => inputRef.current?.focus(), 100)
     }
   }
@@ -340,16 +369,22 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
             {messages.map((msg, idx) => <MessageWithDrafts key={idx} msg={msg} />)}
           </AnimatePresence>
 
-          {/* 조회 중에는 무엇을 뒤지고 있는지 밝힌다 — 말없이 멈춰 있으면 고장으로 보인다 */}
-          {loading && (!streaming || activity) && (
-            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex gap-2.5">
-              <ReactorCore size={28} busy />
-              <div className="flex items-center gap-2.5 rounded-xl rounded-tl-sm border border-cyan-400/20 bg-slate-950/50 px-3.5 py-2.5">
-                <ScanBars />
-                <span className="font-mono text-xs tracking-wide text-cyan-300">
-                  {activity ? `▸ ${activity}` : '▸ 생각하는 중'}
-                </span>
+          {/* 일하는 동안 ERP가 움직이는 것을 그대로 보여준다.
+              말없이 멈춰 있으면 고장으로 보이고, 무엇을 읽었는지 보여야 답을 믿을 수 있다 */}
+          {loading && (!streaming || activity || liveSteps.length > 0) && (
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-2">
+              <div className="flex gap-2.5">
+                <ReactorCore size={28} busy />
+                <div className="flex items-center gap-2.5 rounded-xl rounded-tl-sm border border-cyan-400/20 bg-slate-950/50 px-3.5 py-2.5">
+                  <ScanBars />
+                  <span className="font-mono text-xs tracking-wide text-cyan-300">
+                    {activity ? `▸ ${activity}` : '▸ 생각하는 중'}
+                  </span>
+                </div>
               </div>
+              {(liveSteps.length > 0 || liveScans.length > 0) && (
+                <ErpScope steps={liveSteps} scans={liveScans} live />
+              )}
             </motion.div>
           )}
         </div>

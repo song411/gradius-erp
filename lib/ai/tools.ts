@@ -49,12 +49,24 @@ async function fetchAll<T>(table: string, columns: string): Promise<T[]> {
   return out
 }
 
+/** 어느 테이블을 몇 행, 몇 밀리초에 읽었는지 — 화면에 실시간으로 띄우기 위한 기록 */
+export interface ScanRecord { table: string; rows: number; ms: number }
+
 /** 한 번의 질문 동안 같은 테이블을 두 번 읽지 않게 붙잡아 두는 자리 */
 export class ErpData {
   private cache = new Map<string, Promise<unknown>>()
 
+  /** 이번 질문에서 실제로 읽은 것들. 캐시에 맞은 두 번째 조회는 남지 않는다. */
+  readonly scans: ScanRecord[] = []
+
   private load<T>(key: string, fn: () => Promise<T[]>): Promise<T[]> {
-    if (!this.cache.has(key)) this.cache.set(key, fn())
+    if (!this.cache.has(key)) {
+      const t0 = Date.now()
+      this.cache.set(key, fn().then(rows => {
+        this.scans.push({ table: key, rows: rows.length, ms: Date.now() - t0 })
+        return rows
+      }))
+    }
     return this.cache.get(key) as Promise<T[]>
   }
 
