@@ -2,81 +2,142 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Send, Bot, User, RefreshCw, Sparkles, ChevronRight } from 'lucide-react'
+import { X, Send, User, RefreshCw } from 'lucide-react'
+import MarkdownView from './ai/MarkdownView'
 
 interface Message {
   role: 'user' | 'assistant'
   content: string
 }
 
-// 빠른 질문 예시 목록
+const GREETING = `안녕하세요, 대표님. **가디**입니다.
+
+행사·견적·배정·정산·크루 이력까지 직접 뒤져서 답합니다.
+특정 행사나 사람을 콕 집어 물어보셔도 됩니다.
+
+"이번 행사에 누구 보낼까?" 하고 물으시면 **그 현장을 해본 사람**부터 찾아드립니다.`
+
 const QUICK_QUESTIONS = [
+  '다음 행사에 누구 보내면 좋을까?',
+  '다음주에 무슨 행사 있어?',
+  '미수금 많은 순으로 알려줘',
   '이번달 매출이 얼마야?',
-  '미수금이 얼마나 돼?',
-  '현재 재직 중인 크루는 몇 명이야?',
   '지급 대기 중인 건이 몇 개야?',
-  '최근 행사 현황 알려줘',
-  '전체 문의 상태 요약해줘',
+  '전체 현황 요약해줘',
 ]
 
-function TypingDots() {
+// ─── 아크 리액터 ──────────────────────────────────────────
+/** 가디의 얼굴. 생각 중일 때 빨라지고 밝아진다 — 지금 일하는 중이라는 신호 */
+function ReactorCore({ size = 36, busy = false }: { size?: number; busy?: boolean }) {
   return (
-    <div className="flex items-center gap-1 px-1 py-2">
-      {[0, 1, 2].map(i => (
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <div
+        className="absolute inset-0 rounded-full"
+        style={{ boxShadow: busy ? '0 0 18px 2px rgba(34,211,238,.55)' : '0 0 10px rgba(34,211,238,.3)' }}
+      />
+      <svg viewBox="0 0 100 100" width={size} height={size} className="relative">
+        {/* 바깥 눈금 링 */}
+        <motion.g
+          animate={{ rotate: 360 }}
+          transition={{ repeat: Infinity, duration: busy ? 3 : 14, ease: 'linear' }}
+          style={{ originX: '50%', originY: '50%' }}
+        >
+          <circle cx="50" cy="50" r="46" fill="none" stroke="rgba(34,211,238,.45)"
+            strokeWidth="3" strokeDasharray="14 9" strokeLinecap="round" />
+        </motion.g>
+        {/* 반대로 도는 안쪽 링 */}
+        <motion.g
+          animate={{ rotate: -360 }}
+          transition={{ repeat: Infinity, duration: busy ? 2 : 9, ease: 'linear' }}
+          style={{ originX: '50%', originY: '50%' }}
+        >
+          <circle cx="50" cy="50" r="33" fill="none" stroke="rgba(56,189,248,.6)"
+            strokeWidth="4" strokeDasharray="30 18" strokeLinecap="round" />
+        </motion.g>
+        {/* 코어 */}
+        <motion.circle
+          cx="50" cy="50" r="19"
+          fill="rgba(34,211,238,.18)" stroke="rgba(103,232,249,.9)" strokeWidth="3"
+          animate={{ opacity: busy ? [0.55, 1, 0.55] : [0.75, 1, 0.75] }}
+          transition={{ repeat: Infinity, duration: busy ? 0.9 : 2.6, ease: 'easeInOut' }}
+        />
+        <circle cx="50" cy="50" r="7" fill="rgba(165,243,252,.95)" />
+      </svg>
+    </div>
+  )
+}
+
+/** 조회 중임을 알리는 막대 — 점 세 개보다 '스캔하는 중'에 가깝다 */
+function ScanBars() {
+  return (
+    <div className="flex items-end gap-[3px]" aria-hidden>
+      {[0, 1, 2, 3, 4].map(i => (
         <motion.span
           key={i}
-          className="w-2 h-2 rounded-full bg-violet-400"
-          animate={{ y: [0, -5, 0] }}
-          transition={{ repeat: Infinity, duration: 0.8, delay: i * 0.15, ease: 'easeInOut' }}
+          className="w-[3px] rounded-full bg-cyan-400"
+          animate={{ height: [4, 13, 4], opacity: [0.45, 1, 0.45] }}
+          transition={{ repeat: Infinity, duration: 0.9, delay: i * 0.11, ease: 'easeInOut' }}
         />
       ))}
     </div>
   )
 }
 
-function MessageBubble({ msg }: { msg: Message }) {
-  const isUser = msg.role === 'user'
+/** 패널 네 귀퉁이 꺾쇠 */
+function Corners() {
+  const base = 'pointer-events-none absolute w-4 h-4 border-cyan-400/60'
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className={`flex gap-2.5 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}
-    >
-      {/* 아바타 */}
-      <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold shadow
-        ${isUser ? 'bg-blue-500' : 'bg-gradient-to-br from-violet-600 to-purple-700'}`}>
-        {isUser ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
-      </div>
+    <>
+      <span className={`${base} left-2 top-2 border-l-2 border-t-2`} />
+      <span className={`${base} right-2 top-2 border-r-2 border-t-2`} />
+      <span className={`${base} bottom-2 left-2 border-b-2 border-l-2`} />
+      <span className={`${base} bottom-2 right-2 border-b-2 border-r-2`} />
+    </>
+  )
+}
 
-      {/* 말풍선 */}
-      <div className={`max-w-[78%] rounded-2xl px-4 py-2.5 shadow-sm text-sm leading-relaxed whitespace-pre-wrap
-        ${isUser
-          ? 'bg-blue-500 text-white rounded-tr-sm'
-          : 'bg-white text-gray-800 border border-gray-100 rounded-tl-sm'
-        }`}>
-        {msg.content}
+function MessageBlock({ msg }: { msg: Message }) {
+  const isUser = msg.role === 'user'
+
+  if (isUser) {
+    return (
+      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex justify-end gap-2.5">
+        <div className="max-w-[80%] rounded-xl rounded-tr-sm border border-cyan-400/40 bg-cyan-400/10 px-3.5 py-2 text-sm leading-relaxed text-cyan-50">
+          {msg.content}
+        </div>
+        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-cyan-400/40 bg-cyan-400/10">
+          <User className="h-3.5 w-3.5 text-cyan-300" />
+        </div>
+      </motion.div>
+    )
+  }
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex gap-2.5">
+      <ReactorCore size={28} />
+      <div className="min-w-0 flex-1 rounded-xl rounded-tl-sm border border-cyan-400/15 bg-slate-950/50 px-3.5 py-2.5">
+        <MarkdownView text={msg.content} />
       </div>
     </motion.div>
   )
 }
 
 export default function AiModal({ onClose }: { onClose: () => void }) {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: 'assistant',
-      content: '안녕하세요! 저는 가디어스 ERP AI 도우미입니다 🤖\n\n매출, 미수금, 크루 현황, 지급 상태 등 실시간 데이터를 바탕으로 궁금한 것을 물어보세요!\n아래 빠른 질문을 눌러도 됩니다.',
-    },
-  ])
+  const [messages, setMessages] = useState<Message[]>([{ role: 'assistant', content: GREETING }])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)      // 요청 시작 ~ 종료 (입력 잠금)
   const [streaming, setStreaming] = useState(false)  // 첫 글자가 도착한 뒤
+  const [activity, setActivity] = useState<string | null>(null)  // 지금 무엇을 조회 중인지
   const [error, setError] = useState<string | null>(null)
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
+  // scrollIntoView 를 쓰면 안 된다 — overflow-hidden 인 조상(패널 자체)까지 같이
+  // 밀어버려서 헤더가 화면 밖으로 사라진다. 목록 상자만 직접 내린다.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, loading])
+    const el = listRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [messages, loading, activity])
 
   async function sendMessage(text?: string) {
     const userText = (text ?? input).trim()
@@ -88,6 +149,7 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
     setMessages(newMessages)
     setLoading(true)
     setStreaming(false)
+    setActivity(null)
 
     try {
       const res = await fetch('/api/ai', {
@@ -101,7 +163,7 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
         throw new Error(data?.error || 'AI 응답 오류')
       }
 
-      // NDJSON 스트림 — 한 줄에 이벤트 하나 ({type:'text'|'error'|'done'})
+      // NDJSON 스트림 — 한 줄에 이벤트 하나 ({type:'text'|'tool'|'error'|'done'})
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
@@ -132,12 +194,15 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
 
         for (const line of lines) {
           if (!line.trim()) continue
-          let evt: { type: string; text?: string; error?: string }
+          let evt: { type: string; text?: string; error?: string; label?: string }
           try { evt = JSON.parse(line) } catch { continue }
 
           if (evt.type === 'text' && evt.text) {
             answer += evt.text
+            setActivity(null)   // 답이 흘러나오기 시작하면 조회 표시는 거둔다
             paint()
+          } else if (evt.type === 'tool') {
+            setActivity(evt.label || '조회 중')
           } else if (evt.type === 'error') {
             throw new Error(evt.error || 'AI 응답 오류')
           }
@@ -150,11 +215,12 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
       setError(msg)
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: `⚠️ 죄송합니다. 오류가 발생했습니다.\n${msg}`,
+        content: `**연결에 문제가 있습니다.**\n\n${msg}`,
       }])
     } finally {
       setLoading(false)
       setStreaming(false)
+      setActivity(null)
       setTimeout(() => inputRef.current?.focus(), 100)
     }
   }
@@ -167,100 +233,123 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
   }
 
   function resetChat() {
-    setMessages([{
-      role: 'assistant',
-      content: '대화를 초기화했습니다. 새로운 질문을 입력해주세요! 😊',
-    }])
+    setMessages([{ role: 'assistant', content: GREETING }])
     setError(null)
     setInput('')
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
       <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        initial={{ opacity: 0, scale: 0.96, y: 16 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: 20 }}
-        transition={{ duration: 0.2 }}
-        className="relative bg-gray-50 rounded-2xl shadow-2xl flex flex-col overflow-hidden"
-        style={{ width: '100%', maxWidth: 760, height: '85vh', maxHeight: 800 }}
+        exit={{ opacity: 0, scale: 0.96, y: 16 }}
+        transition={{ duration: 0.22 }}
+        className="relative flex flex-col overflow-hidden rounded-2xl border border-cyan-400/25 bg-[#060a12]"
+        style={{
+          width: '100%', maxWidth: 820, height: '86vh', maxHeight: 820,
+          boxShadow: '0 0 60px rgba(34,211,238,.18), 0 20px 60px rgba(0,0,0,.6)',
+        }}
       >
-        {/* 헤더 */}
-        <div className="bg-gradient-to-r from-violet-600 to-purple-700 px-5 py-4 flex items-center gap-3 shrink-0">
-          <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-            <Sparkles className="w-5 h-5 text-white" />
+        {/* 배경 격자 — 아주 옅게 깔아 금속판 느낌만 낸다 */}
+        <div
+          className="pointer-events-none absolute inset-0 opacity-[0.55]"
+          style={{
+            backgroundImage:
+              'linear-gradient(rgba(34,211,238,.055) 1px, transparent 1px),' +
+              'linear-gradient(90deg, rgba(34,211,238,.055) 1px, transparent 1px)',
+            backgroundSize: '34px 34px',
+          }}
+        />
+        {/* 위쪽에서 번지는 푸른 빛 */}
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 h-48"
+          style={{ background: 'radial-gradient(80% 100% at 50% 0%, rgba(34,211,238,.16), transparent 70%)' }}
+        />
+        {/* 열릴 때 한 번 훑고 지나가는 스캔선 */}
+        <motion.div
+          className="pointer-events-none absolute inset-x-0 z-20 h-24"
+          initial={{ top: '-10%', opacity: 0.85 }}
+          animate={{ top: '110%', opacity: 0 }}
+          transition={{ duration: 1.1, ease: 'easeOut' }}
+          style={{ background: 'linear-gradient(180deg, transparent, rgba(34,211,238,.18), transparent)' }}
+        />
+        <Corners />
+
+        {/* ── 헤더 ───────────────────────────────────────── */}
+        <div className="relative z-10 flex shrink-0 items-center gap-3 border-b border-cyan-400/20 px-5 py-3.5">
+          <ReactorCore size={38} busy={loading} />
+          <div className="min-w-0 flex-1">
+            <h2 className="font-mono text-base font-bold tracking-[0.18em] text-cyan-100">
+              G · A · D · I
+            </h2>
+            <p className="mt-0.5 flex items-center gap-1.5 font-mono text-2xs tracking-wider text-cyan-400/70">
+              <motion.span
+                className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400"
+                animate={{ opacity: [1, 0.25, 1] }}
+                transition={{ repeat: Infinity, duration: 1.8 }}
+              />
+              CLAUDE OPUS 5 · ERP LINK ACTIVE
+            </p>
           </div>
-          <div className="flex-1 min-w-0">
-            <h2 className="text-white font-bold text-base leading-tight">가디어스 AI 업무 도우미</h2>
-            <p className="text-violet-200 text-xs mt-0.5">Claude Opus 5 · 실시간 ERP 데이터 연동</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={resetChat}
-              className="p-2 rounded-lg hover:bg-white/20 transition-colors text-white"
-              title="대화 초기화"
-            >
-              <RefreshCw className="w-4 h-4" />
-            </button>
-            <button
-              onClick={onClose}
-              className="p-2 rounded-lg hover:bg-white/20 transition-colors text-white"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
+          <button
+            onClick={resetChat}
+            title="대화 초기화"
+            className="rounded-lg border border-cyan-400/20 p-2 text-cyan-300/80 transition-colors hover:border-cyan-400/50 hover:bg-cyan-400/10 hover:text-cyan-200"
+          >
+            <RefreshCw className="h-4 w-4" />
+          </button>
+          <button
+            onClick={onClose}
+            title="닫기"
+            className="rounded-lg border border-cyan-400/20 p-2 text-cyan-300/80 transition-colors hover:border-rose-400/50 hover:bg-rose-400/10 hover:text-rose-200"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
 
-        {/* 메시지 영역 */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* ── 대화 ───────────────────────────────────────── */}
+        <div ref={listRef} className="relative z-10 flex-1 space-y-3.5 overflow-y-auto overscroll-contain px-5 py-4">
           <AnimatePresence initial={false}>
-            {messages.map((msg, idx) => (
-              <MessageBubble key={idx} msg={msg} />
-            ))}
+            {messages.map((msg, idx) => <MessageBlock key={idx} msg={msg} />)}
           </AnimatePresence>
 
-          {loading && !streaming && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex gap-2.5"
-            >
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-600 to-purple-700 flex items-center justify-center shrink-0">
-                <Bot className="w-4 h-4 text-white" />
-              </div>
-              <div className="bg-white border border-gray-100 rounded-2xl rounded-tl-sm px-4 shadow-sm">
-                <TypingDots />
+          {/* 조회 중에는 무엇을 뒤지고 있는지 밝힌다 — 말없이 멈춰 있으면 고장으로 보인다 */}
+          {loading && (!streaming || activity) && (
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex gap-2.5">
+              <ReactorCore size={28} busy />
+              <div className="flex items-center gap-2.5 rounded-xl rounded-tl-sm border border-cyan-400/20 bg-slate-950/50 px-3.5 py-2.5">
+                <ScanBars />
+                <span className="font-mono text-xs tracking-wide text-cyan-300">
+                  {activity ? `▸ ${activity}` : '▸ 생각하는 중'}
+                </span>
               </div>
             </motion.div>
           )}
-          <div ref={bottomRef} />
         </div>
 
-        {/* 빠른 질문 버튼 (메시지가 1개일 때만 표시) */}
+        {/* ── 빠른 질문 (첫 화면에서만) ───────────────────── */}
         {messages.length <= 1 && (
-          <div className="px-4 pb-2 shrink-0">
-            <p className="text-xs text-gray-400 mb-2 font-medium">💡 빠른 질문</p>
+          <div className="relative z-10 shrink-0 px-5 pb-2">
+            <p className="mb-2 font-mono text-2xs tracking-wider text-cyan-400/60">▸ QUICK QUERY</p>
             <div className="grid grid-cols-2 gap-1.5">
-              {QUICK_QUESTIONS.map((q) => (
+              {QUICK_QUESTIONS.map(q => (
                 <button
                   key={q}
                   onClick={() => sendMessage(q)}
-                  className="flex items-center gap-1.5 text-left text-xs text-gray-600 bg-white border border-gray-200 rounded-xl px-3 py-2 hover:border-violet-300 hover:text-violet-700 hover:bg-violet-50 transition-all group"
+                  className="truncate rounded-lg border border-cyan-400/20 bg-cyan-400/[0.04] px-3 py-2 text-left text-xs text-slate-300 transition-all hover:border-cyan-400/60 hover:bg-cyan-400/10 hover:text-cyan-100"
                 >
-                  <ChevronRight className="w-3 h-3 text-gray-300 group-hover:text-violet-400 shrink-0" />
-                  <span className="line-clamp-1">{q}</span>
+                  {q}
                 </button>
               ))}
             </div>
           </div>
         )}
 
-        {/* 입력 영역 */}
-        <div className="px-4 pb-4 pt-2 shrink-0 border-t border-gray-100 bg-white">
+        {/* ── 입력 ───────────────────────────────────────── */}
+        <div className="relative z-10 shrink-0 border-t border-cyan-400/20 px-5 pb-4 pt-3">
           {error && (
-            <p className="text-xs text-red-500 mb-2 flex items-center gap-1">
-              <span>⚠️</span> {error}
-            </p>
+            <p className="mb-2 font-mono text-2xs text-rose-400">▸ {error}</p>
           )}
           <div className="flex items-end gap-2">
             <textarea
@@ -268,21 +357,22 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="질문을 입력하세요... (Enter로 전송, Shift+Enter 줄바꿈)"
+              placeholder="무엇이든 물어보세요.  (Enter 전송 · Shift+Enter 줄바꿈)"
               rows={2}
-              className="flex-1 resize-none rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 transition-all"
               disabled={loading}
+              className="flex-1 resize-none rounded-xl border border-cyan-400/25 bg-slate-950/60 px-3.5 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 transition-all focus:border-cyan-400/70 focus:outline-none focus:ring-2 focus:ring-cyan-400/20 disabled:opacity-50"
             />
             <button
               onClick={() => sendMessage()}
               disabled={!input.trim() || loading}
-              className="shrink-0 w-10 h-10 rounded-xl bg-gradient-to-br from-violet-600 to-purple-700 text-white flex items-center justify-center hover:opacity-90 disabled:opacity-40 transition-all shadow"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-cyan-400/40 bg-cyan-400/15 text-cyan-200 transition-all hover:border-cyan-300 hover:bg-cyan-400/25 disabled:opacity-30"
+              style={{ boxShadow: input.trim() && !loading ? '0 0 16px rgba(34,211,238,.35)' : undefined }}
             >
-              <Send className="w-4 h-4" />
+              <Send className="h-4 w-4" />
             </button>
           </div>
-          <p className="text-2xs text-gray-300 mt-1.5 text-center">
-            AI 답변은 참고용입니다. 중요한 의사결정은 ERP 데이터를 직접 확인하세요.
+          <p className="mt-2 text-center font-mono text-2xs tracking-wide text-slate-600">
+            답변은 참고용입니다 · 중요한 결정은 ERP 화면에서 확인하세요
           </p>
         </div>
       </motion.div>

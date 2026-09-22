@@ -166,11 +166,11 @@ const TOOLS: Tool[] = [
   {
     id: 'ai',
     emoji: '🤖',
-    name: 'AI 업무 도우미',
-    desc: '가디어스 ERP 데이터를 바탕으로 매출·미수금·크루 현황을 자연어로 질문하세요',
+    name: 'AI 비서 가디',
+    desc: '행사·견적·배정·정산·크루 이력을 직접 뒤져서 답합니다. 인력 추천도 맡기세요',
     category: 'AI & 데이터',
     status: 'beta',
-    gradient: 'from-violet-600 to-purple-800',
+    gradient: 'from-cyan-500 to-blue-800',
   },
   {
     id: 'report-gen',
