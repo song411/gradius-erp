@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
-import { ErpData, TOOLS, runTool } from '@/lib/ai/tools'
+import { ErpData, DraftBox, TOOLS, runTool } from '@/lib/ai/tools'
 import { BASE_INSTRUCTIONS, TOOL_LABEL } from '@/lib/ai/prompt'
 import { MODEL } from '@/lib/ai/model'
 
@@ -69,6 +69,9 @@ export async function POST(req: NextRequest) {
 
       // 한 번의 질문 동안에는 같은 테이블을 다시 읽지 않는다
       const erp = new ErpData()
+      // 도구가 만든 초안을 모아, 화면에 [이대로 입력] 카드로 띄운다
+      const drafts = new DraftBox()
+      let sentDrafts = 0
       const convo: Anthropic.MessageParam[] = [...messages]
       let usage: Anthropic.Usage | undefined
 
@@ -113,7 +116,7 @@ export async function POST(req: NextRequest) {
           const results = await Promise.all(calls.map(async call => {
             send({ type: 'tool', name: call.name, label: TOOL_LABEL[call.name] || '조회 중' })
             try {
-              const out = await runTool(call.name, call.input as Record<string, unknown>, erp)
+              const out = await runTool(call.name, call.input as Record<string, unknown>, erp, drafts)
               return { type: 'tool_result' as const, tool_use_id: call.id, content: out }
             } catch (err) {
               console.error(`[도구 ${call.name} 오류]`, err)
@@ -125,6 +128,12 @@ export async function POST(req: NextRequest) {
               }
             }
           }))
+
+          // 새로 생긴 초안을 화면으로 흘려보낸다. 저장은 하지 않는다 —
+          // 사람이 [이대로 입력]을 눌러야 /api/ai/apply 가 저장한다
+          while (sentDrafts < drafts.items.length) {
+            send({ type: 'proposal', draft: drafts.items[sentDrafts++] })
+          }
 
           // 여러 결과는 반드시 한 메시지에 담는다 — 나눠 보내면
           // 다음부터 도구를 하나씩만 부르게 된다

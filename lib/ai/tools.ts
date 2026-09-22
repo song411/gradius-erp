@@ -17,9 +17,11 @@ import {
   gradeOf, statusOf, isAssignable, MIN_WORKS_FOR_GRADE,
   GRADE_DESC, STATUS_DESC, type Grade, type PoolStatus,
 } from '@/lib/grading'
+import { parseInquiryText, calcParseConfidence } from '@/lib/inquiryParser'
+import { buildEstimateDraft, buildInquiryDraft, type Draft } from '@/lib/ai/draft'
 import type {
   Inquiry, Assignment, Staff, Settlement, Payout,
-  Estimate, EstimateItem, EventExpense, Evaluation,
+  Estimate, EstimateItem, EventExpense, Evaluation, Role,
 } from '@/lib/supabase/types'
 
 /** Supabase REST 가 한 번에 주는 최대 행 수 */
@@ -103,6 +105,17 @@ export class ErpData {
     return this.load<EventExpense>('event_expenses', () => fetchAll('event_expenses',
       'id, inquiry_id, category, amount, memo, spent_on'))
   }
+  roles() {
+    return this.load<Role>('roles', () => fetchAll('roles',
+      'id, role_code, role_name, base_price, pay_price, leader_bonus'))
+  }
+}
+
+/** 이번 질문에서 만들어진 초안들 — 화면에 [이대로 입력] 카드로 띄우기 위해 모아둔다.
+ *  도구는 저장하지 않는다. 저장은 사람이 버튼을 눌렀을 때만 일어난다. */
+export class DraftBox {
+  readonly items: Draft[] = []
+  add(d: Draft) { this.items.push(d) }
 }
 
 // ─── 공통 헬퍼 ────────────────────────────────────────────
@@ -259,6 +272,75 @@ export const TOOLS: Anthropic.Tool[] = [
       },
     },
   },
+  {
+    name: 'draft_inquiry',
+    description:
+      '카톡·문자로 받은 문의 원문을 읽어 문의 접수 초안을 만든다. 저장하지 않는다 — ' +
+      '사장님이 화면에서 [이대로 입력]을 눌러야 들어간다. ' +
+      '★ text 에 원문을 그대로 넣고, 동시에 당신이 읽어낸 값을 fields 에도 넣으세요. ' +
+      "ERP 파서는 '업체:', '행사명:' 처럼 라벨이 붙은 양식만 읽습니다. " +
+      '줄글로 온 문의는 파서가 거의 못 읽으니, 그때는 당신이 읽은 fields 가 쓰입니다. ' +
+      '날짜는 YYYY-MM-DD 로, 인원은 숫자로 주세요. 확실하지 않은 칸은 비워 두세요 — 지어내면 안 됩니다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', description: '받은 문의 원문 그대로 (가공하지 말 것)' },
+        fields: {
+          type: 'object',
+          description: '당신이 원문에서 읽어낸 값. 파서가 못 읽은 칸을 이것으로 채운다.',
+          properties: {
+            company_name: { type: 'string', description: '거래처(업체명)' },
+            contact_name: { type: 'string', description: '담당자 성함' },
+            phone: { type: 'string', description: '연락처' },
+            event_name: { type: 'string', description: '행사명' },
+            location: { type: 'string', description: '장소' },
+            event_start: { type: 'string', description: '시작일 YYYY-MM-DD' },
+            event_end: { type: 'string', description: '종료일 YYYY-MM-DD (당일이면 비움)' },
+            event_time: { type: 'string', description: '근무 시간 (예: 09:00 ~ 18:00)' },
+            service_type: { type: 'string', description: '직무' },
+            required_staff: { type: 'number', description: '필요 인원 (숫자)' },
+            pay_detail: { type: 'string', description: '페이 원문 (예: 팀장 18 / 스탭 14)' },
+            attire: { type: 'string', description: '복장' },
+            meal: { type: 'string', description: '식사' },
+            parking: { type: 'string', description: '주차' },
+            notes: { type: 'string', description: '특이사항' },
+          },
+        },
+      },
+      required: ['text'],
+    },
+  },
+  {
+    name: 'draft_estimate',
+    description:
+      '행사 하나에 대한 견적서 초안을 만든다. 단가는 ERP 단가표(roles)에서 가져오고 ' +
+      '공급가·부가세·원가·이익률까지 계산한다. 저장하지 않는다 — [이대로 입력]을 눌러야 들어간다. ' +
+      '직무 구성(lines)을 주면 그대로, 안 주면 문의의 필요 인원으로 한 줄 만든다. ' +
+      '최소 이익률(일반 30%·고난이도 40%)에 못 미치면 경고가 함께 온다. ' +
+      '부대비용은 자동으로 만들지 않는다 — 사람이 직접 적는 값이다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        event_id: { type: 'string', description: 'search_events 가 준 id' },
+        keyword: { type: 'string', description: 'id 를 모를 때 쓰는 검색어' },
+        hard: { type: 'boolean', description: '고난이도 행사면 true (최소 이익률 40%)' },
+        lines: {
+          type: 'array',
+          description: '직무 구성. 비우면 문의의 필요 인원으로 한 줄.',
+          items: {
+            type: 'object',
+            properties: {
+              role: { type: 'string', description: '직무 이름 (단가표의 role_name)' },
+              quantity: { type: 'number', description: '인원' },
+              days: { type: 'number', description: '일수. 비우면 운영일 수' },
+              is_leader: { type: 'boolean', description: '팀장이면 true (팀장수당 가산)' },
+            },
+            required: ['role', 'quantity'],
+          },
+        },
+      },
+    },
+  },
 ]
 
 // ─── 도구 실행 ────────────────────────────────────────────
@@ -267,7 +349,9 @@ type ToolInput = Record<string, unknown>
 const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined)
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined)
 
-export async function runTool(name: string, input: ToolInput, erp: ErpData): Promise<string> {
+export async function runTool(
+  name: string, input: ToolInput, erp: ErpData, drafts?: DraftBox,
+): Promise<string> {
   switch (name) {
     case 'search_events':    return searchEvents(input, erp)
     case 'get_event_detail': return eventDetail(input, erp)
@@ -275,8 +359,119 @@ export async function runTool(name: string, input: ToolInput, erp: ErpData): Pro
     case 'get_staff_detail': return staffDetail(input, erp)
     case 'search_settlements': return searchSettlements(input, erp)
     case 'get_summary':      return summary(input, erp)
+    case 'draft_inquiry':    return draftInquiry(input, drafts)
+    case 'draft_estimate':   return draftEstimate(input, erp, drafts)
     default: return `알 수 없는 도구: ${name}`
   }
+}
+
+// ─── 초안 만들기 (저장하지 않는다) ────────────────────────
+
+function draftInquiry(input: ToolInput, drafts?: DraftBox): string {
+  const text = str(input.text)
+  if (!text) return '문의 원문(text)이 필요합니다.'
+
+  // ERP 파서는 라벨이 붙은 양식만 읽는다. 줄글로 온 문의는 거의 못 읽으므로,
+  // 원문을 직접 읽은 AI 가 준 값으로 빈 칸을 메운다. 파서가 읽은 값이 우선이다 —
+  // 양식대로 쓴 글이라면 그쪽이 사람이 의도한 그대로이기 때문이다.
+  const parsed = parseInquiryText(text) as Record<string, unknown>
+  const fromAi = (input.fields && typeof input.fields === 'object')
+    ? input.fields as Record<string, unknown> : {}
+
+  const merged: Record<string, unknown> = { ...parsed }
+  const filledByAi: string[] = []
+  for (const [k, v] of Object.entries(fromAi)) {
+    const cur = merged[k]
+    const empty = cur === undefined || cur === null || cur === '' || cur === 0
+    if (empty && v !== undefined && v !== null && v !== '') {
+      merged[k] = v
+      filledByAi.push(k)
+    }
+  }
+
+  const confidence = calcParseConfidence(merged)
+  const draft = buildInquiryDraft(merged, confidence)
+  drafts?.add(draft)
+
+  const f = draft.fields
+  const show = (label: string, key: string) => {
+    const v = f[key]
+    return `${label}: ${v === undefined || v === null || v === '' ? '(못 읽음)' : v}`
+  }
+
+  return [
+    `[문의 초안] 읽어낸 확신도 ${confidence}%`,
+    show('거래처', 'company_name'),
+    show('담당자', 'contact_name'),
+    show('연락처', 'phone'),
+    show('행사명', 'event_name'),
+    show('장소', 'location'),
+    show('기간', 'event_start') + ' ~ ' + (f.event_end || '(당일)'),
+    show('시간', 'event_time'),
+    show('직무', 'service_type'),
+    show('인원', 'required_staff'),
+    show('페이', 'pay_detail'),
+    show('복장', 'attire'),
+    show('식사', 'meal'),
+    show('주차', 'parking'),
+    f.notes ? `특이사항: ${f.notes}` : '',
+    '',
+    draft.missing.length
+      ? `⚠ 비어 있는 칸: ${draft.missing.join(', ')} — 이 값들은 사장님이 채우셔야 합니다.`
+      : '✓ 필수 칸이 모두 채워졌습니다.',
+    filledByAi.length
+      ? `※ 양식 라벨이 없어 ERP 파서가 못 읽은 칸(${filledByAi.join(', ')})은 원문을 직접 읽어 채웠습니다. 사장님 확인이 필요합니다.`
+      : '',
+    '',
+    '※ 아직 저장하지 않았습니다. 화면의 [이대로 입력] 버튼을 눌러야 문의로 등록됩니다.',
+    '※ 위 내용을 사장님께 그대로 읽어드리고, 못 읽은 칸이 있으면 무엇인지 짚어주세요.',
+  ].filter(Boolean).join('\n')
+}
+
+async function draftEstimate(input: ToolInput, erp: ErpData, drafts?: DraftBox): Promise<string> {
+  const found = resolveEvent(await erp.inquiries(), str(input.event_id), str(input.keyword))
+  if ('error' in found) return found.error
+
+  const roles = await erp.roles()
+  const rawLines = Array.isArray(input.lines) ? input.lines : undefined
+  const lines = rawLines?.map(l => {
+    const o = l as Record<string, unknown>
+    return {
+      role: String(o.role ?? ''),
+      quantity: Number(o.quantity ?? 0),
+      days: o.days === undefined ? undefined : Number(o.days),
+      is_leader: o.is_leader === true,
+    }
+  }).filter(l => l.role && l.quantity > 0)
+
+  const built = buildEstimateDraft({
+    inquiry: found.event, roles, lines, hard: input.hard === true,
+  })
+  if ('error' in built) {
+    return built.error + `\n\n참고 — 단가표에 있는 직무: ${roles.map(r => r.role_name).join(', ')}`
+  }
+  drafts?.add(built)
+
+  const t = built.totals
+  return [
+    `[견적 초안] ${built.company_name} / ${built.event_name}`,
+    '',
+    '품목 | 인원 | 일수 | 청구단가 | 지급단가 | 소계',
+    ...built.items.map(it =>
+      `${it.role_name}${it.is_leader ? '(팀장)' : ''} | ${it.quantity}명 | ${it.days}일 | ` +
+      `${won(it.unit_price)} | ${won(it.pay_unit_price)} | ${won(it.quantity * it.days * it.unit_price)}`),
+    '',
+    `공급가 ${won(t.supply)} / 부가세 ${won(t.vat)} / 합계 ${won(t.total)}`,
+    `원가(지급) ${won(t.cost)} / 예상이익 ${won(t.profit)} / 이익률 ${t.profit_rate}%`,
+    ...(built.warnings.length ? ['', ...built.warnings.map(w => `⚠ ${w}`)] : []),
+    ...(built.items.some(it => it.unit_price === 0)
+      ? [`단가표에 있는 직무: ${roles.map(r => r.role_name).join(' / ')}`,
+         '→ 이 중에서 고른 뒤 lines 로 다시 불러 주세요.']
+      : []),
+    '',
+    '※ 아직 저장하지 않았습니다. 화면의 [이대로 입력] 버튼을 눌러야 견적서로 등록됩니다.',
+    '※ 부대비용(교통·숙박·식비)은 사람이 직접 적는 값이라 초안에 넣지 않았습니다.',
+  ].join('\n')
 }
 
 async function searchEvents(input: ToolInput, erp: ErpData): Promise<string> {

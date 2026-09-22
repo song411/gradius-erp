@@ -4,11 +4,15 @@ import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Send, User, RefreshCw } from 'lucide-react'
 import MarkdownView from './ai/MarkdownView'
+import ProposalCard from './ai/ProposalCard'
+import type { Draft } from '@/lib/ai/draft'
 import { MODEL_LABEL } from '@/lib/ai/model'
 
 interface Message {
   role: 'user' | 'assistant'
   content: string
+  /** AI가 만든 초안 — 말풍선 아래 [이대로 입력] 카드로 뜬다 */
+  drafts?: Draft[]
 }
 
 const GREETING = `안녕하세요, 대표님. **가디**입니다.
@@ -123,6 +127,16 @@ function MessageBlock({ msg }: { msg: Message }) {
   )
 }
 
+/** 말풍선 + 그 아래 붙는 초안 카드들 */
+function MessageWithDrafts({ msg }: { msg: Message }) {
+  return (
+    <div className="space-y-2">
+      <MessageBlock msg={msg} />
+      {msg.drafts?.map((d, i) => <ProposalCard key={i} draft={d} />)}
+    </div>
+  )
+}
+
 export default function AiModal({ onClose }: { onClose: () => void }) {
   const [messages, setMessages] = useState<Message[]>([{ role: 'assistant', content: GREETING }])
   const [input, setInput] = useState('')
@@ -170,16 +184,21 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
       let buffer = ''
       let answer = ''
       let started = false
+      const collected: Draft[] = []   // 도구가 만든 초안 (저장 안 된 상태)
 
       const paint = () => {
+        const msg: Message = {
+          role: 'assistant', content: answer,
+          ...(collected.length ? { drafts: [...collected] } : {}),
+        }
         if (!started) {
           started = true
           setStreaming(true)
-          setMessages(prev => [...prev, { role: 'assistant', content: answer }])
+          setMessages(prev => [...prev, msg])
         } else {
           setMessages(prev => {
             const next = [...prev]
-            next[next.length - 1] = { role: 'assistant', content: answer }
+            next[next.length - 1] = msg
             return next
           })
         }
@@ -195,7 +214,7 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
 
         for (const line of lines) {
           if (!line.trim()) continue
-          let evt: { type: string; text?: string; error?: string; label?: string }
+          let evt: { type: string; text?: string; error?: string; label?: string; draft?: Draft }
           try { evt = JSON.parse(line) } catch { continue }
 
           if (evt.type === 'text' && evt.text) {
@@ -204,13 +223,19 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
             paint()
           } else if (evt.type === 'tool') {
             setActivity(evt.label || '조회 중')
+          } else if (evt.type === 'proposal' && evt.draft) {
+            collected.push(evt.draft)
+            if (started) paint()
           } else if (evt.type === 'error') {
             throw new Error(evt.error || 'AI 응답 오류')
           }
         }
       }
 
-      if (!started) throw new Error('응답을 받지 못했습니다.')
+      if (!started) {
+        if (collected.length === 0) throw new Error('응답을 받지 못했습니다.')
+        paint()   // 말은 없었지만 초안은 만들어졌다 — 카드만이라도 띄운다
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : '알 수 없는 오류'
       setError(msg)
@@ -312,7 +337,7 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
         {/* ── 대화 ───────────────────────────────────────── */}
         <div ref={listRef} className="relative z-10 flex-1 space-y-3.5 overflow-y-auto overscroll-contain px-5 py-4">
           <AnimatePresence initial={false}>
-            {messages.map((msg, idx) => <MessageBlock key={idx} msg={msg} />)}
+            {messages.map((msg, idx) => <MessageWithDrafts key={idx} msg={msg} />)}
           </AnimatePresence>
 
           {/* 조회 중에는 무엇을 뒤지고 있는지 밝힌다 — 말없이 멈춰 있으면 고장으로 보인다 */}
