@@ -86,6 +86,11 @@ const TABS: Array<{
     idle: 'border-gray-200 bg-white text-gray-600 hover:border-gray-400' },
 ]
 
+// ── 집계 카드로 거는 필터 ────────────────────────────────
+// 탭이 '어느 단계냐'를 가른다면, 이쪽은 '어떤 상태냐'를 가른다. 두 축은 겹쳐 쓸 수 있다.
+// (예: '견적 발송 전' 탭 + '손 놓은 건' → 보내지도 않고 방치된 건만)
+type Focus = 'live' | 'waiting' | 'risky' | null
+
 const DETAIL_KEY = 'gradius.pipeline.detail'
 const SORT_KEY   = 'gradius.pipeline.sort'
 const VIEW_KEY   = 'gradius.pipeline.view'
@@ -96,7 +101,7 @@ export default function PipelineContent() {
   const [memos,     setMemos]     = useState<MemoLike[]>([])
   const [loading, setLoading] = useState(true)
   const [searchText, setSearchText] = useState('')
-  const [onlyRisky, setOnlyRisky] = useState(false)
+  const [focus, setFocus] = useState<Focus>(null)
   const [tab, setTab] = useState<TabKey>('all')
   const [showOldConcluded, setShowOldConcluded] = useState(false)
   // 카드에 적어둔 내용까지 펼칠지. 서버 렌더에서는 localStorage를 읽을 수 없어
@@ -196,13 +201,24 @@ export default function PipelineContent() {
     ].some(v => v?.toLowerCase().includes(q))
   }, [searchText])
 
+  /** '손 놓은 건' 의 뜻 — 카드의 숫자와 목록이 같은 것을 가리켜야 한다 */
+  const isRisky = useCallback(
+    (c: PipelineCard) => c.signal !== 'ok' || c.overdue, [])
+
   const visible = useMemo(
     () => onBoard.filter(c => {
-      if (onlyRisky && c.signal === 'ok' && !c.overdue) return false
+      if (focus === 'live' && !isLiveStage(c.stage)) return false
+      if (focus === 'waiting' && c.stage !== '체결 전') return false
+      // ★ 끝난 건은 '손 놓은 건'이 아니다. 체결·미체결 카드는 행사일이 지나면
+      //   expired 로 alert 가 붙는데, 그것까지 넣으면 카드는 8건인데 목록은 45건이 된다.
+      if (focus === 'risky' && !(isLiveStage(c.stage) && isRisky(c))) return false
       return matchesSearch(c)
     }),
-    [onBoard, onlyRisky, matchesSearch],
+    [onBoard, focus, isRisky, matchesSearch],
   )
+
+  /** 같은 카드를 다시 누르면 필터가 풀린다 — 들어갔으면 나올 길이 있어야 한다 */
+  const toggleFocus = (f: Exclude<Focus, null>) => setFocus(cur => (cur === f ? null : f))
 
   const byStage = useMemo(() => {
     const map = {} as Record<PipelineStage, PipelineCard[]>
@@ -225,7 +241,7 @@ export default function PipelineContent() {
   // ── 집계 (검색·필터와 무관하게 전체 기준) ────────────────
   const live       = allCards.filter(c => isLiveStage(c.stage))
   const waiting    = live.filter(c => c.stage === '체결 전')
-  const riskyCount = live.filter(c => c.signal === 'alert').length
+  const riskyCount = live.filter(isRisky).length
   const liveAmount = live.reduce((s, c) => s + c.amount, 0)
   const followUps  = dueToday(allCards)
   const score      = winRate(allCards)
@@ -306,21 +322,45 @@ export default function PipelineContent() {
         })}
       </div>
 
-      {/* 집계 */}
+      {/* 집계 — 숫자만 보여주면 "그래서 뭘 봐야 하나"로 끝난다.
+          뜻을 한 줄 적고, 누르면 그 건들만 남게 한다. */}
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 mb-4">
         <StatCard icon={<Inbox className="h-5 w-5" />} label="진행 중"
-          value={`${live.length}건`} color="blue" />
+          value={`${live.length}건`} color="blue"
+          hint="아직 안 끝난 건 (접수·견적작성·체결 전)"
+          active={focus === 'live'} onClick={() => toggleFocus('live')} />
         <StatCard icon={<Send className="h-5 w-5" />} label="답변 대기"
-          value={`${waiting.length}건`} color="green" />
+          value={`${waiting.length}건`} color="green"
+          hint="견적서 보내고 답을 기다리는 중"
+          active={focus === 'waiting'} onClick={() => toggleFocus('waiting')} />
         <StatCard icon={<AlertTriangle className="h-5 w-5" />} label="손 놓은 건"
           value={`${riskyCount}건`} color={riskyCount > 0 ? 'red' : 'gray'}
-          hint={`${STALE_RULES['체결 전']!.alert}일 이상 무응답 등`} />
+          hint={`${STALE_RULES['체결 전']!.warn}일 넘게 답이 없거나 기한이 지난 건`}
+          active={focus === 'risky'} onClick={() => toggleFocus('risky')} />
         <StatCard icon={<TrendingUp className="h-5 w-5" />} label="진행 중 견적"
-          value={shortKRW(liveAmount)} color="purple" hint="아직 남의 돈 — 매출 아님" />
+          value={shortKRW(liveAmount)} color="purple"
+          hint="아직 남의 돈 — 매출 아닙니다"
+          active={focus === 'live'} onClick={() => toggleFocus('live')} />
         <StatCard icon={<Trophy className="h-5 w-5" />} label={`최근 ${RECENT_CONCLUDED_DAYS}일 승률`}
           value={score.rate != null ? `${score.rate}%` : '-'} color="emerald"
-          hint={`체결 ${score.won} · 미체결 ${score.lost}`} />
+          hint={`결정난 건만 셉니다 — 체결 ${score.won} · 미체결 ${score.lost}`} />
       </div>
+
+      {/* 무엇이 걸려 있는지 — 걸어둔 것을 잊으면 "왜 안 보이지" 가 된다 */}
+      {focus && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm">
+          <span className="font-semibold text-blue-900">
+            {focus === 'live' ? '진행 중' : focus === 'waiting' ? '답변 대기' : '손 놓은 건'}
+          </span>
+          <span className="text-blue-700">만 보고 있습니다 — {visible.length}건</span>
+          <button
+            onClick={() => setFocus(null)}
+            className="ml-auto rounded-md border border-blue-300 bg-white px-2 py-0.5 text-xs font-medium text-blue-700 hover:bg-blue-100"
+          >
+            전체 보기
+          </button>
+        </div>
+      )}
 
       {/* 검색 · 보기 */}
       <div className="flex flex-wrap gap-2 mb-4">
@@ -365,10 +405,12 @@ export default function PipelineContent() {
           </Select>
         </div>
         <button
-          onClick={() => setOnlyRisky(v => !v)}
+          onClick={() => toggleFocus('risky')}
+          aria-pressed={focus === 'risky'}
+          title="위의 '손 놓은 건' 카드와 같은 필터입니다"
           className={[
             'inline-flex items-center gap-2 rounded-lg border px-3 h-10 text-sm font-medium transition-colors',
-            onlyRisky
+            focus === 'risky'
               ? 'border-red-300 bg-red-50 text-red-700'
               : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50',
           ].join(' ')}
@@ -408,18 +450,19 @@ export default function PipelineContent() {
           {PIPELINE_STAGES.map(stage => {
             const list = byStage[stage]
             const done = !isLiveStage(stage)
-            const focus = stage === '체결 전'
+            // 이 칸이 '지금 제일 봐야 할 칸'인가 (상태 필터 focus 와 다른 것이라 이름을 가른다)
+            const hot = stage === '체결 전'
             return (
               <section
                 key={stage}
                 className={[
                   'rounded-xl border',
-                  focus ? 'border-blue-300 bg-blue-50/50' : 'border-gray-200 bg-gray-50',
+                  hot ? 'border-blue-300 bg-blue-50/50' : 'border-gray-200 bg-gray-50',
                 ].join(' ')}
               >
-                <header className={`px-3 py-2.5 border-b ${focus ? 'border-blue-200' : 'border-gray-200'}`}>
+                <header className={`px-3 py-2.5 border-b ${hot ? 'border-blue-200' : 'border-gray-200'}`}>
                   <div className="flex items-baseline gap-2">
-                    <h2 className={`text-sm font-bold ${focus ? 'text-blue-900' : 'text-gray-900'}`}>
+                    <h2 className={`text-sm font-bold ${hot ? 'text-blue-900' : 'text-gray-900'}`}>
                       {stage}
                     </h2>
                     <span className="text-xs font-semibold text-gray-500">{list.length}</span>
@@ -677,13 +720,16 @@ function BoardCard({
 
 // ═════════════════════════════════════════════════════════
 function StatCard({
-  icon, label, value, color, hint,
+  icon, label, value, color, hint, onClick, active,
 }: {
   icon: React.ReactNode
   label: string
   value: string
   color: 'blue' | 'green' | 'red' | 'purple' | 'gray' | 'emerald'
   hint?: string
+  /** 주면 눌러서 그 건들만 볼 수 있는 카드가 된다 */
+  onClick?: () => void
+  active?: boolean
 }) {
   const tone = {
     blue:    'bg-blue-50 text-blue-600',
@@ -694,16 +740,33 @@ function StatCard({
     emerald: 'bg-emerald-50 text-emerald-600',
   }[color]
 
+  const body = (
+    <CardContent className="flex items-center gap-3 p-4">
+      <div className={`rounded-lg p-2 ${tone}`}>{icon}</div>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs text-gray-500">{label}</p>
+        <p className="text-2xl font-bold text-gray-900 truncate">{value}</p>
+        {/* 뜻은 줄여 자르지 않는다 — 읽으라고 적은 줄이다 */}
+        {hint && <p className="mt-0.5 text-2xs leading-snug text-gray-400">{hint}</p>}
+      </div>
+    </CardContent>
+  )
+
+  if (!onClick) return <Card>{body}</Card>
+
   return (
-    <Card>
-      <CardContent className="flex items-center gap-3 p-4">
-        <div className={`rounded-lg p-2 ${tone}`}>{icon}</div>
-        <div className="min-w-0">
-          <p className="text-xs text-gray-500">{label}</p>
-          <p className="text-2xl font-bold text-gray-900 truncate">{value}</p>
-          {hint && <p className="text-2xs text-gray-400 truncate">{hint}</p>}
-        </div>
-      </CardContent>
-    </Card>
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      title={active ? '다시 누르면 전체로 돌아갑니다' : '누르면 이 건들만 봅니다'}
+      className="text-left transition-all hover:-translate-y-px"
+    >
+      <Card className={active
+        ? 'h-full border-blue-500 ring-2 ring-blue-200'
+        : 'h-full hover:border-gray-400'}>
+        {body}
+      </Card>
+    </button>
   )
 }
