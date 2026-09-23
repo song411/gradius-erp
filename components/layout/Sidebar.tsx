@@ -8,11 +8,25 @@ import {
   LayoutDashboard, MessageSquare, FileText, Users, UserCheck,
   Calculator, CreditCard, ClipboardList, Search, TrendingUp,
   ChevronLeft, ChevronRight, Building2, Handshake, FlaskConical, ShieldAlert, ShieldCheck,
-  CalendarRange, Target
+  CalendarRange, Target, Sparkles
 } from 'lucide-react'
 import { useState } from 'react'
+import dynamic from 'next/dynamic'
 
-const navItems = [
+// 가디는 화면을 덮는 큰 모달이다. 사이드바는 모든 화면에 붙어 있으므로
+// 미리 불러오면 안 쓰는 사람도 그 무게를 진다 — 열 때 가져온다.
+const AiModal = dynamic(() => import('@/components/lab/tools/AiModal'), { ssr: false })
+
+/** 메뉴 한 칸. href 로 이동하거나, action 으로 그 자리에서 무언가를 연다. */
+interface NavItem {
+  href?: string
+  /** 페이지 이동이 아니라 모달을 여는 칸 */
+  action?: 'ai'
+  label: string
+  icon: typeof LayoutDashboard
+}
+
+const navItems: NavItem[] = [
   { href: '/ceo', label: 'CEO 전용', icon: TrendingUp },
   { href: '/', label: '대시보드', icon: LayoutDashboard },
   { href: '/inquiries', label: '문의 관리', icon: MessageSquare },
@@ -28,6 +42,8 @@ const navItems = [
   { href: '/customers', label: '고객 관리', icon: Building2 },
   { href: '/attendance', label: '출석부', icon: ClipboardList },
   { href: '/search', label: '통합검색', icon: Search },
+  // 가디는 어느 화면에서든 그 자리에서 열린다 — 보던 것을 두고 옮겨 가지 않는다
+  { action: 'ai', label: 'AI비서 가디', icon: Sparkles },
   { href: '/lab', label: '스마트연구소', icon: FlaskConical },
   { href: '/admin', label: 'DB 관리자', icon: ShieldAlert },
 ]
@@ -35,6 +51,7 @@ const navItems = [
 export default function Sidebar() {
   const pathname = usePathname()
   const [collapsed, setCollapsed] = useState(false)
+  const [aiOpen, setAiOpen] = useState(false)
 
   return (
     <aside
@@ -76,22 +93,47 @@ export default function Sidebar() {
       <nav className="flex-1 overflow-y-auto py-3 space-y-0.5 px-2">
         {navItems.map((item, idx) => {
           const Icon = item.icon
-          const isActive = pathname === item.href ||
-            (item.href !== '/' && pathname.startsWith(item.href))
+          const isActive = !!item.href && (pathname === item.href ||
+            (item.href !== '/' && pathname.startsWith(item.href)))
           const isCeo   = item.href === '/ceo'
           const isLab   = item.href === '/lab'
           const isAdmin = item.href === '/admin'
+          const isAi    = item.action === 'ai'
+
+          // 칸 하나의 생김새 — 이동하는 칸과 여는 칸이 같아 보여야 한다
+          const cls = cn(
+            'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+            isCeo
+              ? isActive
+                ? 'bg-amber-500 text-white'
+                : 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 hover:text-amber-300'
+              : isAi
+                ? aiOpen
+                  ? 'bg-cyan-500 text-white'
+                  : 'bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20 hover:text-cyan-200'
+                : isLab
+                  ? isActive
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300'
+                  : isAdmin
+                    ? isActive
+                      ? 'bg-red-700 text-white'
+                      : 'bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300'
+                    : isActive
+                      ? 'bg-blue-600 text-white'
+                      : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+          )
 
           return (
-            <div key={item.href}>
+            <div key={item.href ?? item.action}>
               {/* CEO 전용 메뉴 아래 구분선 */}
               {idx === 1 && (
                 <div className={cn('my-1.5', collapsed ? 'mx-1' : 'mx-2')}>
                   <div className="border-t border-gray-700" />
                 </div>
               )}
-              {/* 스마트연구소 메뉴 위 구분선 */}
-              {isLab && (
+              {/* 가디 메뉴 위 구분선 — 여기부터 도구 영역 */}
+              {isAi && (
                 <div className={cn('my-1.5', collapsed ? 'mx-1' : 'mx-2')}>
                   <div className="border-t border-gray-700" />
                 </div>
@@ -102,33 +144,25 @@ export default function Sidebar() {
                   <div className="border-t border-gray-700" />
                 </div>
               )}
-              <Link
-                href={item.href}
-                className={cn(
-                  'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-                  isCeo
-                    ? isActive
-                      ? 'bg-amber-500 text-white'
-                      : 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 hover:text-amber-300'
-                    : isLab
-                      ? isActive
-                        ? 'bg-emerald-600 text-white'
-                        : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300'
-                      : isAdmin
-                        ? isActive
-                          ? 'bg-red-700 text-white'
-                          : 'bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300'
-                        : isActive
-                          ? 'bg-blue-600 text-white'
-                          : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                )}
-                title={collapsed ? item.label : undefined}
-              >
-                <Icon className="h-5 w-5 shrink-0" />
-                {!collapsed && (
-                  <span className="flex-1">{item.label}</span>
-                )}
-              </Link>
+              {isAi ? (
+                <button
+                  onClick={() => setAiOpen(true)}
+                  className={cn(cls, 'w-full text-left')}
+                  title={collapsed ? item.label : undefined}
+                >
+                  <Icon className="h-5 w-5 shrink-0" />
+                  {!collapsed && <span className="flex-1">{item.label}</span>}
+                </button>
+              ) : (
+                <Link
+                  href={item.href!}
+                  className={cls}
+                  title={collapsed ? item.label : undefined}
+                >
+                  <Icon className="h-5 w-5 shrink-0" />
+                  {!collapsed && <span className="flex-1">{item.label}</span>}
+                </Link>
+              )}
             </div>
           )
         })}
@@ -150,6 +184,9 @@ export default function Sidebar() {
           )}
         </button>
       </div>
+
+      {/* 가디 — 어느 화면에서 열든 그 화면 위에 뜬다 */}
+      {aiOpen && <AiModal onClose={() => setAiOpen(false)} />}
     </aside>
   )
 }

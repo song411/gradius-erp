@@ -7,7 +7,6 @@ import MbtiModal from './tools/MbtiModal'
 import TaxCalcModal from './tools/TaxCalcModal'
 import TarotModal from './tools/TarotModal'
 import QuoteModal from './tools/QuoteModal'
-import AiModal from './tools/AiModal'
 import GuideModal from './tools/GuideModal'
 import KitModal from './tools/KitModal'
 import IncomeModal from './tools/IncomeModal'
@@ -163,15 +162,8 @@ const TOOLS: Tool[] = [
     gradient: 'from-red-500 to-rose-600',
   },
   // AI & 데이터
-  {
-    id: 'ai',
-    emoji: '🤖',
-    name: 'AI 비서 가디',
-    desc: '행사·견적·배정·정산·크루 이력을 직접 뒤져서 답합니다. 인력 추천도 맡기세요',
-    category: 'AI & 데이터',
-    status: 'beta',
-    gradient: 'from-cyan-500 to-blue-800',
-  },
+  // ※ 'AI 비서 가디' 는 여기서 뺐다 — 왼쪽 메뉴에 상주한다(components/layout/Sidebar.tsx).
+  //    연구소는 '시험해보는 곳'이고, 가디는 이제 시험이 끝나 실무 메뉴로 나갔다.
   {
     id: 'report-gen',
     emoji: '📄',
@@ -190,10 +182,7 @@ const STATUS_META: Record<ToolStatus, { label: string; cls: string }> = {
   soon:  { label: '준비 중',     cls: 'bg-gray-100 text-gray-500 border-gray-200' },
 }
 
-// AI 모달은 전체화면 오버레이로 직접 렌더 (다른 모달보다 크므로 분리)
 function ToolModal({ toolId, onClose }: { toolId: string; onClose: () => void }) {
-  // AI 모달은 자체 오버레이를 포함하므로 별도 처리
-  if (toolId === 'ai')             return <AiModal        onClose={onClose} />
   if (toolId === 'guide')          return <GuideModal     onClose={onClose} />
   if (toolId === 'income-ledger')  return <IncomeModal    onClose={onClose} />
   if (toolId === 'dispatch' || toolId === 'deploy-report') return <DispatchModal onClose={onClose} />
