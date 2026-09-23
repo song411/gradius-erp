@@ -2,12 +2,12 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Send, User, RefreshCw } from 'lucide-react'
+import { X, Send, User, RefreshCw, Brain, ChevronDown } from 'lucide-react'
 import MarkdownView from './ai/MarkdownView'
 import ProposalCard from './ai/ProposalCard'
 import ErpScope, { type ScanRow, type TraceStep } from './ai/ErpScope'
 import type { Draft } from '@/lib/ai/draft'
-import { MODEL_LABEL } from '@/lib/ai/model'
+import { MODELS, EFFORTS, DEFAULT_MODEL, DEFAULT_EFFORT, resolveModel } from '@/lib/ai/model'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -17,6 +17,8 @@ interface Message {
   /** 이 답을 만들며 ERP를 어떻게 훑었는지 */
   steps?: TraceStep[]
   scans?: ScanRow[]
+  /** 답하기 전에 무엇을 따졌는지 (모델이 준 생각 요약) */
+  thinking?: string
 }
 
 const GREETING = `안녕하세요, 대표님. **가디**입니다.
@@ -24,14 +26,15 @@ const GREETING = `안녕하세요, 대표님. **가디**입니다.
 행사·견적·배정·정산·크루 이력까지 직접 뒤져서 답합니다.
 특정 행사나 사람을 콕 집어 물어보셔도 됩니다.
 
-"이번 행사에 누구 보낼까?" 하고 물으시면 **그 현장을 해본 사람**부터 찾아드립니다.`
+"이번 행사에 누구 보낼까?" 하고 물으시면 **그 현장을 해본 사람**부터,
+1순위와 예비까지 **여러 명**을 이유와 함께 뽑아드립니다. 섭외 문구도 만들어 드립니다.`
 
 const QUICK_QUESTIONS = [
   '다음 행사에 누구 보내면 좋을까?',
+  '그 사람들한테 보낼 섭외 문구 만들어줘',
   '다음주에 무슨 행사 있어?',
   '미수금 많은 순으로 알려줘',
   '이번달 매출이 얼마야?',
-  '지급 대기 중인 건이 몇 개야?',
   '전체 현황 요약해줘',
 ]
 
@@ -105,6 +108,31 @@ function Corners() {
   )
 }
 
+/** 답 아래 접혀 있는 '생각 과정'.
+ *  펼치기 전에는 한 줄만 차지한다 — 평소에는 답만 보고, 미심쩍을 때만 열어 본다. */
+function ThinkingPanel({ text }: { text: string }) {
+  const [open, setOpen] = useState(false)
+  if (!text.trim()) return null
+
+  return (
+    <div className="ml-[38px]">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1.5 rounded-lg border border-violet-400/25 px-2 py-1 font-mono text-2xs text-violet-300/80 transition-colors hover:border-violet-400/50 hover:bg-violet-400/10"
+      >
+        <Brain className="h-3 w-3" />
+        생각 과정 {open ? '접기' : '보기'}
+        <ChevronDown className={`h-3 w-3 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="mt-1 max-h-72 overflow-y-auto rounded-xl border border-violet-400/20 bg-violet-400/[0.04] px-3 py-2 text-violet-200/75">
+          <MarkdownView text={text} />
+        </div>
+      )}
+    </div>
+  )
+}
+
 function MessageBlock({ msg }: { msg: Message }) {
   const isUser = msg.role === 'user'
 
@@ -136,12 +164,22 @@ function MessageWithDrafts({ msg }: { msg: Message }) {
   return (
     <div className="space-y-2">
       <MessageBlock msg={msg} />
+      {msg.thinking && <ThinkingPanel text={msg.thinking} />}
       {msg.steps && msg.steps.length > 0 && (
         <ErpScope steps={msg.steps} scans={msg.scans ?? []} live={false} />
       )}
       {msg.drafts?.map((d, i) => <ProposalCard key={i} draft={d} />)}
     </div>
   )
+}
+
+/** 지난번에 고른 값을 되살린다. 저장소를 막아둔 브라우저면 기본값으로 간다. */
+function readStored(key: string, allowed: string[], fallback: string): string {
+  if (typeof window === 'undefined') return fallback
+  try {
+    const v = localStorage.getItem(key)
+    return v && allowed.includes(v) ? v : fallback
+  } catch { return fallback }
 }
 
 export default function AiModal({ onClose }: { onClose: () => void }) {
@@ -152,9 +190,25 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
   const [activity, setActivity] = useState<string | null>(null)  // 지금 무엇을 조회 중인지
   const [liveSteps, setLiveSteps] = useState<TraceStep[]>([])    // 지금 하고 있는 일
   const [liveScans, setLiveScans] = useState<ScanRow[]>([])      // 지금까지 읽은 테이블
+  const [liveThink, setLiveThink] = useState('')                 // 지금 무엇을 따지는 중인지
   const [error, setError] = useState<string | null>(null)
+  // 어떤 모델로 얼마나 깊게 볼지 — 사장님이 고른 값을 다음에 열 때도 그대로 쓴다
+  const [modelId, setModelId] = useState(() =>
+    readStored('gadi.model', MODELS.map(m => m.id), DEFAULT_MODEL))
+  const [effortId, setEffortId] = useState(() =>
+    readStored('gadi.effort', EFFORTS.map(e => e.id), DEFAULT_EFFORT) as typeof DEFAULT_EFFORT)
+  const model = resolveModel(modelId)
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  function pickModel(id: string) {
+    setModelId(id)
+    try { localStorage.setItem('gadi.model', id) } catch { /* 무시 */ }
+  }
+  function pickEffort(id: typeof DEFAULT_EFFORT) {
+    setEffortId(id)
+    try { localStorage.setItem('gadi.effort', id) } catch { /* 무시 */ }
+  }
 
   // scrollIntoView 를 쓰면 안 된다 — overflow-hidden 인 조상(패널 자체)까지 같이
   // 밀어버려서 헤더가 화면 밖으로 사라진다. 목록 상자만 직접 내린다.
@@ -176,12 +230,13 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
     setActivity(null)
     setLiveSteps([])
     setLiveScans([])
+    setLiveThink('')
 
     try {
       const res = await fetch('/api/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: newMessages }),
+        body: JSON.stringify({ messages: newMessages, model: modelId, effort: effortId }),
       })
 
       if (!res.ok || !res.body) {
@@ -198,10 +253,12 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
       const collected: Draft[] = []   // 도구가 만든 초안 (저장 안 된 상태)
       let steps: TraceStep[] = []     // ERP를 어떻게 훑었는지
       const scans: ScanRow[] = []
+      let thinking = ''               // 답하기 전에 따진 것
 
       const paint = () => {
         const msg: Message = {
           role: 'assistant', content: answer,
+          ...(thinking ? { thinking } : {}),
           ...(collected.length ? { drafts: [...collected] } : {}),
           ...(steps.length ? { steps: [...steps], scans: [...scans] } : {}),
         }
@@ -238,6 +295,10 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
             answer += evt.text
             setActivity(null)   // 답이 흘러나오기 시작하면 조회 표시는 거둔다
             paint()
+          } else if (evt.type === 'think' && evt.text) {
+            thinking += evt.text
+            setLiveThink(thinking)
+            if (started) paint()
           } else if (evt.type === 'tool') {
             setActivity(evt.label || '조회 중')
             steps = [...steps, { id: evt.id || String(steps.length), label: evt.label || '조회 중', done: false }]
@@ -260,7 +321,7 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
       }
 
       if (!started) {
-        if (collected.length === 0) throw new Error('응답을 받지 못했습니다.')
+        if (collected.length === 0 && !thinking) throw new Error('응답을 받지 못했습니다.')
         paint()   // 말은 없었지만 초안은 만들어졌다 — 카드만이라도 띄운다
       }
     } catch (err) {
@@ -276,6 +337,7 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
       setActivity(null)
       setLiveSteps([])
       setLiveScans([])
+      setLiveThink('')
       setTimeout(() => inputRef.current?.focus(), 100)
     }
   }
@@ -344,7 +406,7 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
                 animate={{ opacity: [1, 0.25, 1] }}
                 transition={{ repeat: Infinity, duration: 1.8 }}
               />
-              {MODEL_LABEL} · ERP LINK ACTIVE
+              {model.label} · ERP LINK ACTIVE
             </p>
           </div>
           <button
@@ -361,6 +423,50 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
           >
             <X className="h-4 w-4" />
           </button>
+        </div>
+
+        {/* ── 모델·사고 깊이 ─────────────────────────────
+            둘 다 답의 질과 비용을 동시에 움직이는 손잡이라, 질문 앞에 놓아
+            고르고 나서 묻게 한다. 답하는 중에는 잠근다 — 도중에 바뀌면
+            같은 대화 안에서 앞뒤 답이 다른 기준으로 나온다. */}
+        <div className="relative z-10 flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-cyan-400/12 px-5 py-2">
+          <div className="flex items-center gap-1">
+            <span className="mr-1 font-mono text-2xs tracking-wider text-cyan-400/50">MODEL</span>
+            {MODELS.map(m => (
+              <button
+                key={m.id}
+                onClick={() => pickModel(m.id)}
+                disabled={loading}
+                title={m.desc}
+                className={`rounded-md border px-2 py-0.5 font-mono text-2xs transition-colors disabled:opacity-40 ${
+                  m.id === modelId
+                    ? 'border-cyan-400/60 bg-cyan-400/15 text-cyan-100'
+                    : 'border-cyan-400/15 text-cyan-400/60 hover:border-cyan-400/40 hover:text-cyan-200'
+                }`}
+              >
+                {m.short}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-1">
+            <span className="mr-1 font-mono text-2xs tracking-wider text-cyan-400/50">사고</span>
+            {EFFORTS.map(e => (
+              <button
+                key={e.id}
+                onClick={() => pickEffort(e.id)}
+                disabled={loading}
+                title={e.desc}
+                className={`rounded-md border px-2 py-0.5 text-2xs transition-colors disabled:opacity-40 ${
+                  e.id === effortId
+                    ? 'border-violet-400/60 bg-violet-400/15 text-violet-100'
+                    : 'border-violet-400/15 text-violet-300/50 hover:border-violet-400/40 hover:text-violet-200'
+                }`}
+              >
+                {e.short}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* ── 대화 ───────────────────────────────────────── */}
@@ -382,6 +488,13 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
                   </span>
                 </div>
               </div>
+              {liveThink && (
+                <div className="ml-[38px] rounded-lg border border-violet-400/20 bg-violet-400/[0.05] px-2.5 py-1.5">
+                  <p className="font-mono text-2xs leading-relaxed text-violet-300/75">
+                    {liveThink.trim().split('\n').filter(Boolean).slice(-2).join(' ').slice(-160)}
+                  </p>
+                </div>
+              )}
               {(liveSteps.length > 0 || liveScans.length > 0) && (
                 <ErpScope steps={liveSteps} scans={liveScans} live />
               )}

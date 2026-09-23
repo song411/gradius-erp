@@ -78,7 +78,7 @@ export interface AssignmentDraft {
   warnings: string[]
 }
 
-export type Draft = InquiryDraft | EstimateDraft | AssignmentDraft
+export type Draft = InquiryDraft | EstimateDraft | AssignmentDraft | OutreachDraft
 
 // ─── 견적 초안 ────────────────────────────────────────────
 
@@ -202,4 +202,136 @@ export function buildInquiryDraft(
     .map(([, label]) => label)
 
   return { kind: 'inquiry', fields, confidence, missing }
+}
+
+// ─── 섭외 문구 초안 ───────────────────────────────────────
+//
+// 추천만 받아서는 일이 끝나지 않는다. 그 사람들에게 보낼 말을 또 손으로 써야 한다.
+// 그래서 행사 정보(날짜·시간·장소·복장·일당)를 ERP에서 그대로 꺼내 문구로 만든다.
+// ★ 문구는 사람이 복사해서 보낸다 — 여기서 카톡이 나가지 않는다.
+
+export interface OutreachPerson {
+  name: string
+  phone?: string
+  /** 그 사람 이름이 박힌 문구 — 그대로 복사해 보내면 된다 */
+  text: string
+}
+
+export interface OutreachDraft {
+  kind: 'outreach'
+  company_name: string
+  event_name: string
+  /** 이름 자리를 비워둔 공통 문구 (단톡방·여러 명에게 한 번에) */
+  message: string
+  people: OutreachPerson[]
+  notes: string[]
+}
+
+const WEEKDAY = ['일', '월', '화', '수', '목', '금', '토']
+
+/** 앞말의 받침에 따라 조사를 고른다 ('복장이' / '주차가') */
+function josa(word: string, withBatchim: string, without: string): string {
+  const last = word.charCodeAt(word.length - 1)
+  const isHangul = last >= 0xac00 && last <= 0xd7a3
+  if (!isHangul) return without
+  return (last - 0xac00) % 28 === 0 ? without : withBatchim
+}
+
+/** 'YYYY-MM-DD' → '9월 25일 (목)'. UTC 로 새면 날짜가 하루 밀린다 */
+function fmtDay(s: string): string {
+  const [y, m, d] = s.split('-').map(Number)
+  const dt = new Date(y, (m || 1) - 1, d || 1)
+  return `${dt.getMonth() + 1}월 ${dt.getDate()}일 (${WEEKDAY[dt.getDay()]})`
+}
+
+/** 근무일을 사람이 읽는 한 줄로. 길면 처음~끝으로 접는다 */
+function fmtDays(dates: string[]): string {
+  if (dates.length === 0) return ''
+  if (dates.length <= 3) {
+    return dates.map(fmtDay).join(', ') + (dates.length > 1 ? ` · 총 ${dates.length}일` : '')
+  }
+  return `${fmtDay(dates[0])} ~ ${fmtDay(dates[dates.length - 1])} 중 ${dates.length}일`
+}
+
+export interface BuildOutreachInput {
+  inquiry: Inquiry
+  /** 실제 운영일 (eventDatesOf 로 뽑은 것) */
+  dates: string[]
+  people: Array<{ name: string; phone?: string }>
+  /** 직무 — 문구에 적는 이름 */
+  job: string
+  /** 일당(원/일). 0 이면 금액 줄을 빼고 주의로 알린다 */
+  payRate: number
+  /** 회신 기한 같은 덧말 */
+  deadline?: string
+  /** 사장님이 덧붙인 말 */
+  note?: string
+}
+
+export function buildOutreachDraft(input: BuildOutreachInput): OutreachDraft {
+  const { inquiry: iq, dates, job, payRate, deadline, note } = input
+  const notes: string[] = []
+
+  const body: string[] = []
+  const title = [iq.event_name, job].filter(Boolean).join(' · ')
+  if (title) body.push(`[${title}]`)
+  const dayLine = fmtDays(dates)
+  if (dayLine) body.push(`📅 ${dayLine}`)
+  else notes.push('행사 날짜가 비어 있어 문구에 넣지 못했습니다. 문의 화면에서 날짜부터 채우세요.')
+  if (iq.event_time) body.push(`⏰ ${iq.event_time}`)
+  else notes.push('근무 시간이 비어 있습니다. 시간 없이 섭외하면 반드시 다시 묻는 말이 옵니다.')
+  if (iq.location) body.push(`📍 ${iq.location}`)
+  // '미정' 은 아예 적지 않는다. 적어 보내면 "그럼 뭔데요" 하고 되묻는 말이 온다.
+  const known = (v?: string | null): boolean => {
+    const t = (v || '').trim()
+    return t !== '' && t !== '미정'
+  }
+  if (known(iq.attire)) body.push(`👔 복장: ${iq.attire}`)
+  if (known(iq.meal)) body.push(`🍚 식사: ${iq.meal}`)
+  if (known(iq.parking)) body.push(`🚗 주차: ${iq.parking}`)
+  const undecided = ['복장', '식사', '주차'].filter((_, i) => !known([iq.attire, iq.meal, iq.parking][i]))
+  if (undecided.length) {
+    const list = undecided.join('·')
+    notes.push(`${list}${josa(list, '이', '가')} 미정이라 문구에서 뺐습니다. 정해지면 넣어 보내세요.`)
+  }
+
+  // ★ 일당(원/일)만 적는다. 총액은 사람마다 근무 일수가 달라 여기서 셈하지 않는다 —
+  //   멋대로 곱해서 보내면 받는 사람이 그 금액을 약속으로 읽는다.
+  if (payRate > 0) body.push(`💰 일당 ${payRate.toLocaleString()}원`)
+  else notes.push(`'${job}' 의 지급단가를 단가표에서 못 찾아 금액 줄을 뺐습니다. 금액은 직접 적어 보내세요.`)
+
+  if (note) body.push('', note)
+
+  const tail = deadline
+    ? `가능하시면 ${deadline.replace(/\s*까지$/, '')}까지 답장 부탁드립니다 :)`
+    : '가능하시면 답장 부탁드립니다 :)'
+
+  const compose = (who: string) => [
+    `안녕하세요 ${who}, 가디어스입니다 :)`,
+    '아래 현장 가능하신지 여쭤봅니다!',
+    '',
+    ...body,
+    '',
+    tail,
+  ].join('\n')
+
+  const people: OutreachPerson[] = input.people.map(p => ({
+    name: p.name,
+    phone: p.phone,
+    text: compose(`${p.name}님`),
+  }))
+
+  const noPhone = people.filter(p => !p.phone).map(p => p.name)
+  if (noPhone.length) {
+    notes.push(`연락처가 없는 사람: ${noPhone.join(', ')} — 크루 카드에서 번호를 확인하세요.`)
+  }
+
+  return {
+    kind: 'outreach',
+    company_name: iq.company_name || '',
+    event_name: iq.event_name || '',
+    message: compose('○○님'),
+    people,
+    notes,
+  }
 }

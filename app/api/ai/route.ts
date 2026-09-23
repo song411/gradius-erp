@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { ErpData, DraftBox, TOOLS, runTool } from '@/lib/ai/tools'
 import { BASE_INSTRUCTIONS, TOOL_LABEL } from '@/lib/ai/prompt'
-import { MODEL } from '@/lib/ai/model'
+import { resolveModel, resolveEffort } from '@/lib/ai/model'
 
 // 한 번에 넘기는 대화 길이 상한 (토큰 낭비 방지)
 const MAX_HISTORY = 20
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'ANTHROPIC_API_KEY가 설정되지 않았습니다.' }, { status: 503 })
   }
 
-  let body: { messages: IncomingMessage[] }
+  let body: { messages: IncomingMessage[]; model?: string; effort?: string }
   try {
     body = await req.json()
   } catch {
@@ -58,6 +58,10 @@ export async function POST(req: NextRequest) {
   if (messages.length === 0) {
     return NextResponse.json({ error: '메시지가 없습니다.' }, { status: 400 })
   }
+
+  // 화면이 보낸 값은 그대로 믿지 않는다 — 목록에 없는 모델·깊이는 기본값으로 떨어진다
+  const model = resolveModel(body?.model)
+  const effort = resolveEffort(body?.effort)
 
   const client = new Anthropic({ apiKey })
   const encoder = new TextEncoder()
@@ -78,9 +82,13 @@ export async function POST(req: NextRequest) {
       try {
         for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
           const stream = client.messages.stream({
-            model: MODEL,
+            model: model.id,
             max_tokens: 16000,
-            thinking: { type: 'adaptive' },
+            // 생각은 켜두고, 요약을 받아 화면에 흘린다. 그냥 두면 답이 나오기 전까지
+            // 한참 멈춰 있는 것처럼 보이고, 무엇을 따지고 있는지도 알 수 없다.
+            thinking: { type: 'adaptive', display: 'summarized' },
+            // 얼마나 오래 따질지 — 사장님이 헤더에서 고른 값
+            output_config: { effort: effort.id },
             system: [
               // 앞 블록은 매번 같으므로 캐시에 올린다 — 도구를 도는 동안
               // 이 지침과 도구 목록이 매 요청 다시 실려 나가기 때문이다
@@ -92,8 +100,12 @@ export async function POST(req: NextRequest) {
           })
 
           for await (const event of stream) {
-            if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+            if (event.type !== 'content_block_delta') continue
+            if (event.delta.type === 'text_delta') {
               send({ type: 'text', text: event.delta.text })
+            } else if (event.delta.type === 'thinking_delta') {
+              // 답이 아니라 '생각하는 내용'. 화면은 이것을 접어서 따로 보여준다.
+              send({ type: 'think', text: event.delta.thinking })
             }
           }
 
@@ -153,7 +165,7 @@ export async function POST(req: NextRequest) {
           convo.push({ role: 'user', content: results })
         }
 
-        send({ type: 'done', usage })
+        send({ type: 'done', usage, model: model.id, effort: effort.id })
       } catch (err) {
         console.error('[Claude API 오류]', err)
         send({ type: 'error', error: errorMessage(err) })

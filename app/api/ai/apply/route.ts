@@ -46,8 +46,8 @@ export async function POST(req: NextRequest) {
   }
 
   const draft = body?.draft
-  const ALLOWED = ['inquiry', 'estimate', 'assignment']
-  if (!draft || !ALLOWED.includes(draft.kind)) {
+  // 섭외 문구(outreach)는 저장하는 초안이 아니다 — 복사해서 카톡으로 보내는 글이라 여기로 오지 않는다
+  if (!draft || (draft.kind !== 'inquiry' && draft.kind !== 'estimate' && draft.kind !== 'assignment')) {
     return NextResponse.json({ error: '저장할 수 있는 초안이 아닙니다.' }, { status: 400 })
   }
 

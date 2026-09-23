@@ -2,8 +2,8 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Check, AlertTriangle, ArrowUpRight, Loader2 } from 'lucide-react'
-import type { Draft } from '@/lib/ai/draft'
+import { Check, AlertTriangle, ArrowUpRight, Loader2, Copy } from 'lucide-react'
+import type { Draft, OutreachDraft } from '@/lib/ai/draft'
 
 // AI가 채워 보여주는 카드. 저장 버튼은 사람 손에 있다.
 // ─────────────────────────────────────────────────────────
@@ -21,6 +21,104 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
         {empty ? '(비어 있음)' : String(value)}
       </span>
     </div>
+  )
+}
+
+
+// ─── 섭외 문구 카드 ───────────────────────────────────────
+// 저장하는 초안이 아니다. 여기서 카톡이 나가지도 않는다 — 복사해서 사장님이 보낸다.
+// 그래서 버튼이 [이대로 입력]이 아니라 [복사]다.
+
+function CopyButton({ text, label = '복사' }: { text: string; label?: string }) {
+  const [done, setDone] = useState(false)
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(text)
+      setDone(true)
+      setTimeout(() => setDone(false), 1600)
+    } catch {
+      setDone(false)
+    }
+  }
+
+  return (
+    <button
+      onClick={copy}
+      className="flex shrink-0 items-center gap-1 rounded-lg border border-cyan-400/40 bg-cyan-400/10 px-2.5 py-1 text-2xs text-cyan-200 transition-colors hover:border-cyan-300 hover:bg-cyan-400/20"
+    >
+      {done ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+      {done ? '복사됨' : label}
+    </button>
+  )
+}
+
+function OutreachCard({ draft }: { draft: OutreachDraft }) {
+  const [dismissed, setDismissed] = useState(false)
+  if (dismissed) return null
+
+  // 여러 명에게 한 번에 보낼 때 — 이름이 박힌 문구를 줄줄이 이어 붙인다
+  const allText = draft.people.length
+    ? draft.people.map(p => `── ${p.name}${p.phone ? ` (${p.phone})` : ''} ──\n${p.text}`).join('\n\n')
+    : draft.message
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="ml-[38px] rounded-xl border border-cyan-400/35 bg-cyan-400/[0.05] p-3.5"
+    >
+      <div className="mb-2 flex items-center gap-2">
+        <span className="font-mono text-2xs tracking-wider text-cyan-300">▸ 섭외 문구</span>
+        {draft.people.length > 0 && (
+          <span className="rounded border border-cyan-400/30 px-1.5 py-0.5 font-mono text-2xs text-cyan-300/80">
+            {draft.people.length}명
+          </span>
+        )}
+        <span className="ml-auto font-mono text-2xs text-slate-500">보내지 않음 · 복사해서 발송</span>
+      </div>
+
+      <p className="mb-1.5 text-xs text-slate-300">
+        {draft.company_name} · {draft.event_name}
+      </p>
+
+      <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap rounded-lg border border-cyan-400/15 bg-slate-950/60 px-3 py-2.5 text-xs leading-relaxed text-slate-200">
+        {draft.message}
+      </pre>
+
+      {draft.people.length > 0 && (
+        <div className="mt-2 space-y-1">
+          <p className="font-mono text-2xs tracking-wider text-cyan-400/60">
+            ▸ 이름 넣은 문구 — 한 명씩 복사
+          </p>
+          {draft.people.map(p => (
+            <div key={p.name} className="flex items-center gap-2 rounded-lg border border-cyan-400/12 bg-slate-950/40 px-2.5 py-1.5">
+              <span className="text-xs text-slate-200">{p.name}</span>
+              <span className="font-mono text-2xs text-slate-500">{p.phone || '번호 없음'}</span>
+              <span className="ml-auto" />
+              <CopyButton text={p.text} />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {draft.notes.length > 0 && (
+        <div className="mt-2 flex gap-1.5 rounded-lg border border-rose-400/25 bg-rose-400/[0.06] px-2.5 py-1.5 text-2xs text-rose-300">
+          <AlertTriangle className="mt-[1px] h-3 w-3 shrink-0" />
+          <div>{draft.notes.map((n, i) => <p key={i}>{n}</p>)}</div>
+        </div>
+      )}
+
+      <div className="mt-3 flex items-center gap-2">
+        <CopyButton text={allText} label={draft.people.length > 1 ? '전체 복사' : '문구 복사'} />
+        <button
+          onClick={() => setDismissed(true)}
+          className="rounded-lg border border-slate-600/50 px-3 py-1 text-2xs text-slate-400 transition-colors hover:border-slate-500 hover:text-slate-300"
+        >
+          닫기
+        </button>
+      </div>
+    </motion.div>
   )
 }
 
@@ -50,6 +148,7 @@ export default function ProposalCard({ draft }: { draft: Draft }) {
     }
   }
 
+  if (draft.kind === 'outreach') return <OutreachCard draft={draft} />
   if (dismissed) return null
 
   const isInquiry = draft.kind === 'inquiry'

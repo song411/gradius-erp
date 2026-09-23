@@ -18,7 +18,7 @@ import {
   GRADE_DESC, STATUS_DESC, type Grade, type PoolStatus,
 } from '@/lib/grading'
 import { parseInquiryText, calcParseConfidence } from '@/lib/inquiryParser'
-import { buildEstimateDraft, buildInquiryDraft, findRole,
+import { buildEstimateDraft, buildInquiryDraft, buildOutreachDraft, findRole,
   type Draft, type AssignmentRow } from '@/lib/ai/draft'
 import type {
   Inquiry, Assignment, Staff, Settlement, Payout,
@@ -417,6 +417,31 @@ export const TOOLS: Anthropic.Tool[] = [
       },
     },
   },
+  {
+    name: 'draft_outreach',
+    description:
+      '추천·배정한 크루에게 보낼 섭외 카톡 문구를 만든다. 행사 날짜·시간·장소·복장·일당을 ' +
+      'ERP에서 그대로 꺼내 넣으므로 사람이 다시 옮겨 적지 않아도 된다. ' +
+      '보내지는 않는다 — 사장님이 화면에서 복사해 카톡으로 보낸다. ' +
+      '★ 추천을 마친 뒤 "섭외 문구도 만들어드릴까요?" 하고 여쭙고, 하라고 하시면 이것을 쓴다. ' +
+      '이름을 주면 그 사람 이름이 박힌 문구를 한 명씩 만들어 준다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        event_id: { type: 'string', description: 'search_events 가 준 id' },
+        keyword: { type: 'string', description: 'id 를 모를 때 쓰는 검색어' },
+        names: {
+          type: 'array',
+          description: '문구를 보낼 크루 이름들 (크루 카드에 있는 그대로). 비우면 공통 문구만 만든다.',
+          items: { type: 'string' },
+        },
+        job: { type: 'string', description: '문구에 적을 직무. 비우면 문의의 직무' },
+        pay_rate: { type: 'number', description: '일당(원/일). 비우면 단가표의 지급단가' },
+        deadline: { type: 'string', description: "회신 기한 (예: '오늘 저녁', '내일 오전')" },
+        note: { type: 'string', description: '덧붙일 말 (예: 식사 제공, 주차 지원)' },
+      },
+    },
+  },
 ]
 
 // ─── 도구 실행 ────────────────────────────────────────────
@@ -438,6 +463,7 @@ export async function runTool(
     case 'draft_inquiry':    return draftInquiry(input, drafts)
     case 'draft_estimate':   return draftEstimate(input, erp, drafts)
     case 'draft_assignment': return draftAssignment(input, erp, drafts)
+    case 'draft_outreach':   return draftOutreach(input, erp, drafts)
     default: return `알 수 없는 도구: ${name}`
   }
 }
@@ -1193,5 +1219,92 @@ async function summary(input: ToolInput, erp: ErpData): Promise<string> {
     '※ 위 합계·건수는 전체를 집계한 정확한 값입니다. 더 자세한 것은 다른 도구로 조회하세요.',
     `※ 등급은 평점을 번역한 것입니다(S 4.5↑ / A 3.8↑ / B 3.0↑ / C 2.0↑ / X 2.0미만). ` +
     `근무 ${MIN_WORKS_FOR_GRADE}회 미만은 '미분류(수습)'로 두고 매기지 않습니다.`,
+  ].join('\n')
+}
+
+/** 섭외 문구 초안 — 보내지 않는다. 사장님이 복사해서 카톡으로 보낸다. */
+async function draftOutreach(input: ToolInput, erp: ErpData, drafts?: DraftBox): Promise<string> {
+  const found = resolveEvent(await erp.inquiries(), str(input.event_id), str(input.keyword))
+  if ('error' in found) return found.error
+  const ev = found.event
+
+  const [staffList, assigns, roles, items] = await Promise.all([
+    erp.staff(), erp.assignments(), erp.roles(), erp.estimateItems(),
+  ])
+
+  const job = str(input.job) || ev.service_type || '행사스탭'
+  const role = findRole(roles, job)
+  const norm = (v?: string | null) => (v || '').trim().toLowerCase()
+
+  // 일당 — 사장님이 준 값 > 이 행사 배정의 단가 > 견적에 적힌 지급단가 > 단가표.
+  // 견적까지 보는 이유: 단가표에 없는 이름('보안요원' 처럼 부르는 말)으로 견적이 나가 있는 일이
+  // 흔하다. 그때 금액 줄을 통째로 빼면, 견적서에는 있는 숫자를 사람이 다시 찾아 적게 된다.
+  //
+  // ★ 반드시 '같은 직무' 인 것만 본다. 문구에 적히는 금액은 받는 사람에게 약속으로 읽힌다.
+  //   다른 직무의 단가를 끌어다 적느니 금액 줄을 비우는 편이 낫다.
+  const sameJob = (v?: string | null) => {
+    const a = norm(v), b = norm(job)
+    return !!a && !!b && (a === b || a.includes(b) || b.includes(a))
+  }
+  const fromAssign = assigns.find(a =>
+    a.inquiry_id === ev.id && a.status !== '취소' && (a.pay_rate ?? 0) > 0 && sameJob(a.job_type))
+  const fromItem = items.find(it =>
+    it.inquiry_id === ev.id && (it.pay_unit_price ?? 0) > 0 && sameJob(it.role_name))
+
+  const given = num(input.pay_rate)
+  const payRate = given && given > 0 ? given
+    : (fromAssign?.pay_rate ?? fromItem?.pay_unit_price ?? role?.pay_price ?? 0)
+  const paySource = given && given > 0 ? '사장님이 알려주신 금액'
+    : fromAssign ? '이 행사 배정에 적힌 지급단가'
+    : fromItem ? '이 행사 견적서의 지급단가'
+    : role ? '단가표의 지급단가'
+    : ''
+
+  // 이름은 반드시 크루 카드에서 찾는다. 못 찾은 이름으로 문구를 만들면
+  // 엉뚱한 사람에게 "○○님" 하고 보내게 된다 (AI가 한글 이름을 흘린 적이 있다).
+  const wanted = Array.isArray(input.names) ? input.names.map(String) : []
+  const people: Array<{ name: string; phone?: string }> = []
+  const misses: string[] = []
+  for (const raw of wanted) {
+    const name = raw.trim()
+    if (!name) continue
+    const { hit, close } = findStaffByName(staffList, name)
+    if (!hit) {
+      misses.push(close.length
+        ? `'${name}' 을(를) 크루 목록에서 못 찾았습니다. 혹시 ${close.slice(0, 5).map(c => c.name).join(' / ')} 인가요?`
+        : `'${name}' 을(를) 크루 목록에서 못 찾아 문구를 만들지 않았습니다.`)
+      continue
+    }
+    if (people.some(p => p.name === hit.name)) continue
+    people.push({ name: hit.name, phone: hit.phone ?? undefined })
+  }
+
+  const draft = buildOutreachDraft({
+    inquiry: ev,
+    dates: eventDatesOf(ev),
+    people,
+    job,
+    payRate,
+    deadline: str(input.deadline),
+    note: str(input.note),
+  })
+  draft.notes.push(...misses)
+  // 어디서 온 금액인지 밝힌다 — 문구에 적힌 돈은 받는 사람에게 약속으로 읽힌다
+  if (payRate > 0 && paySource) draft.notes.push(`일당 ${won(payRate)}은 ${paySource}입니다.`)
+  drafts?.add(draft)
+
+  return [
+    `[섭외 문구 초안] ${draft.company_name} / ${draft.event_name} · ${job}`,
+    people.length ? `보낼 사람 ${people.length}명: ${people.map(p => `${p.name}(${p.phone || '번호없음'})`).join(', ')}`
+                  : '이름을 주지 않아 공통 문구만 만들었습니다.',
+    '',
+    '--- 문구 ---',
+    draft.message,
+    '--- 끝 ---',
+    ...(draft.notes.length ? ['', ...draft.notes.map(n => `⚠ ${n}`)] : []),
+    '',
+    '※ 보내지 않았습니다. 화면의 카드에서 [복사]를 눌러 카톡에 붙여넣으세요.',
+    '※ 이름이 박힌 문구는 사람마다 따로 만들어 카드에 있습니다.',
+    '※ 금액은 하루치(일당)만 적었습니다. 총액은 사람마다 근무 일수가 달라 적지 않습니다.',
   ].join('\n')
 }
