@@ -74,7 +74,8 @@ export class ErpData {
   inquiries() {
     return this.load<Inquiry>('inquiries', () => fetchAll('inquiries',
       'id, inquiry_code, company_name, contact_name, phone, event_name, location, ' +
-      'event_start, event_end, event_dates, event_time, service_type, required_staff, ' +
+      'event_start, event_end, event_dates, event_time, service_type, required_staff, '
+      + 'pay_detail, expected_pay, ' +
       'status, category, attire, meal, parking, notes, memo, consult_notes, ' +
       'next_action, next_action_at, lost_reason, created_at'))
   }
@@ -436,9 +437,8 @@ export const TOOLS: Anthropic.Tool[] = [
           items: { type: 'string' },
         },
         job: { type: 'string', description: '문구에 적을 직무. 비우면 문의의 직무' },
-        pay_rate: { type: 'number', description: '일당(원/일). 비우면 단가표의 지급단가' },
-        deadline: { type: 'string', description: "회신 기한 (예: '오늘 저녁', '내일 오전')" },
-        note: { type: 'string', description: '덧붙일 말 (예: 식사 제공, 주차 지원)' },
+        pay_rate: { type: 'number', description: '일당(원/일). 비우면 문의에 적힌 페이 원문' },
+        note: { type: 'string', description: "'특이사항' 칸에 적을 말" },
       },
     },
   },
@@ -1254,7 +1254,14 @@ async function draftOutreach(input: ToolInput, erp: ErpData, drafts?: DraftBox):
   const given = num(input.pay_rate)
   const payRate = given && given > 0 ? given
     : (fromAssign?.pay_rate ?? fromItem?.pay_unit_price ?? role?.pay_price ?? 0)
+  // 페이 칸에 적을 말 — 문의에 적힌 원문('시급12000')이 있으면 그것을 그대로 쓴다.
+  // 사람이 쓰던 말이 그대로 크루에게 가야 오해가 없다.
+  const payText = given && given > 0 ? `${given.toLocaleString()}원`
+    : ev.pay_detail ? ev.pay_detail
+    : payRate > 0 ? `일당 ${won(payRate)}`
+    : ''
   const paySource = given && given > 0 ? '사장님이 알려주신 금액'
+    : ev.pay_detail ? '문의에 적힌 페이 원문'
     : fromAssign ? '이 행사 배정에 적힌 지급단가'
     : fromItem ? '이 행사 견적서의 지급단가'
     : role ? '단가표의 지급단가'
@@ -1284,13 +1291,12 @@ async function draftOutreach(input: ToolInput, erp: ErpData, drafts?: DraftBox):
     dates: eventDatesOf(ev),
     people,
     job,
-    payRate,
-    deadline: str(input.deadline),
-    note: str(input.note),
+    payText,
+    notes: str(input.note),
   })
   draft.notes.push(...misses)
-  // 어디서 온 금액인지 밝힌다 — 문구에 적힌 돈은 받는 사람에게 약속으로 읽힌다
-  if (payRate > 0 && paySource) draft.notes.push(`일당 ${won(payRate)}은 ${paySource}입니다.`)
+  // 어디서 온 값인지 밝힌다 — 문구에 적힌 돈은 받는 사람에게 약속으로 읽힌다
+  if (payText && paySource) draft.notes.push(`페이 '${payText}' 는 ${paySource}입니다.`)
   drafts?.add(draft)
 
   return [
