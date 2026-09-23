@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Send, User, RefreshCw, Brain, ChevronDown } from 'lucide-react'
 import MarkdownView from './ai/MarkdownView'
@@ -8,7 +8,6 @@ import ProposalCard from './ai/ProposalCard'
 import ErpScope, { type ScanRow, type TraceStep } from './ai/ErpScope'
 import type { Draft } from '@/lib/ai/draft'
 import { MODELS, EFFORTS, DEFAULT_MODEL, DEFAULT_EFFORT, resolveModel } from '@/lib/ai/model'
-import { krwLabel } from '@/lib/ai/cost'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -20,8 +19,6 @@ interface Message {
   scans?: ScanRow[]
   /** 답하기 전에 무엇을 따졌는지 (모델이 준 생각 요약) */
   thinking?: string
-  /** 이 답 한 번에 든 값 (원) */
-  costKrw?: number
 }
 
 const GREETING = `안녕하세요, 대표님. **가디**입니다.
@@ -171,11 +168,6 @@ function MessageWithDrafts({ msg }: { msg: Message }) {
       {msg.steps && msg.steps.length > 0 && (
         <ErpScope steps={msg.steps} scans={msg.scans ?? []} live={false} />
       )}
-      {msg.costKrw !== undefined && msg.costKrw > 0 && (
-        <p className="ml-[38px] font-mono text-2xs text-slate-500">
-          ▸ 이 답에 약 {krwLabel(msg.costKrw)}
-        </p>
-      )}
       {msg.drafts?.map((d, i) => <ProposalCard key={i} draft={d} />)}
     </div>
   )
@@ -199,7 +191,6 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
   const [liveSteps, setLiveSteps] = useState<TraceStep[]>([])    // 지금 하고 있는 일
   const [liveScans, setLiveScans] = useState<ScanRow[]>([])      // 지금까지 읽은 테이블
   const [liveThink, setLiveThink] = useState('')                 // 지금 무엇을 따지는 중인지
-  const [monthLabel, setMonthLabel] = useState<string | null>(null)  // 이번 달 가디 사용료
   const [error, setError] = useState<string | null>(null)
   // 어떤 모델로 얼마나 깊게 볼지 — 사장님이 고른 값을 다음에 열 때도 그대로 쓴다
   const [modelId, setModelId] = useState(() =>
@@ -209,25 +200,6 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
   const model = resolveModel(modelId)
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
-
-  // 이번 달 얼마 썼는지 — 열 때 한 번, 답할 때마다 한 번 새로 본다
-  const loadUsage = useCallback(async () => {
-    try {
-      const res = await fetch('/api/ai/usage')
-      const data = await res.json()
-      setMonthLabel(data?.ready ? data.month.label : null)
-    } catch { /* 못 읽어도 대화에는 지장이 없다 */ }
-  }, [])
-
-  // 열 때 한 번. 떠난 뒤 도착한 응답으로 사라진 화면을 건드리지 않게 끊어준다.
-  useEffect(() => {
-    let alive = true
-    fetch('/api/ai/usage')
-      .then(r => r.json())
-      .then(d => { if (alive) setMonthLabel(d?.ready ? d.month.label : null) })
-      .catch(() => { /* 못 읽어도 대화에는 지장이 없다 */ })
-    return () => { alive = false }
-  }, [])
 
   function pickModel(id: string) {
     setModelId(id)
@@ -282,13 +254,11 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
       let steps: TraceStep[] = []     // ERP를 어떻게 훑었는지
       const scans: ScanRow[] = []
       let thinking = ''               // 답하기 전에 따진 것
-      let costKrw: number | undefined // 이 답에 든 값
 
       const paint = () => {
         const msg: Message = {
           role: 'assistant', content: answer,
           ...(thinking ? { thinking } : {}),
-          ...(costKrw !== undefined ? { costKrw } : {}),
           ...(collected.length ? { drafts: [...collected] } : {}),
           ...(steps.length ? { steps: [...steps], scans: [...scans] } : {}),
         }
@@ -318,7 +288,6 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
           let evt: {
             type: string; text?: string; error?: string; label?: string
             draft?: Draft; id?: string; ms?: number; tables?: ScanRow[]
-            cost?: { usd: number; krw: number }
           }
           try { evt = JSON.parse(line) } catch { continue }
 
@@ -345,9 +314,6 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
           } else if (evt.type === 'proposal' && evt.draft) {
             collected.push(evt.draft)
             if (started) paint()
-          } else if (evt.type === 'done') {
-            costKrw = evt.cost?.krw
-            if (started) paint()
           } else if (evt.type === 'error') {
             throw new Error(evt.error || 'AI 응답 오류')
           }
@@ -372,7 +338,6 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
       setLiveSteps([])
       setLiveScans([])
       setLiveThink('')
-      loadUsage()   // 방금 쓴 만큼을 헤더에 바로 반영한다
       setTimeout(() => inputRef.current?.focus(), 100)
     }
   }
@@ -502,15 +467,6 @@ export default function AiModal({ onClose }: { onClose: () => void }) {
               </button>
             ))}
           </div>
-
-          {monthLabel && (
-            <span
-              className="ml-auto font-mono text-2xs text-cyan-400/50"
-              title="이번 달 가디를 쓴 값 (우리가 되짚은 어림값 — 정확한 청구는 Anthropic Console)"
-            >
-              이번 달 {monthLabel}
-            </span>
-          )}
         </div>
 
         {/* ── 대화 ───────────────────────────────────────── */}

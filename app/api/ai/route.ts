@@ -173,7 +173,9 @@ export async function POST(req: NextRequest) {
           convo.push({ role: 'user', content: results })
         }
 
-        send({ type: 'done', usage, cost: costOf(model.id, usage), model: model.id, effort: effort.id })
+        // 금액은 화면으로 보내지 않는다 — 쓸 때마다 값이 보이면 묻기가 부담스러워진다.
+        // 기록은 서버에만 남는다(아래).
+        send({ type: 'done', usage, model: model.id, effort: effort.id })
       } catch (err) {
         console.error('[Claude API 오류]', err)
         send({ type: 'error', error: errorMessage(err) })
