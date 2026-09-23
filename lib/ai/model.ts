@@ -14,6 +14,9 @@ export interface ModelOption {
   short: string
   /** 언제 쓰는 것인지 */
   desc: string
+  /** 단가 (USD / 100만 토큰). 모델을 더할 때 값을 같이 적게 하려고 여기 둔다 —
+   *  따로 두면 모델은 늘고 단가표는 안 늘어 비용이 0원으로 찍힌다. */
+  price: { input: number; output: number }
 }
 
 /** 고를 수 있는 모델. 여기 없는 id 는 서버가 받지 않는다. */
@@ -23,12 +26,14 @@ export const MODELS: ModelOption[] = [
     label: 'CLAUDE OPUS 5',
     short: 'OPUS',
     desc: '판단이 걸린 일 — 인력 추천·견적·비교',
+    price: { input: 5, output: 25 },
   },
   {
     id: 'claude-sonnet-5',
     label: 'CLAUDE SONNET 5',
     short: 'SONNET',
     desc: '빠르고 싼 쪽 — 단순 조회·요약',
+    price: { input: 2, output: 10 },
   },
 ]
 

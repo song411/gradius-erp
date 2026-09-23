@@ -3,6 +3,8 @@ import Anthropic from '@anthropic-ai/sdk'
 import { ErpData, DraftBox, TOOLS, runTool } from '@/lib/ai/tools'
 import { BASE_INSTRUCTIONS, TOOL_LABEL } from '@/lib/ai/prompt'
 import { resolveModel, resolveEffort } from '@/lib/ai/model'
+import { emptyUsage, addUsage, costOf } from '@/lib/ai/cost'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 // 한 번에 넘기는 대화 길이 상한 (토큰 낭비 방지)
 const MAX_HISTORY = 20
@@ -77,7 +79,11 @@ export async function POST(req: NextRequest) {
       const drafts = new DraftBox()
       let sentDrafts = 0
       const convo: Anthropic.MessageParam[] = [...messages]
-      let usage: Anthropic.Usage | undefined
+      // 도구를 도는 동안 매 턴이 따로 청구된다. 마지막 턴만 세면 실제 쓴 것의
+      // 일부만 세게 된다 — 여러 번 조회하는 질문일수록 크게 어긋난다.
+      const usage = emptyUsage()
+      let turns = 0
+      const usedTools: string[] = []
 
       try {
         for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
@@ -110,7 +116,8 @@ export async function POST(req: NextRequest) {
           }
 
           const final = await stream.finalMessage()
-          usage = final.usage
+          addUsage(usage, final.usage)
+          turns++
 
           if (final.stop_reason === 'refusal') {
             send({ type: 'error', error: '요청을 처리할 수 없습니다. 질문을 다르게 표현해주세요.' })
@@ -130,6 +137,7 @@ export async function POST(req: NextRequest) {
           const turnStart = Date.now()
 
           const results = await Promise.all(calls.map(async call => {
+            usedTools.push(call.name)
             send({ type: 'tool', id: call.id, name: call.name, label: TOOL_LABEL[call.name] || '조회 중' })
             const t0 = Date.now()
             try {
@@ -165,11 +173,37 @@ export async function POST(req: NextRequest) {
           convo.push({ role: 'user', content: results })
         }
 
-        send({ type: 'done', usage, model: model.id, effort: effort.id })
+        send({ type: 'done', usage, cost: costOf(model.id, usage), model: model.id, effort: effort.id })
       } catch (err) {
         console.error('[Claude API 오류]', err)
         send({ type: 'error', error: errorMessage(err) })
       } finally {
+        // 쓴 만큼을 남긴다. 실패해도 답은 이미 나갔으니 여기서 막지 않는다 —
+        // 기록을 못 남겼다고 대화가 끊기면 본말이 뒤집힌다.
+        if (turns > 0) {
+          const cost = costOf(model.id, usage)
+          const last = messages[messages.length - 1]
+          const question = typeof last?.content === 'string' ? last.content.slice(0, 200) : null
+          try {
+            const { error } = await createAdminClient().from('ai_usage').insert({
+              model: model.id,
+              effort: effort.id,
+              turns,
+              input_tokens: usage.input_tokens,
+              output_tokens: usage.output_tokens,
+              cache_write_tokens: usage.cache_creation_input_tokens,
+              cache_read_tokens: usage.cache_read_input_tokens,
+              cost_usd: Number(cost.usd.toFixed(6)),
+              cost_krw: Number(cost.krw.toFixed(2)),
+              question,
+              tools: usedTools.length ? [...new Set(usedTools)] : null,
+            })
+            // 표가 아직 없으면(마이그레이션 015 미실행) 여기서 조용히 지나간다
+            if (error) console.warn('[가디 사용기록 남기지 못함]', error.message)
+          } catch (err) {
+            console.warn('[가디 사용기록 남기지 못함]', err)
+          }
+        }
         controller.close()
       }
     },
