@@ -5,6 +5,7 @@
 // (카톡 파싱 → 확인 → 등록으로 이미 돌아가는 lib/inquiryParser.ts 와 같은 결)
 
 import { calcVAT, calcProfitRate } from '@/lib/utils'
+import { resolveRoleName, canonRoleKey, normRole } from '@/lib/roleAlias'
 import type { Inquiry, Role } from '@/lib/supabase/types'
 
 /** 지원품목은 청구·원가 계산에서 빼는 항목 (EstimateBuilder 와 같은 규칙) */
@@ -84,13 +85,47 @@ export type Draft = InquiryDraft | EstimateDraft | AssignmentDraft | OutreachDra
 
 const norm = (s?: string | null) => (s || '').trim().toLowerCase()
 
-/** 직무 이름으로 단가표에서 역할을 찾는다. 정확히 같은 것 → 포함 관계 순. */
+/** 직무 이름으로 단가표에서 역할을 찾는다.
+ *  정확히 같은 것 → 별칭(사람이 부르는 다른 말) → 포함 관계 순.
+ *
+ *  별칭을 거치는 이유: 단가표에는 11개 이름뿐인데 실무에서는 '행사스탭'·'신변보호'
+ *  처럼 다른 말을 쓴다. 그때마다 되물으면 ERP 가 사람을 부리는 꼴이 된다. */
 export function findRole(roles: Role[], name: string): Role | undefined {
-  const q = norm(name)
-  if (!q) return undefined
-  return roles.find(r => norm(r.role_name) === q)
-    ?? roles.find(r => norm(r.role_name).includes(q) || q.includes(norm(r.role_name)))
+  return findRoleDetail(roles, name).role
 }
+
+/** 무엇을 무엇으로 봤는지까지 돌려준다 — 사람이 확인할 수 있어야 한다 */
+export function findRoleDetail(
+  roles: Role[], name: string,
+): { role?: Role; renamedFrom?: string } {
+  const q = norm(name)
+  if (!q) return {}
+
+  const exact = roles.find(r => norm(r.role_name) === q)
+  if (exact) return { role: exact }
+
+  const alias = resolveRoleName(name)
+  if (alias.name) {
+    const hit = roles.find(r => normRole(r.role_name) === normRole(alias.name))
+    if (hit) return { role: hit, renamedFrom: alias.renamedFrom }
+  }
+
+  const loose = roles.find(r => norm(r.role_name).includes(q) || q.includes(norm(r.role_name)))
+  return loose ? { role: loose, renamedFrom: norm(loose.role_name) === q ? undefined : name.trim() } : {}
+}
+
+/** 단가표에 없는 직무를 과거 견적 실적으로 메우기 위한 값 */
+export interface PriceHistory {
+  /** 과거 청구단가 중앙값 */
+  unit: number
+  /** 과거 지급단가 중앙값 */
+  pay: number
+  /** 사례 수 */
+  n: number
+}
+
+/** 과거 실적을 근거로 쓰려면 이만큼은 쌓여 있어야 한다 */
+export const MIN_HISTORY_CASES = 3
 
 export interface BuildEstimateInput {
   inquiry: Inquiry
@@ -99,6 +134,8 @@ export interface BuildEstimateInput {
   lines?: Array<{ role: string; quantity: number; days?: number; is_leader?: boolean }>
   /** 고난이도 행사인지 — 최소 이익률이 40%가 된다 */
   hard?: boolean
+  /** 단가표에 없는 직무를 메울 과거 실적 (canonRoleKey 한 이름이 열쇠) */
+  history?: Map<string, PriceHistory>
 }
 
 export function buildEstimateDraft(input: BuildEstimateInput): EstimateDraft | { error: string } {
@@ -128,23 +165,67 @@ export function buildEstimateDraft(input: BuildEstimateInput): EstimateDraft | {
     warnings.push(`직무 구성을 따로 주지 않아 '${job}' ${n}명 한 줄로 잡았습니다. 실제 편성이 다르면 알려주세요.`)
   }
 
+  const won = (n: number) => `${Math.round(n).toLocaleString()}원`
   const items: DraftItem[] = []
+  const unknown: string[] = []
+
   for (const l of lines) {
-    const role = findRole(roles, l.role)
-    if (!role) {
-      warnings.push(`단가표에 '${l.role}' 이(가) 없어 단가를 0으로 두었습니다. 견적 화면에서 직무를 고르셔야 합니다.`)
+    const { role, renamedFrom } = findRoleDetail(roles, l.role)
+    if (renamedFrom) {
+      warnings.push(`'${renamedFrom}' 은(는) 단가표의 '${role!.role_name}' 으로 봤습니다. 아니면 말씀해주세요.`)
     }
-    const base = (role?.base_price ?? 0) + (l.is_leader ? (role?.leader_bonus ?? 0) : 0)
+
+    let unitPrice: number
+    let payPrice: number
+    let roleName: string
+
+    if (role) {
+      unitPrice = role.base_price + (l.is_leader ? (role.leader_bonus ?? 0) : 0)
+      payPrice = role.pay_price ?? 0
+      roleName = role.role_name
+    } else {
+      // 단가표에 없다고 바로 포기하지 않는다 — 실제로 그 이름으로 견적을 내온 기록이
+      // 있으면 그게 단가표보다 현실에 가깝다 (경비지도사처럼 단가표에 없는 직무가 있다)
+      const h = input.history?.get(canonRoleKey(l.role))
+      if (h && h.n >= MIN_HISTORY_CASES) {
+        unitPrice = h.unit
+        payPrice = h.pay
+        roleName = l.role
+        warnings.push(
+          `'${l.role}' 은(는) 단가표에 없어 과거 견적 ${h.n}건의 중앙값 ` +
+          `(청구 ${won(h.unit)} / 지급 ${won(h.pay)})으로 잡았습니다. 확인해주세요.`)
+      } else {
+        // ★ 0원짜리 줄을 만들지 않는다. 0원인 채로 [이대로 입력]을 누르면
+        //   그 인원 몫이 통째로 빠진 견적서가 저장된다.
+        unknown.push(l.role)
+        continue
+      }
+    }
+
     items.push({
       role_id: role?.id,
-      role_name: role?.role_name ?? l.role,
+      role_name: roleName,
       quantity: Math.max(1, l.quantity),
       days: Math.max(1, l.days ?? defaultDays),
-      unit_price: base,
-      pay_unit_price: role?.pay_price ?? 0,
+      unit_price: unitPrice,
+      pay_unit_price: payPrice,
       is_leader: l.is_leader === true,
       item_type: '인력',
     })
+  }
+
+  if (unknown.length > 0) {
+    return {
+      error:
+        `'${unknown.join("', '")}' 의 단가를 정하지 못해 견적 초안을 만들지 않았습니다.
+` +
+        `단가표에도 없고, 그 이름으로 낸 과거 견적도 ${MIN_HISTORY_CASES}건이 안 됩니다.
+` +
+        `단가표에 있는 직무: ${roles.map(r => r.role_name).join(' / ')}
+` +
+        `이 중 어느 것인지 사장님께 여쭙거나, 청구단가를 직접 알려달라고 하세요. ` +
+        `0원으로 채운 견적은 만들지 않습니다.`,
+    }
   }
 
   const billable = items.filter(it => !SUPPORT_TYPES.includes(it.item_type))

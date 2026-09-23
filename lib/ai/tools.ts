@@ -19,7 +19,8 @@ import {
 } from '@/lib/grading'
 import { parseInquiryText, calcParseConfidence } from '@/lib/inquiryParser'
 import { buildEstimateDraft, buildInquiryDraft, buildOutreachDraft, findRole,
-  type Draft, type AssignmentRow } from '@/lib/ai/draft'
+  MIN_HISTORY_CASES, type Draft, type AssignmentRow, type PriceHistory } from '@/lib/ai/draft'
+import { normRole, resolveRoleName, canonRoleKey } from '@/lib/roleAlias'
 import type {
   Inquiry, Assignment, Staff, Settlement, Payout,
   Estimate, EstimateItem, EventExpense, Evaluation, Role,
@@ -419,6 +420,26 @@ export const TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: 'price_reference',
+    description:
+      '이 직무를 우리가 과거에 얼마에 불렀고, 그 값에 몇 %가 체결됐는지 본다. ' +
+      '★ 견적을 만들기 전에 반드시 이것을 먼저 보세요. ' +
+      '단가표(roles)는 11줄짜리 최저선일 뿐이라, 그것만 보고 견적을 내면 실제로 받아온 ' +
+      '값보다 싸게 부르게 됩니다(실측: 경호원 단가표 20만원, 실제 체결 중앙 25만원). ' +
+      '행사 규모·지역·거래처로 좁혀서도 보여줍니다. ' +
+      "'이 직무 얼마 받아야 해?', '이 가격이면 붙을까?' 같은 질문에도 씁니다.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        role: { type: 'string', description: "직무 이름. 사람이 쓰는 말 그대로 넣어도 된다('행사스탭', '신변보호')" },
+        staff_count: { type: 'number', description: '이번 행사의 필요 인원 — 규모가 같은 사례로 좁혀 본다' },
+        location: { type: 'string', description: '이번 행사 장소 — 같은 지역 사례로 좁혀 본다' },
+        company: { type: 'string', description: '거래처명 — 이 거래처에 얼마를 불러왔는지 본다' },
+      },
+      required: ['role'],
+    },
+  },
+  {
     name: 'draft_outreach',
     description:
       '추천·배정한 크루에게 보낼 섭외 카톡 문구를 만든다. 행사 날짜·시간·장소·복장·일당을 ' +
@@ -464,6 +485,7 @@ export async function runTool(
     case 'draft_estimate':   return draftEstimate(input, erp, drafts)
     case 'draft_assignment': return draftAssignment(input, erp, drafts)
     case 'draft_outreach':   return draftOutreach(input, erp, drafts)
+    case 'price_reference':  return priceReference(input, erp)
     default: return `알 수 없는 도구: ${name}`
   }
 }
@@ -686,8 +708,11 @@ async function draftEstimate(input: ToolInput, erp: ErpData, drafts?: DraftBox):
     }
   }).filter(l => l.role && l.quantity > 0)
 
+  // 단가표에 없는 직무는 과거 실적으로 메운다 — 단가표는 11줄뿐이고
+  // 실무에서는 '경비지도사' 처럼 거기 없는 이름으로도 견적을 내 왔다
   const built = buildEstimateDraft({
     inquiry: found.event, roles, lines, hard: input.hard === true,
+    history: await priceHistory(erp),
   })
   if ('error' in built) {
     return built.error + `\n\n참고 — 단가표에 있는 직무: ${roles.map(r => r.role_name).join(', ')}`
@@ -1313,4 +1338,194 @@ async function draftOutreach(input: ToolInput, erp: ErpData, drafts?: DraftBox):
     '※ 이름이 박힌 문구는 사람마다 따로 만들어 카드에 있습니다.',
     '※ 금액은 하루치(일당)만 적었습니다. 총액은 사람마다 근무 일수가 달라 적지 않습니다.',
   ].join('\n')
+}
+
+// ─── 값의 근거: 과거에 얼마에 불렀고 얼마에 붙었나 ────────
+//
+// 단가표(roles)는 11줄짜리 '최저선'이다. 그것만 보고 견적을 내면 실제로 받아온
+// 값보다 싸게 부른다(실측: 경호원 단가표 20만, 실제 체결 중앙 25만).
+// 사장님 말씀대로 "기준은 우리가 만들어 가는 것"이라, 만들어 온 기록에서 값을 읽는다.
+//
+// ★ 자르면 표본이 금세 얇아진다. 얇은 구간은 숫자를 내되 '얇다'고 못박고
+//   결론에 쓰지 않는다 (크루 등급에서 배운 것과 같다).
+
+/** 이 구간은 믿고 말해도 되는가 */
+const THIN_SAMPLE = 5
+
+interface PriceCase {
+  price: number
+  pay: number
+  won: boolean
+  inq: Inquiry
+}
+
+/** 아직 결정 안 난 건은 값의 근거가 될 수 없다 — 붙을지 떨어질지 모른다 */
+const UNDECIDED = ['접수', '견적', '보류', '취소']
+
+/** 직무별 과거 견적 사례. 한 질문 안에서는 한 번만 모은다. */
+async function collectCases(erp: ErpData): Promise<Map<string, PriceCase[]>> {
+  const [items, inquiries] = await Promise.all([erp.estimateItems(), erp.inquiries()])
+  const byId = new Map(inquiries.map(i => [i.id, i]))
+
+  const out = new Map<string, PriceCase[]>()
+  for (const it of items) {
+    const inq = it.inquiry_id ? byId.get(it.inquiry_id) : undefined
+    if (!inq) continue
+    if (UNDECIDED.includes(inq.status)) continue          // 결정난 건만
+    // 사람 값만 본다. 식비·교통비·지원품목이 섞이면 '주차비'가 주차요원 단가로 잡힌다.
+    if ((it.item_type || '').trim() !== '인력') continue
+    const price = Number(it.unit_price) || 0
+    if (price <= 0) continue
+    // 같은 일을 다르게 부른 이름들을 한 덩어리로 묶는다
+    // ('행사스탭'·'진행요원'·'세팅스탭' → 행사 진행요원)
+    const key = canonRoleKey(it.role_name)
+    if (!key) continue
+    const list = out.get(key) ?? []
+    list.push({ price, pay: Number(it.pay_unit_price) || 0, won: inq.status !== '미체결', inq })
+    out.set(key, list)
+  }
+  return out
+}
+
+const median = (nums: number[]): number => {
+  if (nums.length === 0) return 0
+  const s = [...nums].sort((a, b) => a - b)
+  return s[Math.floor(s.length / 2)]
+}
+
+/** 단가표에 없는 직무를 메울 값 — 견적 초안이 쓴다 */
+async function priceHistory(erp: ErpData): Promise<Map<string, PriceHistory>> {
+  const cases = await collectCases(erp)
+  const out = new Map<string, PriceHistory>()
+  for (const [key, list] of cases) {
+    if (list.length < MIN_HISTORY_CASES) continue
+    out.set(key, {
+      unit: median(list.map(c => c.price)),
+      pay: median(list.map(c => c.pay).filter(v => v > 0)),
+      n: list.length,
+    })
+  }
+  return out
+}
+
+/** 장소를 덩어리로 묶는다 — '코엑스 A홀'과 '코엑스 3층'은 같은 곳이다 */
+function placeGroup(loc?: string | null): string {
+  const v = loc || ''
+  if (/코엑스|COEX/i.test(v)) return '코엑스'
+  if (/킨텍스|KINTEX/i.test(v)) return '킨텍스'
+  if (/세텍|SETEC/i.test(v)) return '세텍'
+  if (/aT|양재/i.test(v)) return 'aT센터'
+  if (/서울|강남|잠실|성수|여의도|상암|송파|마포/.test(v)) return '서울'
+  if (/경기|수원|고양|분당|일산|용인|성남|인천/.test(v)) return '경기·인천'
+  return v ? '그 외 지방' : '장소미상'
+}
+
+/** 인원 규모 구간 — 실측에서 값이 가장 크게 갈린 축이다
+ *  (경호원: 1~3명 22만·체결 57% / 4~9명 25만·체결 93%) */
+function sizeBand(n?: number | null): string {
+  const v = n ?? 0
+  if (v <= 0) return '인원미상'
+  if (v <= 3) return '1~3명'
+  if (v <= 9) return '4~9명'
+  if (v <= 29) return '10~29명'
+  return '30명 이상'
+}
+
+/** 한 묶음을 한 줄로 — 사례 수·중앙값·체결률, 얇으면 얇다고 적는다 */
+function bandLine(label: string, list: PriceCase[]): string {
+  const rate = Math.round((list.filter(c => c.won).length / list.length) * 100)
+  const thin = list.length < THIN_SAMPLE ? '  ⚠ 표본이 얇아 참고만' : ''
+  return `  ${label} | ${list.length}건 | 중앙 ${won(median(list.map(c => c.price)))} | 체결률 ${rate}%${thin}`
+}
+
+async function priceReference(input: ToolInput, erp: ErpData): Promise<string> {
+  const asked = str(input.role)
+  if (!asked) return 'role(직무 이름)이 필요합니다.'
+
+  const [cases, roles] = await Promise.all([collectCases(erp), erp.roles()])
+
+  // 사람이 쓴 말을 단가표 이름으로 옮겨보고, 둘 다로 찾는다.
+  // '행사스탭' 처럼 단가표엔 없지만 견적에는 많이 쓴 이름이 있다.
+  const alias = resolveRoleName(asked)
+  const list = cases.get(canonRoleKey(asked)) ?? []
+
+  const tableRole = roles.find(r => normRole(r.role_name) === normRole(alias.name ?? asked))
+  const tableLine = tableRole
+    ? `단가표: 청구 ${won(tableRole.base_price)} / 지급 ${won(tableRole.pay_price ?? 0)}` +
+      `${tableRole.leader_bonus ? ` / 팀장가산 ${won(tableRole.leader_bonus)}` : ''}  ← 최저선입니다`
+    : `단가표에 '${asked}' 은(는) 없습니다.`
+
+  if (list.length === 0) {
+    return [
+      `[값의 근거] '${asked}'`,
+      tableLine,
+      '',
+      '이 이름으로 낸 과거 견적이 없습니다. 값을 지어내지 마시고 사장님께 여쭤보세요.',
+      ...(alias.name && alias.name !== asked ? [`※ '${asked}' 을(를) '${alias.name}' 으로 봤습니다.`] : []),
+    ].join('\n')
+  }
+
+  const wonList = list.filter(c => c.won)
+  const lostList = list.filter(c => !c.won)
+  const prices = list.map(c => c.price)
+  const rate = Math.round((wonList.length / list.length) * 100)
+
+  const lines: string[] = [
+    `[값의 근거] '${asked}'` +
+      (alias.name && normRole(alias.name) !== normRole(asked) ? ` → '${alias.name}' 으로 봤습니다` : ''),
+    tableLine,
+    '',
+    `[기준선] 결정난 견적 ${list.length}건 · 체결률 ${rate}%`,
+    `  전체 중앙 ${won(median(prices))} (${won(Math.min(...prices))} ~ ${won(Math.max(...prices))})`,
+    `  체결된 건 중앙 ${won(median(wonList.map(c => c.price)))} (${wonList.length}건)`,
+    ...(lostList.length
+      ? [`  떨어진 건 중앙 ${won(median(lostList.map(c => c.price)))} (${lostList.length}건)`]
+      : []),
+    ...(median(list.map(c => c.pay).filter(v => v > 0)) > 0
+      ? [`  지급단가 중앙 ${won(median(list.map(c => c.pay).filter(v => v > 0)))}`] : []),
+  ]
+
+  // ── 맥락으로 좁혀 본다 ──
+  const size = num(input.staff_count)
+  const place = str(input.location)
+  const company = str(input.company)
+
+  const narrowed: string[] = []
+  if (size !== undefined) {
+    const band = sizeBand(size)
+    const g = list.filter(c => sizeBand(c.inq.required_staff) === band)
+    if (g.length) narrowed.push(bandLine(`같은 규모(${band})`, g))
+  }
+  if (place) {
+    const band = placeGroup(place)
+    const g = list.filter(c => placeGroup(c.inq.location) === band)
+    if (g.length) narrowed.push(bandLine(`같은 지역(${band})`, g))
+  }
+  if (company) {
+    const g = list.filter(c => (c.inq.company_name || '').includes(company))
+    narrowed.push(g.length ? bandLine(`이 거래처(${company})`, g) : `  이 거래처(${company}) | 0건 | 첫 거래입니다`)
+  }
+  if (narrowed.length) lines.push('', '[좁혀 보면]', ...narrowed)
+
+  // ── 규모별 전체 분포 — 어느 구간이 다른지 보여준다 ──
+  const bySize = new Map<string, PriceCase[]>()
+  list.forEach(c => {
+    const b = sizeBand(c.inq.required_staff)
+    bySize.set(b, [...(bySize.get(b) ?? []), c])
+  })
+  if (bySize.size > 1) {
+    lines.push('', '[규모별]')
+    for (const b of ['1~3명', '4~9명', '10~29명', '30명 이상', '인원미상']) {
+      const g = bySize.get(b)
+      if (g && g.length) lines.push(bandLine(b, g))
+    }
+  }
+
+  lines.push('',
+    `※ 중앙값은 결정난 견적(체결+미체결) 기준입니다. 아직 살아 있는 건은 넣지 않았습니다.`,
+    `※ ${THIN_SAMPLE}건 미만 구간은 우연일 수 있습니다. 그 숫자로 단정하지 마세요.`,
+    `※ 단가표 값은 최저선입니다. 실제로 받아온 값이 더 높으면 그쪽이 현실입니다.`,
+    `※ 왜 떨어졌는지(가격인지 일정인지)는 아직 기록이 얇아 알 수 없습니다.`)
+
+  return lines.join('\n')
 }
