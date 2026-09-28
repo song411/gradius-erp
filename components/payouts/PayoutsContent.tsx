@@ -5,6 +5,7 @@ import * as XLSX from 'xlsx'
 import { db } from '@/lib/supabase/api'
 import type { Inquiry, Assignment, Payout, Settlement, EventExpense } from '@/lib/supabase/types'
 import { formatKRW, formatDate } from '@/lib/utils'
+import { isHeadOfficeAssignment } from '@/lib/finance'
 import PayoutForm from './PayoutForm'
 import BulkPayoutModal from './BulkPayoutModal'
 import ExpensesSection from './ExpensesSection'
@@ -50,10 +51,9 @@ function parseNotesMemo(notes?: string | null): string {
   return notes
 }
 
-// 본사 인원 이름 기반 감지 (이름 OR is_payable=false)
-const HQ_NAMES = new Set(['최규성', '송무재', '여지은', '김영찬'])
+// 무급 인원 감지 — 본사 판정은 lib/finance.ts 한 곳(isHeadOfficeAssignment)을 쓴다
 function isHQ(a: Assignment) {
-  return a.is_payable === false || (a.staff_name ? HQ_NAMES.has(a.staff_name) : false)
+  return a.is_payable === false || isHeadOfficeAssignment(a)
 }
 
 // 배정완료 → 완료 자동 전환

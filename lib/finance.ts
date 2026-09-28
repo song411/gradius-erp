@@ -65,6 +65,7 @@ export function periodRef(inq: Inquiry | undefined, sett: Settlement): string {
  *  추정치를 확정값처럼 보여주는 것이 제일 위험하다 — 틀린 것보다 틀린 줄 모르는 게 나쁘다. */
 export type PayoutSource =
   | 'actual'      // 지급 레코드가 있다 (금액 확정)
+  | 'hq'          // 본사 인원만 배정됐다 — 지급이 없는 게 정상 (추정으로 내려가지 않는다)
   | 'settlement'  // 정산에 적힌 예상지급
   | 'assignment'  // 배정 기준 추정 (pay_rate × work_days)
   | 'none'        // 알 수 있는 게 없다
@@ -77,6 +78,7 @@ export type PayoutStage =
   | 'partial'    // 일부만 송금됨
   | 'unpaid'     // 금액은 확정, 아직 안 나감
   | 'estimated'  // 지급 기록이 없어 추정
+  | 'hq'         // 본사 인원만 — 지급할 것이 없음
   | 'none'       // 알 수 있는 게 없음
 
 export const PAYOUT_STAGE_LABEL: Record<PayoutStage, string> = {
@@ -84,6 +86,7 @@ export const PAYOUT_STAGE_LABEL: Record<PayoutStage, string> = {
   partial:   '일부 지급',
   unpaid:    '미지급',
   estimated: '추정',
+  hq:        '본사 인원',
   none:      '정보 없음',
 }
 
@@ -100,10 +103,18 @@ export interface PayoutInfo {
 
 export const PAYOUT_SOURCE_LABEL: Record<PayoutSource, string> = {
   actual:     '지급 확정',
+  hq:         '본사 인원 (지급 없음)',
   settlement: '예상지급(정산 입력값)',
   assignment: '배정 기준 추정',
   none:       '지급 정보 없음',
 }
+
+/** 본사 인원 판정. 배정의 staff_type 이 기준이고, 타입이 비어 있던 시절의 행을 위해
+ *  이름 목록을 보조로 둔다. 이름 목록은 여기 한 곳에만 있다 — 화면마다 복사해 두면
+ *  사람이 바뀔 때 하나씩 어긋난다. (2026-09-28 실측: 본사 이름 161줄 중 159줄이 '본사' 타입) */
+export const HQ_STAFF_NAMES = new Set(['최규성', '송무재', '여지은', '김영찬'])
+export const isHeadOfficeAssignment = (a: Pick<Assignment, 'staff_type' | 'staff_name'>): boolean =>
+  a.staff_type === '본사' || (!!a.staff_name && HQ_STAFF_NAMES.has(a.staff_name))
 
 /** 화면에서 '이 숫자 믿어도 되나'를 가르는 기준 */
 export const isEstimated = (s: PayoutSource) => s === 'settlement' || s === 'assignment'
@@ -116,6 +127,8 @@ export interface FinanceIndex {
   paidByInquiry:     Map<string, number>
   expenseByInquiry:  Map<string, number>
   estimateByInquiry: Map<string, number>
+  /** 살아 있는 배정이 전부 본사 인원인 행사. 지급이 0인 게 정상이라 추정으로 내려가면 안 된다. */
+  hqOnlyInquiries:   Set<string>
 }
 
 /** 실제로 돈이 나간 것으로 보는 지급 상태 */
@@ -152,15 +165,25 @@ export function buildFinanceIndex(
   })
 
   // 지급 레코드도 정산 입력값도 없을 때 쓰는 마지막 근거.
-  // 취소된 배정과 무급(본사) 인원은 뺀다.
+  // 취소된 배정과 무급 인원은 뺀다. 본사 인원은 is_payable 과 무관하게 뺀다 —
+  // 예전 배정 행에는 본사인데 지급 가능이 켜지고 단가까지 적힌 것이 76줄 있었고,
+  // 그 때문에 청주가구박람회(본사 1명, 행이 두 번 중복)에 104만원 추정이 붙어 적자로 보였다.
   const estimateByInquiry = new Map<string, number>()
+  const liveByInquiry = new Map<string, { total: number; hq: number }>()
   assignments.forEach(a => {
-    if (!a.inquiry_id || a.status === '취소' || a.is_payable === false) return
+    if (!a.inquiry_id || a.status === '취소') return
+    const hq = isHeadOfficeAssignment(a)
+    const c = liveByInquiry.get(a.inquiry_id) || { total: 0, hq: 0 }
+    c.total++; if (hq) c.hq++
+    liveByInquiry.set(a.inquiry_id, c)
+    if (hq || a.is_payable === false) return
     const amt = (a.pay_rate || 0) * (a.work_days || 1)
     estimateByInquiry.set(a.inquiry_id, (estimateByInquiry.get(a.inquiry_id) || 0) + amt)
   })
+  const hqOnlyInquiries = new Set<string>()
+  liveByInquiry.forEach((c, id) => { if (c.total > 0 && c.hq === c.total) hqOnlyInquiries.add(id) })
 
-  return { payoutByInquiry, paidByInquiry, expenseByInquiry, estimateByInquiry }
+  return { payoutByInquiry, paidByInquiry, expenseByInquiry, estimateByInquiry, hqOnlyInquiries }
 }
 
 /** 이 행사에 나간(나갈) 인건비.
@@ -193,6 +216,12 @@ export function payoutOf(
       amount: actual, source: 'actual', paid, pending,
       stage: pending <= 0 ? 'paid' : paid > 0 ? 'partial' : 'unpaid',
     }
+  }
+
+  // 본사 인원만 나간 행사는 지급이 없는 게 정상이다. 정산에 누가 예상지급을 적어 뒀어도,
+  // 배정에 단가가 남아 있어도 추정으로 내려가지 않는다. (실제 지급 레코드가 있으면 위에서 이미 잡힌다)
+  if (index.hqOnlyInquiries.has(inquiryId)) {
+    return { amount: 0, source: 'hq', paid: 0, pending: 0, stage: 'hq' }
   }
 
   const fromSett = settlementPayout || 0

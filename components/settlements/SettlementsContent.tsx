@@ -20,7 +20,7 @@ import type {
 } from '@/lib/supabase/types'
 import {
   buildFinanceIndex, dedupeSettlements, toRows, countableRows, sumRows, unpaidTotal,
-  payoutOf, PAYOUT_SOURCE_LABEL, PAYOUT_STAGE_LABEL,
+  payoutOf, PAYOUT_SOURCE_LABEL, PAYOUT_STAGE_LABEL, HQ_STAFF_NAMES,
 } from '@/lib/finance'
 import { toast } from 'sonner'
 
@@ -746,9 +746,8 @@ export default function SettlementsContent() {
                                     로딩 중...
                                   </div>
                                 ) : (() => {
-                                  const HQ_NAMES = new Set(['최규성', '송무재', '여지은', '김영찬'])
                                   const pays = detailPayouts[s.id] || []
-                                  const payable = pays.filter(p => !(p.staff_name && HQ_NAMES.has(p.staff_name)))
+                                  const payable = pays.filter(p => !(p.staff_name && HQ_STAFF_NAMES.has(p.staff_name)))
                                   const calcTotal = payable.reduce((sum, p) => sum + p.final_pay, 0)
                                   const matches = s.payout_amount > 0 && Math.abs(calcTotal - s.payout_amount) < 1000
 

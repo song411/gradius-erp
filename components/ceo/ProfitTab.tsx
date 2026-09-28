@@ -6,15 +6,14 @@ import { ChevronDown, ChevronRight, TrendingUp, TrendingDown, Minus, Clock, User
 import { Input } from '@/components/ui/input'
 import type { CeoData } from './CeoContent'
 import {
-  buildFinanceIndex, payoutOf, expenseOf, isCountable, isEstimated,
+  buildFinanceIndex, payoutOf, expenseOf, isCountable, isEstimated, isHeadOfficeAssignment,
   PAYOUT_STAGE_LABEL,
   type PayoutSource, type PayoutStage,
 } from '@/lib/finance'
 import type { Inquiry, Settlement, Payout } from '@/lib/supabase/types'
 import { PeriodFilter, isInPeriodFn, type PeriodState } from './PeriodFilter'
 
-// 본사 인원 목록
-const HQ_NAMES = new Set(['최규성', '송무재', '여지은', '김영찬'])
+// 본사 인원 판정은 lib/finance.ts 의 isHeadOfficeAssignment 한 곳에서 한다.
 
 // 수익률 태그
 function ProfitRateTag({ rate }: { rate: number }) {
@@ -78,6 +77,7 @@ const STAGE_STYLE: Record<PayoutStage, string> = {
   partial:   'bg-yellow-100 text-yellow-900 border-yellow-300',
   unpaid:    'bg-orange-100 text-orange-800 border-orange-300',
   estimated: 'bg-white      text-gray-500   border-dashed border-gray-400',
+  hq:        'bg-slate-100  text-slate-600  border-slate-300',
   none:      'bg-gray-100   text-gray-500   border-gray-300',
 }
 
@@ -90,6 +90,7 @@ function StageBadge({ stage }: { stage: PayoutStage }) {
         stage === 'partial'   ? '일부만 송금됨' :
         stage === 'unpaid'    ? '금액은 확정, 아직 송금 전' :
         stage === 'estimated' ? '지급 기록이 없어 추정한 값. 지급관리에 등록되면 확정됩니다' :
+        stage === 'hq'        ? '본사 인원만 투입된 행사. 지급할 것이 없어 0원이 정상입니다' :
         '지급 정보 없음'
       }
     >
@@ -148,17 +149,19 @@ export default function ProfitTab({ data }: { data: CeoData }) {
         const profit      = supplyPrice - totalPayout - totalExpense
         const profitRate  = supplyPrice > 0 ? Math.round((profit / supplyPrice) * 100) : 0
 
-        // 본사 인원만 배정된 경우 판별
-        const hqNames     = inqAssigns.filter(a => a.staff_name && HQ_NAMES.has(a.staff_name)).map(a => a.staff_name!)
-        const nonHqAssigns = inqAssigns.filter(a => !HQ_NAMES.has(a.staff_name || ''))
-        const isHqOnly    = inqAssigns.length > 0 && nonHqAssigns.length === 0
+        // 본사 인원만 배정된 경우 판별 — 돈 계산 모듈이 같은 기준으로 이미 판정해 준다(source 'hq').
+        // 예전에는 지급액이 0일 때만 이 판별을 봤는데, 추정이 먼저 값을 만들어 버려서
+        // 본사 판별이 한 번도 이기지 못했다. 지금은 추정보다 앞에서 잡힌다.
+        const liveAssigns = inqAssigns.filter(a => a.status !== '취소')
+        const hqNames     = Array.from(new Set(liveAssigns.filter(isHeadOfficeAssignment).map(a => a.staff_name || '').filter(Boolean)))
+        const nonHqAssigns = liveAssigns.filter(a => !isHeadOfficeAssignment(a))
 
         // 케이스 결정
         let payoutCase: PayoutCase = 'none'
-        if (totalPayout > 0) {
-          payoutCase = 'normal'
-        } else if (isHqOnly) {
+        if (payoutSource === 'hq') {
           payoutCase = 'hq_only'               // 본사 인원만 → 지급비 없음, 수익률 100%
+        } else if (totalPayout > 0) {
+          payoutCase = 'normal'
         } else if (allPayouts.length > 0 || nonHqAssigns.length > 0) {
           payoutCase = 'pending'               // 배정/지급 있지만 아직 미지급완료
         } else {
