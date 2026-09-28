@@ -89,7 +89,7 @@ export class ErpData {
     return this.load<Staff>('staff', () => fetchAll('staff',
       'id, name, gender, age, region, phone, available_jobs, certifications, ' +
       'recommend, total_score, attendance_score, performance_score, ' +
-      'appearance_score, teamwork_score, adaptability_score, memo'))
+      'appearance_score, teamwork_score, adaptability_score, memo, created_at'))
   }
   settlements() {
     return this.load<Settlement>('settlements', () => fetchAll('settlements',
@@ -258,8 +258,9 @@ export const TOOLS: Anthropic.Tool[] = [
     name: 'recommend_staff',
     description:
       '이 행사에 보낼 크루를 추천한다. 먼저 하드 필터(그날 겹침·투입불가 등급·직무)로 거른 뒤, ' +
-      '남은 사람을 현장 경험 > 등급 > 기회 균등 > 지역 순으로 점수를 매겨 매칭률과 함께 준다. ' +
-      '★1순위는 그 현장을 해본 사람이다(같은 거래처·장소·행사). ' +
+      '남은 사람을 세 묶음으로 구성해 준다 — 경험(이 현장·거래처를 해본 사람) · 능력(평점이 높은 사람) · ' +
+      '새 얼굴(투입 3회 미만인 사람). 잘하는 사람만 계속 부르면 인력풀이 마르기 때문에 새 얼굴 자리를 항상 둔다. ' +
+      '묶음 비율은 newcomers 로 바꿀 수 있다(사장님이 "신규 더" 하면 올리고, "이번엔 경험자만" 하면 0). ' +
       '등급(S/A/B/C/X·미분류)과 상태(활성/잠재/관찰/비활성)도 함께 준다. ' +
       '필요 인원을 알면 그 1.5배를 뽑는다 — 섭외하면 거절이 나오기 때문이다. ' +
       '"누구 보낼까", "인력 추천" 류 질문에 쓴다.',
@@ -273,6 +274,10 @@ export const TOOLS: Anthropic.Tool[] = [
         include_held: {
           type: 'boolean',
           description: '투입불가·관찰 등급까지 포함할지. 사람이 모자랄 때만 true (기본 false)',
+        },
+        newcomers: {
+          type: 'number',
+          description: '새 얼굴(투입 3회 미만) 자리를 몇 개 둘지. 비우면 전체의 20%(최소 1명). 0이면 새 얼굴 없이 경험·능력만',
         },
       },
     },
@@ -845,6 +850,7 @@ async function recommendStaff(input: ToolInput, erp: ErpData): Promise<string> {
   const jobFilter = str(input.job_type)
   const needRaw = num(input.limit)
   const includeHeld = input.include_held === true
+  const newcomersRaw = num(input.newcomers)
 
   const [inquiries, assigns, staffList, evals] = await Promise.all([
     erp.inquiries(), erp.assignments(), erp.staff(), erp.evaluations(),
@@ -914,22 +920,33 @@ async function recommendStaff(input: ToolInput, erp: ErpData): Promise<string> {
     }
   })
 
-  // ── ④ 하드 필터 → 소프트 점수 ─────────────────────────
-  // 꼭 필요한 조건은 '있다/없다'로 거르고, 나머지는 '얼마나 잘 맞나'로 순위를 낸다.
-  // 이 둘을 섞으면 안 맞는 사람이 점수로 올라온다.
+  // ── ④ 하드 필터 → 세 축 점수 ─────────────────────────
+  // 꼭 필요한 조건은 '있다/없다'로 거르고, 나머지는 세 축으로 따로 잰다.
+  //   경험 — 이 현장·거래처·장소를 아는가
+  //   능력 — 평점이 높은가 (데이터가 얇으면 신뢰도를 깎는다)
+  //   새 얼굴 — 투입이 3회 미만인가 (인력풀을 늘리는 것도 우리 일이다)
+  // 예전엔 한 점수로 합쳐서 정렬했는데, 경험 점수가 워낙 커서 한 번이라도 해본 사람이
+  // 영원히 앞섰고, 이력·평점이 없는 새 크루는 0점이라 명단에서 아예 지워졌다.
+  // 그래서 항상 "했던 사람만" 나왔다. 축을 나누고 묶음마다 자리를 두는 이유다.
+  type Bucket = '경험' | '능력' | '새 얼굴'
   type Cand = {
     s: Staff; key: string; grade: Grade; status: PoolStatus
-    score: number; why: string[]; warn: string[]; h?: Hist
+    exp: number; qual: number; fresh: number; common: number
+    isNew: boolean; why: string[]; warn: string[]; h?: Hist
+    bucket?: Bucket; shown?: number
   }
   const cands: Cand[] = []
-  const cut = { busy: 0, notAssignable: 0, job: 0, headOffice: 0, noBasis: 0 }
+  const cut = { busy: 0, notAssignable: 0, job: 0, headOffice: 0 }
+  const d180 = new Date(); d180.setDate(d180.getDate() - 180)
+  const since180 = d180.toISOString().slice(0, 10)
 
   for (const s of staffList) {
     const key = staffKey(s.id, s.name)
     if (!key) continue
 
     const h = hist.get(key)
-    const grade = gradeOf(s.total_score, h?.total ?? 0)
+    const total = h?.total ?? 0
+    const grade = gradeOf(s.total_score, total)
     const status = statusOf({
       grade, lastWorkDate: h?.lastDate, recommend: s.recommend,
       hasNegativeEval: noReco.has(key), today,
@@ -946,52 +963,58 @@ async function recommendStaff(input: ToolInput, erp: ErpData): Promise<string> {
       }
     }
 
-    // 소프트 점수
     const why: string[] = []
     const warn: string[] = []
-    let score = 0
 
+    // 경험 축 — 상한을 낮게 둔다. 같은 거래처 3번이면 충분히 아는 것이고,
+    // 10번이라고 3번보다 세 배 더 잘 아는 게 아니다.
+    let exp = 0
     if (h) {
-      if (h.sameClient > 0) { score += Math.min(h.sameClient, 4) * 100; why.push(`${ev.company_name} ${h.sameClient}회`) }
-      if (h.sameEvent > 0)  { score += Math.min(h.sameEvent, 3) * 80;  why.push(`같은 행사 ${h.sameEvent}회`) }
+      if (h.sameClient > 0) { exp += Math.min(h.sameClient, 3) * 60; why.push(`${ev.company_name} ${h.sameClient}회`) }
+      if (h.sameEvent > 0)  { exp += Math.min(h.sameEvent, 2) * 50;  why.push(`같은 행사 ${h.sameEvent}회`) }
       if (h.samePlace > 0 && norm(ev.location) !== evClient) {
-        score += Math.min(h.samePlace, 3) * 60; why.push(`같은 장소 ${h.samePlace}회`)
+        exp += Math.min(h.samePlace, 2) * 40; why.push(`같은 장소 ${h.samePlace}회`)
       }
-      score += Math.min(h.total, 20) * 3
-      if (why.length === 0 && h.total > 0) why.push(`총 ${h.total}회`)
+      exp += Math.min(total, 10) * 3
+      if (why.length === 0 && total > 0) why.push(`총 ${total}회`)
     }
 
-    // 품질 — 평점을 직접 쓴다.
-    // 등급(S/A/B)은 사람이 읽기 위한 라벨일 뿐이다. 등급 계단으로 점수를 주면
-    // 배정 2회라 '미분류'가 된 평점 4.4가, 'B' 3.1보다 낮게 평가되는 뒤집힘이 생긴다.
-    // 실제로 우리 데이터는 평점 보유자의 81%가 배정 3회 미만이라 이 뒤집힘이 흔하다.
-    // 대신 데이터가 얇으면 신뢰도를 깎는다 — 무시하지도, 그대로 믿지도 않는다.
+    // 능력 축 — 평점을 직접 쓴다. 등급 계단으로 주면 배정 2회짜리 4.4가 B 3.1보다
+    // 낮게 뒤집힌다(평점 보유자의 81%가 배정 3회 미만). 데이터가 얇으면 0.7배.
     const rating = s.total_score || 0
-    const thin = (h?.total ?? 0) < MIN_WORKS_FOR_GRADE
-    score += rating * 18 * (thin ? 0.7 : 1)
+    const thin = total < MIN_WORKS_FOR_GRADE
+    let qual = rating * 20 * (thin ? 0.7 : 1)
+    if (s.recommend === '우선투입') { qual += 25; why.push('우선투입') }
     why.push(`${grade}등급${rating ? `(${rating})` : ''}`)
 
-    // 기회 균등 — 최근 90일에 덜 나간 사람을 조금 올린다.
-    // 잘하는 사람만 계속 부르면 나머지가 조용히 이탈한다.
-    if (h && h.total >= MIN_WORKS_FOR_GRADE && h.recent90 === 0) {
-      score += 35; why.push('최근 한산')
+    // 새 얼굴 축 — 투입 3회 미만. 0회가 가장 높고, 최근 6개월 안에 등록했으면 더.
+    const isNew = total < MIN_WORKS_FOR_GRADE
+    let fresh = 0
+    if (isNew) {
+      fresh = 100 - total * 20
+      why.push(total === 0 ? '새 얼굴 · 첫 투입' : `새 얼굴 · ${total}회`)
+      if (s.created_at && s.created_at.slice(0, 10) >= since180) { fresh += 20; why.push('최근 등록') }
+      if (rating > 0) fresh += rating * 6
     }
 
-    // 적합성 — 지역
+    // 공통 — 어느 묶음에서든 같이 본다
+    let common = 0
     if (evPlace && s.region) {
       const mine = norm(s.region).split(/[,·/]/).map(x => x.trim()).filter(Boolean)
       if (mine.some(r => r && (evPlace.includes(r) || r.includes('전국')))) {
-        score += 40; why.push(`${s.region} 거주`)
+        common += 40; why.push(`${s.region} 거주`)
       }
     }
+    // 돌아가며 나가게 — 최근 90일에 안 나간 사람은 조금 올리고, 자주 나간 사람은 조금 내린다.
+    if (h && total > 0 && h.recent90 === 0) { common += 20; why.push('최근 한산') }
+    if (h && h.recent90 >= 3) { common -= 25; why.push(`최근 90일 ${h.recent90}회`) }
 
     if (status === '잠재') warn.push('6개월+ 미투입')
-    if (s.recommend === '우선투입') { score += 25; why.push('우선투입') }
     if (noReco.has(key)) warn.push('재추천 아니오 이력')
     if (!s.phone) warn.push('연락처 없음')
+    if (total === 0 && rating === 0) warn.push('이력·평점 없음 — 통화로 확인')
 
-    if (score <= 0) { cut.noBasis++; continue }
-    cands.push({ s, key, grade, status, score, why, warn, h })
+    cands.push({ s, key, grade, status, exp, qual, fresh, common, isNew, why, warn, h })
   }
 
   if (cands.length === 0) {
@@ -999,24 +1022,48 @@ async function recommendStaff(input: ToolInput, erp: ErpData): Promise<string> {
       `(그날 잡힘 ${cut.busy}명 / 투입불가·관찰 ${cut.notAssignable}명 / 직무 불일치 ${cut.job}명 제외)`
   }
 
-  cands.sort((a, b) => b.score - a.score)
-
+  // ── ⑤ 세 묶음으로 구성 ─────────────────────────────────
   // 필요 인원의 1.5배를 기본으로 뽑는다 — 섭외하면 거절이 나오기 때문
   const need = ev.required_staff ?? 0
   const limit = needRaw ?? Math.min(Math.max(need > 0 ? Math.ceil(need * 1.5) : 12, 8), 40)
-  const top = cands.slice(0, limit)
+  const wantNew = newcomersRaw != null ? Math.max(0, Math.round(newcomersRaw)) : Math.max(1, Math.round(limit * 0.2))
+  const wantExp = Math.ceil((limit - wantNew) * 0.6)
+  const wantQual = Math.max(0, limit - wantNew - wantExp)
 
-  // 매칭률 — 보여줄 목록 안에서 최저~최고를 60~99%로 펼친다.
-  // 1등 대비 비율로 하면 1등 점수가 튈 때 나머지가 전부 하한에 뭉개진다
-  // (실제로 7위부터 40위까지 전부 55%로 붙어 버렸다).
-  const hi = Math.max(...top.map(c => c.score))
-  const lo = Math.min(...top.map(c => c.score))
-  const rate = (sc: number) =>
-    hi === lo ? 90 : Math.round(60 + ((sc - lo) / (hi - lo)) * 39)
+  const expScore = (c: Cand) => c.exp + c.common + c.qual * 0.5
+  const qualScore = (c: Cand) => c.qual + c.common + Math.min(c.exp, 60) * 0.3
+  const freshScore = (c: Cand) => c.fresh + c.common
+  const anyScore = (c: Cand) => Math.max(expScore(c), qualScore(c), c.isNew ? freshScore(c) : 0)
 
-  // ── ⑤ 출력 ───────────────────────────────────────────
+  const taken = new Set<string>()
+  const pick = (bucket: Bucket, pool: Cand[], score: (c: Cand) => number, n: number) => {
+    const chosen = pool.filter(c => !taken.has(c.key)).sort((a, b) => score(b) - score(a)).slice(0, Math.max(0, n))
+    chosen.forEach(c => { c.bucket = bucket; c.shown = score(c); taken.add(c.key) })
+    return chosen
+  }
+  const gExp = pick('경험', cands.filter(c => c.exp > 0), expScore, wantExp)
+  const gQual = pick('능력', cands.filter(c => (c.s.total_score || 0) > 0), qualScore, wantQual)
+  const gNew = pick('새 얼굴', cands.filter(c => c.isNew), freshScore, wantNew)
+  // 어느 묶음이 모자라면 남은 사람 중 어느 축으로든 가장 나은 사람으로 채운다
+  const short = limit - (gExp.length + gQual.length + gNew.length)
+  const filler = short > 0 ? pick('능력', cands, anyScore, short) : []
+  const groups: Array<{ name: Bucket; reason: string; list: Cand[] }> = [
+    { name: '경험', reason: '이 현장·거래처·장소를 해본 사람. 설명이 덜 들고 사고가 적다.', list: gExp },
+    { name: '능력', reason: '평점이 높은 사람. 이 현장은 처음이어도 어디서든 잘한 사람.', list: [...gQual, ...filler] },
+    { name: '새 얼굴', reason: `투입 ${MIN_WORKS_FOR_GRADE}회 미만. 한두 명은 늘 섞어야 인력풀이 마르지 않는다.`, list: gNew },
+  ]
+
+  // 매칭률 — 묶음 안에서 최저~최고를 60~99%로 펼친다. 묶음끼리, 행사끼리 비교하는 값이 아니다.
+  const rateIn = (list: Cand[]) => {
+    const v = list.map(c => c.shown ?? 0)
+    const hi = Math.max(...v), lo = Math.min(...v)
+    return (sc: number) => (hi === lo ? 90 : Math.round(60 + ((sc - lo) / (hi - lo)) * 39))
+  }
+
+  // ── ⑥ 출력 ───────────────────────────────────────────
   const dates = [...targetDates].sort()
   const need1 = dates.length === 1 ? dates[0] : `${dates[0]}~${dates[dates.length - 1]} (${dates.length}일)`
+  const shownAll = groups.flatMap(g => g.list)
 
   const lines: string[] = [
     `[추천 대상] ${ev.company_name || '-'} / ${ev.event_name || '-'}`,
@@ -1029,35 +1076,45 @@ async function recommendStaff(input: ToolInput, erp: ErpData): Promise<string> {
     `  ↓ 그날 다른 현장에 잡힘        -${cut.busy}명`,
     `  ↓ 투입불가·관찰 등급          -${cut.notAssignable}명`,
     ...(jobFilter ? [`  ↓ 직무 '${jobFilter}' 안 맞음   -${cut.job}명`] : []),
-    `  ↓ 근무이력·평점 둘 다 없음     -${cut.noBasis}명`,
-    `조건 통과 ${cands.length}명 → 상위 ${top.length}명 추천` +
+    `조건 통과 ${cands.length}명 → ${shownAll.length}명 추천` +
       (need > 0 && !needRaw ? ` (필요 ${need}명의 1.5배)` : ''),
     '',
+    `[구성] 경험 ${groups[0].list.length} · 능력 ${groups[1].list.length} · 새 얼굴 ${groups[2].list.length}` +
+      (gNew.length < wantNew ? ` (새 얼굴 자리 ${wantNew}개 중 ${gNew.length}명만 있었음)` : '') +
+      ' — 비율은 말씀하시면 바꿉니다 (예: "신규 3명", "이번엔 경험자만")',
   ]
 
   // 등급 분포
   const dist: Record<string, number> = {}
-  top.forEach(c => { dist[c.grade] = (dist[c.grade] || 0) + 1 })
+  shownAll.forEach(c => { dist[c.grade] = (dist[c.grade] || 0) + 1 })
   lines.push('[추천 명단의 등급 분포] ' +
     (['S', 'A', 'B', '미분류', 'C'] as Grade[])
-      .filter(g => dist[g]).map(g => `${g} ${dist[g]}명`).join(' / '))
+      .filter(g => dist[g]).map(g => `${g} ${dist[g]}명`).join(' / '), '')
 
-  const experienced = top.filter(c => (c.h?.sameClient || 0) + (c.h?.sameEvent || 0) + (c.h?.samePlace || 0) > 0).length
-  lines.push(`이 중 ${experienced}명은 이 현장/거래처를 해본 사람입니다.`, '')
-
-  lines.push('[추천 명단] 순위 | 매칭률 | 이름 | 등급·상태 | 근거 | 연락처')
-  top.forEach((c, idx) => {
-    const last = c.h?.lastDate ? ` · 최근 ${c.h.lastDate} ${c.h.lastWhere}` : ' · 근무이력 없음'
-    const warnTxt = c.warn.length ? `  ⚠ ${c.warn.join(', ')}` : ''
-    lines.push(
-      `${idx + 1}. ${rate(c.score)}% | ${c.s.name}(${c.s.gender || '?'}/${c.s.age ?? '?'}세/${c.s.region || '지역미상'})` +
-      ` | ${c.grade}·${c.status} | ${c.why.join(' · ')}${last} | ${c.s.phone || '없음'}${warnTxt}`,
-    )
+  let idx = 0
+  groups.forEach(g => {
+    lines.push(`[${g.name} ${g.list.length}명] ${g.reason}`)
+    if (g.list.length === 0) { lines.push('  (해당하는 사람이 없음)', ''); return }
+    lines.push('순위 | 매칭률 | 이름 | 등급·상태 | 근거 | 연락처')
+    const rate = rateIn(g.list)
+    g.list.forEach(c => {
+      idx++
+      const last = c.h?.lastDate ? ` · 최근 ${c.h.lastDate} ${c.h.lastWhere}` : ' · 근무이력 없음'
+      const warnTxt = c.warn.length ? `  ⚠ ${c.warn.join(', ')}` : ''
+      lines.push(
+        `${idx}. ${rate(c.shown ?? 0)}% | ${c.s.name}(${c.s.gender || '?'}/${c.s.age ?? '?'}세/${c.s.region || '지역미상'})` +
+        ` | ${c.grade}·${c.status} | ${c.why.join(' · ')}${last} | ${c.s.phone || '없음'}${warnTxt}`,
+      )
+    })
+    lines.push('')
   })
 
-  lines.push('',
-    '※ 순위 규칙: 먼저 하드 필터(그날 겹침·투입불가·직무)로 거르고, 남은 사람을 ' +
-    '현장 경험 > 평점 > 기회 균등 > 지역 순으로 점수를 매겼습니다. 매칭률은 이 목록 안에서 최저~최고를 펼친 상대값이라, 다른 행사의 %와 비교하면 안 됩니다.',
+  lines.push(
+    '※ 구성 규칙: 하드 필터(그날 겹침·투입불가·직무)로 거른 뒤, 남은 사람을 경험·능력·새 얼굴 세 축으로 따로 재서 ' +
+    '묶음마다 자리를 뒀습니다. 한 점수로 줄 세우면 해본 사람만 계속 나오고 새 크루는 명단에서 사라지기 때문입니다. ' +
+    '매칭률은 묶음 안에서 최저~최고를 펼친 상대값이라 묶음끼리, 다른 행사와 비교하면 안 됩니다.',
+    '※ 세 묶음은 기준이지 규칙이 아닙니다. 이 현장 성격(VIP·위험·대규모)에 따라 새 얼굴을 줄이거나, ' +
+    '한산한 현장이면 늘리는 판단을 사장님께 여쭤보세요.',
     '※ 겹침은 배정에 적힌 근무일(work_dates) 기준으로 이미 걸렀습니다. 근무일이 비어 있는 배정만 ' +
     '행사 전 기간 근무로 봤습니다. 행사 기간이 길어도 그 사람의 근무일이 아니면 겹치는 것이 아니니, ' +
     '위 목록에 있는 사람은 그날 비어 있다고 보시면 됩니다.',
