@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { findPrevBizInfo } from '@/lib/bizInfo'
+import { loadPrevBizInfo } from '@/lib/bizInfo'
 import { db } from '@/lib/supabase/api'
 import {
   STATUS_COLORS, formatKRW, formatDate,
@@ -256,12 +256,9 @@ export default function InquiryDetail({ id }: { id: string }) {
       await db.update('settlements', existingSettle.id, updatePayload)
     } else {
       // 재이용 고객이면 세금계산서 발행 정보를 이전 정산에서 물려받는다 (규칙: lib/bizInfo.ts)
-      const prevBiz = findPrevBizInfo(
-        await db.list<Settlement>('settlements', { order: 'created_at.desc' }),
-        inquiry.company_name,
-      )
+      const prevBiz = await loadPrevBizInfo(inquiry.company_name)
       await db.insert('settlements', {
-        ...(prevBiz?.info ?? {}),
+        ...prevBiz,
         ...updatePayload,
         inquiry_id:     id,
         company_name:   inquiry.company_name,

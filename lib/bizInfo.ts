@@ -12,6 +12,7 @@
 // 사람이 이미 적어 둔 칸은 절대 덮어쓰지 않는다. 빈 칸만 채운다.
 
 import type { Settlement } from '@/lib/supabase/types'
+import { db } from '@/lib/supabase/api'
 
 /** 세금계산서에 들어가는 발행 정보. 청구금액·현장주소는 여기 없다 — 건마다 다르다. */
 export const BIZ_INFO_FIELDS = [
@@ -90,4 +91,19 @@ export function fillEmptyBizFields<T extends BizInfo>(form: T, info: BizInfo): {
     if (!next[k] && info[k]) { (next as BizInfo)[k] = info[k]; filled.push(k) }
   })
   return { next, filled }
+}
+
+/** 정산을 자동으로 만드는 자리(체결·견적 확정)에서 쓰는 조회.
+ *  발행 정보는 있으면 좋은 것이고 정산 생성은 꼭 되어야 하는 것이다. 그래서 여기서 무슨 일이
+ *  나도 빈 값으로 돌아간다 — 조회 하나 때문에 '확정 실패'가 뜨면 안 된다.
+ *  (db.list 의 order 는 컬럼 이름만 받고 방향은 asc 로 준다. 'created_at.desc' 처럼 붙여 쓰면
+ *   그런 컬럼이 없다는 DB 오류가 난다 — 2026-09-29 첫 배포에서 그렇게 적었었다) */
+export async function loadPrevBizInfo(companyName: string | undefined | null): Promise<BizInfo> {
+  try {
+    const rows = await db.list<Settlement>('settlements', { order: 'created_at', asc: false })
+    return findPrevBizInfo(rows, companyName)?.info ?? {}
+  } catch (e) {
+    console.error('[bizInfo] 이전 발행 정보 조회 실패 — 빈 값으로 진행', e)
+    return {}
+  }
 }
