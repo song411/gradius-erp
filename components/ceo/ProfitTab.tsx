@@ -40,11 +40,25 @@ function HqRateTag() {
   )
 }
 
-// 지급 대기 태그
-function PendingTag() {
+// 지급 대기 태그 — 아직 돈이 다 나가지 않은 행사는 수익률을 확정값처럼 내놓지 않는다.
+// 2026-09-16에 지급액을 발생 기준으로 바꾸면서 금액은 거의 항상 잡히게 됐고, 그 뒤로
+// 미지급·일부 지급·추정 상태에서도 수익률이 확정처럼 찍혔다. 사장님이 원래 쓰던 방식은
+// '지급 후 표시'였다(2026-09-29). 숫자를 숨기지는 않는다 — 예상치로 작게 같이 적어,
+// 정렬·필터가 어떤 값으로 도는지는 알 수 있게 한다.
+function PendingTag({ expected, stage }: { expected?: number; stage?: PayoutStage }) {
+  const why =
+    stage === 'partial'   ? '일부만 송금됨. 전액 지급되면 확정 수익률이 표시됩니다' :
+    stage === 'unpaid'    ? '금액은 확정됐지만 아직 송금 전. 지급되면 확정 수익률이 표시됩니다' :
+    stage === 'estimated' ? '지급 기록이 없어 추정한 값. 지급관리에 등록·지급되면 확정됩니다' :
+                            '지급이 끝나면 수익률이 표시됩니다'
   return (
-    <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 whitespace-nowrap">
-      <Clock className="h-3 w-3" />지급 후 표시
+    <span className="inline-flex flex-col items-center gap-0.5" title={why}>
+      <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 whitespace-nowrap">
+        <Clock className="h-3 w-3" />지급 후 표시
+      </span>
+      {expected !== undefined && (
+        <span className="text-2xs text-gray-400 whitespace-nowrap">예상 {expected}%</span>
+      )}
     </span>
   )
 }
@@ -366,7 +380,9 @@ export default function ProfitTab({ data }: { data: CeoData }) {
                       {(r.payoutCase === 'pending' || r.payoutCase === 'none') && <span className="text-gray-300">-</span>}
                     </td>
                     <td className="px-3 py-3 text-center">
-                      {r.payoutCase === 'normal'  && <ProfitRateTag rate={r.profitRate} />}
+                      {/* 전액 송금된 뒤에만 확정 수익률. 그 전엔 '지급 후 표시'와 예상치 */}
+                      {r.payoutCase === 'normal' && r.payoutStage === 'paid' && <ProfitRateTag rate={r.profitRate} />}
+                      {r.payoutCase === 'normal' && r.payoutStage !== 'paid' && <PendingTag expected={r.profitRate} stage={r.payoutStage} />}
                       {r.payoutCase === 'hq_only' && <HqRateTag />}
                       {r.payoutCase === 'pending' && <PendingTag />}
                       {r.payoutCase === 'none'    && <span className="text-gray-300 text-xs">-</span>}
