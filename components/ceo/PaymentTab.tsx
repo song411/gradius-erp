@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react'
 import { db } from '@/lib/supabase/api'
 import { formatKRW } from '@/lib/utils'
+import { isHeadOfficePayout } from '@/lib/finance'
 import { Button } from '@/components/ui/button'
 import { ChevronDown, ChevronRight, Clock, AlertTriangle, CheckCircle2, FileSpreadsheet, Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
@@ -63,12 +64,8 @@ function parseSegments(memo?: string | null): PaySegment[] | null {
   return null
 }
 
-// 본사 인원 고정 명단 (이름으로 판별 — DB의 is_payable 필드가 true로 잘못 저장됨)
-const HQ_STAFF_NAMES = new Set(['최규성', '송무재', '여지은', '김영찬'])
-
-// 본사 인원 판별: 이름이 HQ 명단에 있으면 지급불필요
-const isHQByMap  = (p: Payout, _asgMap: Map<string, Assignment>) =>
-  !!(p.staff_name && HQ_STAFF_NAMES.has(p.staff_name))
+// 본사 인원 판별: 명단은 lib/finance.ts 한 곳에 있다. 여기 따로 두면 수익보고와 어긋난다.
+const isHQByMap  = (p: Payout, _asgMap: Map<string, Assignment>) => isHeadOfficePayout(p)
 
 const isRealDone = (p: Payout, asgMap: Map<string, Assignment>) =>
   isHQByMap(p, asgMap) || p.status === '지급완료' || p.status === '완료'

@@ -116,6 +116,16 @@ export const HQ_STAFF_NAMES = new Set(['최규성', '송무재', '여지은', '�
 export const isHeadOfficeAssignment = (a: Pick<Assignment, 'staff_type' | 'staff_name'>): boolean =>
   a.staff_type === '본사' || (!!a.staff_name && HQ_STAFF_NAMES.has(a.staff_name))
 
+/** 지급 행의 본사 판정. 지급 행에는 staff_type 이 없어 이름으로만 본다.
+ *
+ *  본사 인원에게는 지급이 나가지 않는다 (2026-09-29 사장님 확인). 그런데 지급 행은
+ *  배정에서 자동으로 만들어져 본사 인원 것도 함께 생기고, 그중 단가가 남아 있던 두 줄은
+ *  금액까지 붙어 있었다 — 베이비페어 3/12 여지은 39만원, 연구학교 컨퍼런스 3/30 송무재 8.5만원.
+ *  지급관리는 이름으로 걸러 '처리 완료'로 숨겼는데 수익보고는 그대로 세서, 한 화면에선
+ *  '일부 지급'으로 보이고 다른 화면에선 아무 이유가 안 보였다. 두 화면이 이 한 함수를 쓴다. */
+export const isHeadOfficePayout = (p: Pick<Payout, 'staff_name'>): boolean =>
+  !!p.staff_name && HQ_STAFF_NAMES.has(p.staff_name)
+
 /** 화면에서 '이 숫자 믿어도 되나'를 가르는 기준 */
 export const isEstimated = (s: PayoutSource) => s === 'settlement' || s === 'assignment'
 
@@ -151,6 +161,8 @@ export function buildFinanceIndex(
   const paidByInquiry   = new Map<string, number>()
   payouts.forEach(p => {
     if (!p.inquiry_id) return
+    // 본사 인원 지급 행은 비용도, 미송금도 아니다. 금액이 적혀 있어도 세지 않는다.
+    if (isHeadOfficePayout(p)) return
     const amt = p.final_pay || 0
     payoutByInquiry.set(p.inquiry_id, (payoutByInquiry.get(p.inquiry_id) || 0) + amt)
     if (PAID_STATUSES.has(p.status)) {

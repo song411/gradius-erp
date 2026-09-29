@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { db } from '@/lib/supabase/api'
 import { X, Download, FileText, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import type { Payout, Assignment } from '@/lib/supabase/types'
+import { isHeadOfficePayout } from '@/lib/finance'
 
 // ── 타입 ─────────────────────────────────────────────────────────
 interface IncomeRow {
@@ -36,8 +37,6 @@ function formatKRW(n: number) {
   return n.toLocaleString('ko-KR') + '원'
 }
 
-// 본사 인원 명단 (이름 기반 판별 — PaymentTab, CeoContent 등 동일 패턴)
-const HQ_STAFF_NAMES = new Set(['최규성', '송무재', '여지은', '김영찬'])
 
 type SortMode = 'paidAt' | 'siteName'
 
@@ -161,7 +160,7 @@ export default function IncomeModal({ onClose }: { onClose: () => void }) {
   // 본사 제외 + 정렬 적용
   const displayRows = (() => {
     let list = excludeHQ
-      ? rows.filter(r => !HQ_STAFF_NAMES.has(r.name))
+      ? rows.filter(r => !isHeadOfficePayout({ staff_name: r.name }))
       : rows
 
     if (sortMode === 'siteName') {
