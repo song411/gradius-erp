@@ -23,6 +23,7 @@ import {
   payoutOf, PAYOUT_SOURCE_LABEL, PAYOUT_STAGE_LABEL, HQ_STAFF_NAMES,
 } from '@/lib/finance'
 import { toast } from 'sonner'
+import { findPrevBizInfo, uniqueBizOptions, searchBizOptions, bizInfoOf, fillEmptyBizFields, type BizInfo } from '@/lib/bizInfo'
 
 interface PaySegment { rate: number; days: number }
 function parseNotesSegments(notes?: string | null): PaySegment[] | null {
@@ -66,19 +67,10 @@ export default function SettlementsContent() {
   const [saving, setSaving]         = useState(false)
   const [error, setError]           = useState('')
 
-  // 사업자번호가 있는 이전 정산 건을 업체명 기준으로 중복 제거 (최신 순)
-  const prevBizOptions = (() => {
-    const seen = new Set<string>()
-    return settlements
-      .filter(s => s.id !== editTarget?.id && s.biz_number)
-      .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))
-      .filter(s => {
-        const key = s.biz_number!
-        if (seen.has(key)) return false
-        seen.add(key)
-        return true
-      })
-  })()
+  // 이전 발행 정보 검색 — 사업자번호 기준 한 곳당 하나, 최신 순 (규칙은 lib/bizInfo.ts)
+  const prevBizOptions = uniqueBizOptions(settlements, editTarget?.id)
+  const [bizQuery, setBizQuery] = useState('')
+  const bizMatches = searchBizOptions(prevBizOptions, bizQuery)
 
   // 인라인 메모 편집
   const [memoEditId, setMemoEditId]     = useState<string | null>(null)
@@ -123,11 +115,7 @@ export default function SettlementsContent() {
   })
 
   // 이전 발행 정보 자동완성용
-  const [prevBizInfo, setPrevBizInfo] = useState<{
-    biz_number?: string; corp_name?: string; rep_name?: string
-    email?: string; contact_phone?: string; biz_address?: string
-    company_name?: string
-  } | null>(null)
+  const [prevBizInfo, setPrevBizInfo] = useState<(BizInfo & { company_name?: string }) | null>(null)
   const load = useCallback(async () => {
     setLoading(true)
     try {
@@ -205,6 +193,7 @@ export default function SettlementsContent() {
   function openCreate() {
     setEditTarget(null)
     setPrevBizInfo(null)
+    setBizQuery('')
     setForm({
       inquiry_id: '', company_name: '', site_name: '', dispatch_period: '',
       manager: '', site_address: '', supply_price: '', vat: '', received_amount: '',
@@ -220,6 +209,7 @@ export default function SettlementsContent() {
   function openEdit(s: Settlement) {
     setEditTarget(s)
     setPrevBizInfo(null)
+    setBizQuery('')
     setForm({
       inquiry_id: s.inquiry_id || '',
       company_name: s.company_name || '',
@@ -249,11 +239,22 @@ export default function SettlementsContent() {
     setShowModal(true)
   }
 
-  // 문의 선택 시 업체명 자동완성 (이전 발행 정보 탐색은 드롭다운으로 분리)
+  // 문의 선택 시 업체명 자동완성. 재이용 고객이면 이전 발행 정보(사업자번호·상호·대표자·
+  // 이메일·연락처·사업장주소)를 빈 칸에 자동으로 채운다 — 사람이 적어 둔 칸은 건드리지 않는다.
+  // 이름 표기가 달라 못 찾으면 아래 검색으로 사람이 고른다.
   async function handleInquirySelect(inquiryId: string) {
     const inq = inquiries.find(i => i.id === inquiryId)
-    setForm(f => ({ ...f, inquiry_id: inquiryId, company_name: inq?.company_name || f.company_name }))
     setPrevBizInfo(null)
+    const hit = findPrevBizInfo(settlements, inq?.company_name, editTarget?.id)
+    const base = { ...form, inquiry_id: inquiryId, company_name: inq?.company_name || form.company_name }
+    if (!hit) { setForm(base); return }
+    const { next, filled } = fillEmptyBizFields(base, hit.info)
+    setForm(next)
+    if (filled.length > 0) {
+      toast.success(`재이용 고객 — ${hit.from.corp_name || hit.from.company_name}의 이전 발행 정보를 채웠습니다 (${filled.length}칸)`, {
+        description: `${hit.from.site_name || ''} ${hit.from.dispatch_period || ''}`.trim() || undefined,
+      })
+    }
   }
 
   // 선택한 이전 정산 건의 발행 정보 적용 (청구금액·현장주소는 건드리지 않음)
@@ -270,6 +271,7 @@ export default function SettlementsContent() {
     }))
     toast.success('이전 발행 정보를 불러왔습니다.')
     setPrevBizInfo(null)
+    setBizQuery('')
   }
 
   async function handleSave() {
@@ -853,38 +855,25 @@ export default function SettlementsContent() {
               </Select>
             </div>
 
-            {/* 이전 발행 정보 선택 — 항상 표시 */}
+            {/* 이전 발행 정보 — 재이용 고객은 문의를 고르면 자동으로 채워진다. 표기가 달라 못 찾은 건 여기서 검색 */}
             {prevBizOptions.length > 0 && (
               <div className="col-span-2 bg-amber-50 border-2 border-amber-200 rounded-xl px-4 py-3 space-y-2">
-                <p className="text-xs font-bold text-amber-800 flex items-center gap-1.5">
-                  <Sparkles className="h-3.5 w-3.5" />
-                  이전 발행 정보 불러오기
-                </p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-bold text-amber-800 flex items-center gap-1.5">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    이전 발행 정보 불러오기
+                  </p>
+                  <p className="text-2xs text-amber-700/70">
+                    재이용 고객은 문의를 고르면 빈 칸이 자동으로 채워집니다 · {prevBizOptions.length}곳
+                  </p>
+                </div>
                 <div className="flex gap-2">
-                  <select
-                    className="flex-1 text-sm border border-amber-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
-                    defaultValue=""
-                    onChange={e => {
-                      const s = prevBizOptions.find(o => o.id === e.target.value)
-                      if (!s) { setPrevBizInfo(null); return }
-                      setPrevBizInfo({
-                        biz_number:    s.biz_number,
-                        corp_name:     s.corp_name,
-                        rep_name:      s.rep_name,
-                        email:         s.email,
-                        contact_phone: s.contact_phone,
-                        biz_address:   (s as Settlement & { biz_address?: string }).biz_address,
-                        company_name:  s.company_name,
-                      })
-                    }}
-                  >
-                    <option value="">업체 선택...</option>
-                    {prevBizOptions.map(s => (
-                      <option key={s.id} value={s.id}>
-                        {s.corp_name || s.company_name || '(업체명 없음)'} — {s.biz_number}
-                      </option>
-                    ))}
-                  </select>
+                  <Input
+                    value={bizQuery}
+                    onChange={e => { setBizQuery(e.target.value); setPrevBizInfo(null) }}
+                    placeholder="상호·업체명·대표자·사업자번호로 검색"
+                    className="flex-1 bg-white border-amber-300 focus-visible:ring-amber-400"
+                  />
                   <button
                     type="button"
                     onClick={applyPrevBizInfo}
@@ -894,9 +883,37 @@ export default function SettlementsContent() {
                     적용
                   </button>
                 </div>
+                {bizQuery && !prevBizInfo && (
+                  bizMatches.length === 0 ? (
+                    <p className="text-xs text-amber-700/70 px-1">검색 결과가 없습니다</p>
+                  ) : (
+                    <ul className="max-h-44 overflow-y-auto bg-white border border-amber-200 rounded-lg divide-y divide-amber-100">
+                      {bizMatches.slice(0, 20).map(s => (
+                        <li key={s.id}>
+                          <button
+                            type="button"
+                            onClick={() => setPrevBizInfo({ ...bizInfoOf(s), company_name: s.company_name })}
+                            className="w-full text-left px-3 py-1.5 hover:bg-amber-50 transition-colors"
+                          >
+                            <span className="text-sm font-semibold text-gray-800">{s.corp_name || s.company_name || '(업체명 없음)'}</span>
+                            <span className="text-xs text-gray-500 ml-2">
+                              {[s.biz_number, s.rep_name, s.corp_name && s.company_name && s.corp_name !== s.company_name ? s.company_name : ''].filter(Boolean).join(' · ')}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                      {bizMatches.length > 20 && (
+                        <li className="px-3 py-1.5 text-2xs text-gray-400">{bizMatches.length - 20}곳 더 있음 — 더 자세히 검색하세요</li>
+                      )}
+                    </ul>
+                  )
+                )}
                 {prevBizInfo && (
-                  <p className="text-xs text-amber-700">
+                  <p className="text-xs text-amber-800">
+                    <span className="font-semibold">{prevBizInfo.corp_name || prevBizInfo.company_name}</span>
+                    {' · '}
                     {[prevBizInfo.biz_number, prevBizInfo.rep_name, prevBizInfo.biz_address].filter(Boolean).join(' · ')}
+                    <span className="text-amber-700/70"> — [적용]을 누르면 발행 칸에 들어갑니다</span>
                   </p>
                 )}
               </div>

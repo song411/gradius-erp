@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { findPrevBizInfo } from '@/lib/bizInfo'
 import { useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { db } from '@/lib/supabase/api'
@@ -10,7 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Plus, Search, Edit2, Trash2, Eye, Package, FileText, TrendingUp, Send, Clock, CheckCircle, Star, Copy, RotateCcw, XCircle, LayoutList } from 'lucide-react'
-import type { Estimate, EstimateItem, Inquiry } from '@/lib/supabase/types'
+import type { Estimate, EstimateItem, Inquiry, Settlement } from '@/lib/supabase/types'
 import EstimateBuilder from './EstimateBuilder'
 import EstimatePreview from './EstimatePreview'
 
@@ -234,7 +235,13 @@ export default function EstimatesContent() {
             return inq?.date_memo || ''
           })()
 
+          // 재이용 고객이면 세금계산서 발행 정보를 이전 정산에서 물려받는다 (규칙: lib/bizInfo.ts)
+          const prevBiz = findPrevBizInfo(
+            await db.list<Settlement>('settlements', { order: 'created_at.desc' }),
+            est.company_name || inq?.company_name,
+          )
           const settlementPayload = {
+            ...(prevBiz?.info ?? {}),
             inquiry_id:       est.inquiry_id,
             company_name:     est.company_name || inq?.company_name || '',
             site_name:        est.site_name || inq?.event_name || '',
