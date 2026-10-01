@@ -11,6 +11,8 @@ import { worksOnDate } from '@/components/schedule/matrixCore'
 
 // ── 출력 옵션 ────────────────────────────────────────────
 type SheetMode = 'blank' | 'record'
+// 순번 정렬: 배정한 순서 그대로 / 본사 먼저 + 나머지 가나다순
+type SortMode = 'assigned' | 'hqFirst'
 
 interface Props {
   open: boolean
@@ -185,6 +187,7 @@ export default function AttendanceSheetModal({
   // 날짜는 "출석 탭에서 보고 있던 날짜"가 기본값. 사용자가 직접 고르면 그 값이 우선.
   // ('all' = 전체 날짜를 날짜별 여러 장으로) 닫을 때 null로 되돌려 다음 열기에 기본값 복귀.
   const [dateOverride, setDateOverride] = useState<string | null>(null)
+  const [sortMode, setSortMode] = useState<SortMode>('hqFirst')
   const [includePhone, setIncludePhone] = useState(true)
   const [includePledge, setIncludePledge] = useState(true)
   // 엑셀 생성 중 (exceljs 동적 로드 + 파일 조립)
@@ -207,6 +210,18 @@ export default function AttendanceSheetModal({
   }, [datesKey, dateSel, inquiry.event_start])
 
   const activeAssignments = assignments.filter(a => a.status !== '취소')
+
+  // 순번 매기기 전 정렬. 본사 우선이면 본사끼리도 가나다, 그 다음 외부 인원 가나다.
+  function sortRows(list: Assignment[]): Assignment[] {
+    if (sortMode === 'assigned') return list
+    const byName = (x: Assignment, y: Assignment) =>
+      (x.staff_name || '').localeCompare(y.staff_name || '', 'ko')
+    return [...list].sort((x, y) => {
+      const hx = x.staff_type === '본사' ? 0 : 1
+      const hy = y.staff_type === '본사' ? 0 : 1
+      return hx - hy || byName(x, y)
+    })
+  }
 
   // 한 배정을 출석부 한 줄로. 날짜가 없으면(종합 시트) 출결 칸은 비운다.
   function toRow(a: Assignment, no: number, date?: string): SheetRow {
@@ -233,15 +248,13 @@ export default function AttendanceSheetModal({
   // 배정에 근무일(work_dates)을 골라 둔 사람은 그 날에만 나온다.
   // 안 고른 사람은 전체기간 투입이라 매일 나온다 (캘린더·공지문과 같은 규칙).
   function buildRows(date: string): SheetRow[] {
-    return activeAssignments
-      .filter(a => worksOnDate(a, date))
+    return sortRows(activeAssignments.filter(a => worksOnDate(a, date)))
       .map((a, i) => toRow(a, i + 1, date))
   }
 
   // 출력 대상 날짜 중 하루라도 근무하는 사람 전부 — 종합 시트용
   function buildUnionRows(dateList: string[]): SheetRow[] {
-    return activeAssignments
-      .filter(a => dateList.some(d => worksOnDate(a, d)))
+    return sortRows(activeAssignments.filter(a => dateList.some(d => worksOnDate(a, d))))
       .map((a, i) => toRow(a, i + 1))
   }
 
@@ -716,6 +729,30 @@ export default function AttendanceSheetModal({
             </select>
           </div>
         )}
+
+        {/* 순번 정렬 */}
+        <div>
+          <p className="text-xs font-semibold text-gray-500 mb-1.5">순번</p>
+          <div className="grid grid-cols-2 gap-2">
+            {([
+              { v: 'hqFirst', label: '본사 먼저', desc: '본사 → 나머지 가나다순' },
+              { v: 'assigned', label: '배정 순서', desc: '배정한 순서 그대로' },
+            ] as const).map(o => (
+              <button
+                key={o.v}
+                onClick={() => setSortMode(o.v)}
+                className={`text-left px-3 py-2 rounded-lg border transition-colors ${
+                  sortMode === o.v
+                    ? 'border-blue-500 bg-blue-50 text-blue-800'
+                    : 'border-gray-200 hover:bg-gray-50 text-gray-600'
+                }`}
+              >
+                <span className="block text-sm font-semibold">{o.label}</span>
+                <span className="block text-xs text-gray-400 mt-0.5">{o.desc}</span>
+              </button>
+            ))}
+          </div>
+        </div>
 
         {/* 연락처 포함 */}
         <label className="flex items-center gap-2 cursor-pointer select-none">
