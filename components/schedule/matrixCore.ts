@@ -330,6 +330,16 @@ export function splitByDate(assigns: Assignment[], date: string) {
   return { pinned, allPeriod }
 }
 
+/** 이 배정이 그 날짜에 근무하는가 — splitByDate와 같은 규칙의 한 명 판정.
+ *  work_dates가 비어 있으면 전체기간 투입이므로 어느 날이든 true.
+ *  출석 탭·출석부 출력처럼 "오늘 명단"을 만드는 곳은 전부 이걸 써야
+ *  캘린더·공지문과 인원 수가 어긋나지 않는다. */
+export function worksOnDate(a: Pick<Assignment, 'work_dates'>, date: string): boolean {
+  const dates = a.work_dates
+  if (!Array.isArray(dates) || dates.length === 0) return true
+  return dates.includes(date)
+}
+
 export function makeCell(job: JobBase, date: string): JobCell {
   const { pinned, allPeriod } = splitByDate(job.assignments, date)
   return { job, pinned, allPeriod, total: pinned.length + allPeriod.length }

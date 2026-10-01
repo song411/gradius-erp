@@ -5,7 +5,7 @@ import { db } from '@/lib/supabase/api'
 import type { Inquiry, Assignment, Attendance, Evaluation, Staff } from '@/lib/supabase/types'
 import type { AttendanceStatus } from '@/lib/supabase/types'
 import { formatDate, formatKRW } from '@/lib/utils'
-import { eventDatesOf } from '@/components/schedule/matrixCore'
+import { eventDatesOf, worksOnDate } from '@/components/schedule/matrixCore'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -263,7 +263,8 @@ export default function AttendanceContent() {
     targetDate: string,
   ) => {
     const newMap: Record<string, { status: AttendanceStatus | null; clockIn: string; notes: string; dirty: boolean }> = {}
-    asgns.filter(a => a.status !== '취소').forEach(a => {
+    // 그 날짜에 근무하는 사람만 — 근무일을 골라 둔 배정은 그 날에만, 안 골랐으면 매일
+    asgns.filter(a => a.status !== '취소' && worksOnDate(a, targetDate)).forEach(a => {
       // 해당 날짜의 출석 레코드만 매칭
       const existing = atts.find(at => at.assignment_id === a.id && at.work_date === targetDate)
       newMap[a.id] = {
@@ -564,6 +565,9 @@ export default function AttendanceContent() {
     (i.event_name || '').includes(searchText)
   )
 
+  // 선택한 날짜의 근무자 — 날짜 탭을 바꾸면 명단도 바뀐다
+  const dayAssignments = assignments.filter(a => !selectedDate || worksOnDate(a, selectedDate))
+
   const dirtyCount = Object.values(editMap).filter(v => v.dirty && v.status).length
   const presentCount = Object.values(editMap).filter(v => v.status === '출석').length
   const absentCount = Object.values(editMap).filter(v => v.status === '결근').length
@@ -790,8 +794,11 @@ export default function AttendanceContent() {
                     </button>
                   </div>
 
-                  {/* 출석 목록 */}
-                  {assignments.map(asgn => {
+                  {/* 출석 목록 — 선택한 날짜에 근무하는 사람만 (출석부 출력과 같은 규칙) */}
+                  {dayAssignments.length === 0 && (
+                    <p className="text-sm text-gray-400 text-center py-6">이 날짜에 배정된 인원이 없습니다</p>
+                  )}
+                  {dayAssignments.map(asgn => {
                     const edit = editMap[asgn.id] || { status: null, clockIn: '', notes: '', dirty: false }
                     return (
                       <div key={asgn.id} className={`bg-white rounded-xl border px-4 py-3 flex flex-col gap-2 shadow-sm ${edit.dirty ? 'border-orange-300' : 'border-gray-200'}`}>

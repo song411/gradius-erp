@@ -7,6 +7,7 @@ import { Dialog, DialogHeader, DialogTitle, DialogContent, DialogFooter, DialogC
 import { Button } from '@/components/ui/button'
 import { Printer, FileSpreadsheet } from 'lucide-react'
 import { toast } from 'sonner'
+import { worksOnDate } from '@/components/schedule/matrixCore'
 
 // ── 출력 옵션 ────────────────────────────────────────────
 type SheetMode = 'blank' | 'record'
@@ -205,32 +206,57 @@ export default function AttendanceSheetModal({
     return dateSel === 'all' ? list : [dateSel]
   }, [datesKey, dateSel, inquiry.event_start])
 
-  // 특정 날짜의 인원 행 생성 — 인쇄·엑셀 공용
-  function buildRows(date: string): SheetRow[] {
-    return assignments
-      .filter(a => a.status !== '취소')
-      .map((a, i) => {
-        const att = mode === 'record'
-          ? attendances.find(at => at.assignment_id === a.id && at.work_date === date)
-          : undefined
-        const staff = a.staff_id ? staffMap[a.staff_id] : undefined
-        return {
-          no: i + 1,
-          assignId: a.id,
-          name: a.staff_name || '-',
-          isHQ: a.staff_type === '본사',
-          isLeader: a.role_type === '팀장',
-          job: a.job_type || '',
-          phone: formatPhone(a.phone || staff?.phone),
-          clockIn: hhmm(att?.clock_in),
-          clockOut: hhmm(att?.clock_out),
-          status: att?.status || '',
-          notes: att?.notes || att?.reason || '',
-        }
-      })
+  const activeAssignments = assignments.filter(a => a.status !== '취소')
+
+  // 한 배정을 출석부 한 줄로. 날짜가 없으면(종합 시트) 출결 칸은 비운다.
+  function toRow(a: Assignment, no: number, date?: string): SheetRow {
+    const att = mode === 'record' && date
+      ? attendances.find(at => at.assignment_id === a.id && at.work_date === date)
+      : undefined
+    const staff = a.staff_id ? staffMap[a.staff_id] : undefined
+    return {
+      no,
+      assignId: a.id,
+      name: a.staff_name || '-',
+      isHQ: a.staff_type === '본사',
+      isLeader: a.role_type === '팀장',
+      job: a.job_type || '',
+      phone: formatPhone(a.phone || staff?.phone),
+      clockIn: hhmm(att?.clock_in),
+      clockOut: hhmm(att?.clock_out),
+      status: att?.status || '',
+      notes: att?.notes || att?.reason || '',
+    }
   }
 
-  const rowCount = assignments.filter(a => a.status !== '취소').length
+  // 특정 날짜의 인원 행 생성 — 인쇄·엑셀 공용.
+  // 배정에 근무일(work_dates)을 골라 둔 사람은 그 날에만 나온다.
+  // 안 고른 사람은 전체기간 투입이라 매일 나온다 (캘린더·공지문과 같은 규칙).
+  function buildRows(date: string): SheetRow[] {
+    return activeAssignments
+      .filter(a => worksOnDate(a, date))
+      .map((a, i) => toRow(a, i + 1, date))
+  }
+
+  // 출력 대상 날짜 중 하루라도 근무하는 사람 전부 — 종합 시트용
+  function buildUnionRows(dateList: string[]): SheetRow[] {
+    return activeAssignments
+      .filter(a => dateList.some(d => worksOnDate(a, d)))
+      .map((a, i) => toRow(a, i + 1))
+  }
+
+  const rowCount = activeAssignments.length
+  // 날짜별 인원 — 날짜마다 다를 수 있어 안내문에는 범위로 보여준다
+  const countsByDate = useMemo(
+    () => targetDates.map(d => activeAssignments.filter(a => worksOnDate(a, d)).length),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [targetDates, assignments],
+  )
+  const countLabel = (() => {
+    if (!countsByDate.length) return `${rowCount}명`
+    const min = Math.min(...countsByDate), max = Math.max(...countsByDate)
+    return min === max ? `${max}명` : `하루 ${min}~${max}명`
+  })()
 
   // ── A4 인쇄 ────────────────────────────────────────────
   function handlePrint() {
@@ -268,7 +294,7 @@ export default function AttendanceSheetModal({
           </tr>
           <tr>
             <th>업 체 명</th><td colspan="3">${esc(inquiry.company_name || '')}</td>
-            <th>인 원</th><td>${rowCount}명</td>
+            <th>인 원</th><td>${rows.length}명</td>
           </tr>
           <tr>
             <th>장 소</th><td colspan="3">${esc(inquiry.location || '')}</td>
@@ -410,7 +436,7 @@ export default function AttendanceSheetModal({
         // 3~5행: 행사 정보표
         const meta: [string, string, string, string][] = [
           ['행사명', inquiry.event_name || '', '일 자', formatDateLong(date)],
-          ['업체명', inquiry.company_name || '', '인 원', `${rowCount}명`],
+          ['업체명', inquiry.company_name || '', '인 원', `${rows.length}명`],
           ['장 소', inquiry.location || '', '근무시간', inquiry.event_time || ''],
         ]
         meta.forEach(([l1, v1, l2, v2], i) => {
@@ -555,7 +581,9 @@ export default function AttendanceSheetModal({
 
       // 다일 행사 + 기록 모드: 날짜별 출결을 한 장에 모은 종합 시트
       if (mode === 'record' && targetDates.length > 1) {
-        const rows = buildRows(targetDates[0])
+        // 날짜별 명단이 다르므로 한 날짜가 아니라 전 기간 근무자 합집합으로 만든다
+        const rows = buildUnionRows(targetDates)
+        const asgnById = new Map(activeAssignments.map(a => [a.id, a]))
         const ws = wb.addWorksheet('종합', {
           pageSetup: {
             paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0,
@@ -595,10 +623,14 @@ export default function AttendanceSheetModal({
         })
 
         rows.forEach((r, i) => {
+          const asgn = asgnById.get(r.assignId)
+          // 그날 근무가 아닌 사람은 '—'로 표시해 빈칸(미입력)과 구분한다
           const perDate = targetDates.map(d =>
-            attendances.find(at => at.assignment_id === r.assignId && at.work_date === d)?.status || ''
+            asgn && !worksOnDate(asgn, d)
+              ? '—'
+              : attendances.find(at => at.assignment_id === r.assignId && at.work_date === d)?.status || ''
           )
-          const present = perDate.filter(s => s && s !== '결근').length
+          const present = perDate.filter(s => s && s !== '결근' && s !== '—').length
           const values: (string | number)[] = [
             r.no, r.name, r.job,
             ...(includePhone ? [r.phone] : []),
@@ -710,7 +742,7 @@ export default function AttendanceSheetModal({
         </label>
 
         <p className="text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2 leading-relaxed">
-          인원 {rowCount}명 · A4 세로 {targetDates.length}장
+          인원 {countLabel} · A4 세로 {targetDates.length}장
           {mode === 'blank' && ' · 출근/퇴근/출결/서명란 비워서 출력'}
           {includePledge && ' · 명단 위에 안전교육 서약서'}
           <br />
