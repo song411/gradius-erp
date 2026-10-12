@@ -63,12 +63,13 @@ async function tryAutoComplete(inq: Inquiry, assignList: Assignment[], payoutLis
   const fiveDaysAfter = new Date(inq.event_end)
   fiveDaysAfter.setDate(fiveDaysAfter.getDate() + 5)
   if (new Date() < fiveDaysAfter) return false
-  const inqAssigns = assignList.filter(a => a.inquiry_id === inq.id)
+  const inqPayouts = payoutList.filter(p => p.inquiry_id === inq.id)
+  const inqAssigns = assignList.filter(a => a.inquiry_id === inq.id && isActiveAssignment(a, inqPayouts))
   if (!inqAssigns.length) return false
   const payableLeaders = inqAssigns.filter(a => !isHQ(a) && a.role_type !== '팀원')
   if (payableLeaders.length > 0) {
     const ids = new Set(payableLeaders.map(a => a.id))
-    const pays = payoutList.filter(p => p.inquiry_id === inq.id && ids.has(p.assignment_id || ''))
+    const pays = inqPayouts.filter(p => ids.has(p.assignment_id || ''))
     if (pays.length < payableLeaders.length) return false // 미등록 인원 있음
     if (!pays.every(p => ['검토완료', '확인완료', '완료', '지급완료'].includes(p.status))) return false
   }
@@ -92,15 +93,25 @@ const STATUS_LABEL: Record<string, string> = {
 }
 
 function isDone(p: Payout) { return p.status === '완료' || p.status === '지급완료' }
+
+// 지급 대상이 되는 배정인지 — 취소된 사람은 아니고, 후보는 지급 기록이 있을 때만이다.
+// 취소 제외는 lib/finance.ts·출석부와 같은 기준. 옛 행사에 후보로 남은 사람이 45명이나 되는데
+// 이들을 '미등록'으로 세면 끝난 행사가 처리필요로 올라오고, 반대로 무조건 빼면
+// 후보 상태 그대로 지급까지 끝난 옛 행사(3건)가 지급할 사람이 없는 처리필요가 된다.
+function isActiveAssignment(a: Assignment, payouts: Payout[]) {
+  if (a.status === '취소') return false
+  if (a.status === '후보') return payouts.some(p => p.assignment_id === a.id)
+  return true
+}
 function isPending(p: Payout) { return !isDone(p) }
 
 function groupByInquiry(inquiries: Inquiry[], assignments: Assignment[], payouts: Payout[]) {
   return inquiries.map(inq => {
-    const inqAssigns     = assignments.filter(a => a.inquiry_id === inq.id)
+    const inqPayouts     = payouts.filter(p => p.inquiry_id === inq.id)
+    const inqAssigns     = assignments.filter(a => a.inquiry_id === inq.id && isActiveAssignment(a, inqPayouts))
     const hqAssigns      = inqAssigns.filter(isHQ)
     const payableAssigns = inqAssigns.filter(a => !isHQ(a))
     const payableLeaders = payableAssigns.filter(a => a.role_type !== '팀원')
-    const inqPayouts     = payouts.filter(p => p.inquiry_id === inq.id)
 
     const totalFinal     = inqPayouts.reduce((s, p) => s + (p.final_pay || 0), 0)
     const unregistered   = payableLeaders.filter(a => !inqPayouts.find(p => p.assignment_id === a.id)).length
@@ -116,10 +127,11 @@ function groupByInquiry(inquiries: Inquiry[], assignments: Assignment[], payouts
     // 처리 상태 판단
     const isHqOnly = inqAssigns.length > 0 && payableLeaders.length === 0
 
-    // 완료 조건: 등록된 외부 지급 기록이 1건 이상이고 전부 입금완료
-    // → 미등록 인원(후보 미확정)은 무시, 본사 인원도 무시
+    // 완료 조건: 유급 인원이 전부 지급 등록돼 있고, 그 기록이 전부 입금완료.
+    // 예전엔 '등록된 기록만' 봐서 8명 중 4명만 등록·입금해도 지급완료 탭으로 넘어갔다.
+    // 후보·취소는 isActiveAssignment에서 이미 뺐으므로 여기서 미등록은 진짜 미등록이다.
     const allRegisteredPaid = payablePayouts.length > 0 && payablePayouts.every(isDone)
-    const allDone           = isHqOnly || allRegisteredPaid
+    const allDone           = isHqOnly || (allRegisteredPaid && unregistered === 0)
     const needsAction       = !isHqOnly && !allDone
 
     return {
@@ -229,10 +241,30 @@ export default function PayoutsContent() {
     toast.success('입금 및 인건비 지급 완료 — 자동으로 정산완료 처리되었습니다.', { duration: 5000 })
   }
 
+  // CEO 지급 탭과 같은 값('지급완료' + paid_at)으로 남긴다. 예전엔 '완료'만 쓰고 paid_at을 비워
+  // CEO 완료 이력에 입금일이 '-'로 나오고 기간 필터에서 빠졌다. 읽는 쪽은 모두 두 값을 다 받는다.
+  const PAID = () => ({ status: '지급완료' as const, paid_at: new Date().toISOString() })
+
   async function handleSinglePaid(payoutId: string) {
-    await db.update('payouts', payoutId, { status: '완료' })
+    try {
+      await db.update('payouts', payoutId, PAID())
+      toast.success('입금완료로 처리했습니다.')
+    } catch (e) {
+      toast.error(`입금완료 처리 실패: ${(e as Error).message}`)
+      return
+    }
     if (selectedId) await checkAndAutoSettle(selectedId)
     load()
+  }
+
+  async function handleSingleConfirm(payoutId: string) {
+    try {
+      await db.update('payouts', payoutId, { status: '확인완료' })
+      toast.success('검토완료로 처리했습니다.')
+      load()
+    } catch (e) {
+      toast.error(`검토완료 처리 실패: ${(e as Error).message}`)
+    }
   }
 
   // 등록된 '대기' 건을 검토완료로 올리기만 한다.
@@ -267,7 +299,11 @@ export default function PayoutsContent() {
     const toPay = currentPayouts.filter(p => p.status === '검토완료' || p.status === '확인완료')
     if (!toPay.length) { toast.info('입금 처리할 검토완료 건이 없습니다.'); return }
     if (!confirm(`검토완료 ${toPay.length}건을 모두 입금완료로 바꾸겠습니까?`)) return
-    await Promise.all(toPay.map(p => db.update('payouts', p.id, { status: '완료' })))
+    try {
+      await Promise.all(toPay.map(p => db.update('payouts', p.id, PAID())))
+    } catch (e) {
+      toast.error(`입금완료 처리 실패: ${(e as Error).message}`); load(); return
+    }
     toast.success(`${toPay.length}건 입금 완료 처리`)
     if (selectedId) await checkAndAutoSettle(selectedId)
     load()
@@ -296,7 +332,7 @@ export default function PayoutsContent() {
     const rows = confirmed.map(p => ({
       '이름': p.staff_name || '', '은행': p.bank_name || '',
       '계좌번호': p.account_number || '', '이체금액': p.final_pay || 0,
-      '메모': p.notes || `${eventName} ${p.dispatch_period || ''}`.trim(),
+      '메모': parseNotesMemo(p.notes) || `${eventName} ${p.dispatch_period || ''}`.trim(),
     }))
     rows.push({ '이름': `합계 (${rows.length}명)`, '은행': '', '계좌번호': '', '이체금액': rows.reduce((s, r) => s + r['이체금액'], 0), '메모': '' })
     const ws = XLSX.utils.json_to_sheet(rows)
@@ -609,7 +645,7 @@ export default function PayoutsContent() {
                               </>
                             )}
                             {payout.status === '대기' && (
-                              <button onClick={() => db.update('payouts', payout.id, { status: '확인완료' }).then(load)}
+                              <button onClick={() => handleSingleConfirm(payout.id)}
                                 className="text-2xs bg-blue-600 text-white rounded-lg px-2.5 py-1 hover:bg-blue-700 whitespace-nowrap font-semibold transition-colors">
                                 검토완료 →
                               </button>
