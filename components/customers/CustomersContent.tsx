@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { db } from '@/lib/supabase/api'
+import { toast } from 'sonner'
 import { getCustomerType } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -29,9 +31,11 @@ const emptyForm = {
 }
 
 export default function CustomersContent() {
+  // 통합검색 결과에서 넘어올 때 그 업체만 바로 보이게 한다
+  const searchParams = useSearchParams()
   const [customers, setCustomers] = useState<Customer[]>([])
   const [loading, setLoading] = useState(true)
-  const [searchText, setSearchText] = useState('')
+  const [searchText, setSearchText] = useState(searchParams.get('search') || '')
   const [filterType, setFilterType] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [editTarget, setEditTarget] = useState<Customer | null>(null)
@@ -108,13 +112,19 @@ export default function CustomersContent() {
 
     setSaving(false)
     setShowModal(false)
+    toast.success(editTarget ? '수정되었습니다.' : '등록되었습니다.')
     load()
   }
 
   async function handleDelete(id: string) {
     if (!confirm('이 고객사를 삭제하시겠습니까?')) return
-    await db.delete('customers', id)
-    load()
+    try {
+      await db.delete('customers', id)
+      toast.success('삭제되었습니다.')
+      load()
+    } catch (e) {
+      toast.error(`삭제 실패: ${(e as Error).message}`)
+    }
   }
 
   const filtered = customers.filter(c => {

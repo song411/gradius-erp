@@ -240,8 +240,11 @@ export default function GuardsContent() {
     load()
   }
 
+  const searchLower = search.toLowerCase()
   const filtered = guards.filter(g =>
-    !search || g.name.includes(search) || (g.certificate_number || '').includes(search)
+    !searchLower ||
+    (g.name || '').toLowerCase().includes(searchLower) ||
+    (g.certificate_number || '').toLowerCase().includes(searchLower)
   )
 
   // 서류 완비 여부
@@ -285,7 +288,7 @@ export default function GuardsContent() {
           {loading ? (
             <div className="text-center py-10 text-gray-400 text-xs">불러오는 중...</div>
           ) : filtered.length === 0 ? (
-            <div className="text-center py-10 text-gray-400 text-xs">등록된 경호원이 없습니다.</div>
+            <div className="text-center py-10 text-gray-400 text-xs">{search ? '검색 결과가 없습니다.' : '등록된 경호원이 없습니다.'}</div>
           ) : filtered.map(g => {
             const complete = docsComplete(g)
             const isSelected = selected?.id === g.id

@@ -37,14 +37,6 @@ const LABELS = {
   settlements: '정산',
 }
 
-const HREFS: Record<string, (id: string) => string> = {
-  inquiries: (id) => `/inquiries/${id}`,
-  staff: (id) => `/staff`,
-  customers: (id) => `/customers`,
-  estimates: (id) => `/estimates`,
-  assignments: (id) => `/contracts`,
-  settlements: (id) => `/settlements`,
-}
 
 export default function SearchContent() {
   const [query, setQuery] = useState('')
@@ -141,7 +133,7 @@ export default function SearchContent() {
               count={results.inquiries.length}
             >
               {results.inquiries.map(inq => (
-                <Link key={inq.id} href={`/inquiries`}>
+                <Link key={inq.id} href={`/inquiries/${inq.id}`}>
                   <div className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg cursor-pointer">
                     <div>
                       <p className="font-medium text-sm">{inq.event_name}</p>
@@ -160,7 +152,7 @@ export default function SearchContent() {
           {results.staff.length > 0 && (
             <ResultSection label="직원" icon={Users} count={results.staff.length}>
               {results.staff.map(s => (
-                <Link key={s.id} href="/staff">
+                <Link key={s.id} href={`/staff?search=${encodeURIComponent(s.name || '')}`}>
                   <div className="flex items-center gap-3 p-3 hover:bg-gray-50 rounded-lg cursor-pointer">
                     <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-sm font-bold shrink-0">
                       {s.name[0]}
@@ -188,7 +180,7 @@ export default function SearchContent() {
           {results.customers.length > 0 && (
             <ResultSection label="고객사" icon={Building2} count={results.customers.length}>
               {results.customers.map(c => (
-                <Link key={c.id} href="/customers">
+                <Link key={c.id} href={`/customers?search=${encodeURIComponent(c.company_name || '')}`}>
                   <div className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg cursor-pointer">
                     <div>
                       <p className="font-medium text-sm">{c.company_name}</p>
@@ -211,7 +203,7 @@ export default function SearchContent() {
           {results.estimates.length > 0 && (
             <ResultSection label="견적" icon={FileText} count={results.estimates.length}>
               {results.estimates.map(e => (
-                <Link key={e.id} href="/estimates">
+                <Link key={e.id} href={`/estimates?search=${encodeURIComponent(e.company_name || '')}`}>
                   <div className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg cursor-pointer">
                     <div>
                       <p className="font-medium text-sm">{e.event_name || '-'}</p>
@@ -231,7 +223,7 @@ export default function SearchContent() {
           {results.assignments.length > 0 && (
             <ResultSection label="배정" icon={UserCheck} count={results.assignments.length}>
               {results.assignments.map(a => (
-                <Link key={a.id} href="/contracts">
+                <Link key={a.id} href={a.inquiry_id ? `/assignments?inq=${a.inquiry_id}` : '/assignments'}>
                   <div className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg cursor-pointer">
                     <div>
                       <p className="font-medium text-sm">{a.staff_name}</p>
@@ -250,7 +242,7 @@ export default function SearchContent() {
           {results.settlements.length > 0 && (
             <ResultSection label="정산" icon={CreditCard} count={results.settlements.length}>
               {results.settlements.map(s => (
-                <Link key={s.id} href="/settlements">
+                <Link key={s.id} href={`/settlements?search=${encodeURIComponent(s.company_name || '')}`}>
                   <div className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg cursor-pointer">
                     <div>
                       <p className="font-medium text-sm">{s.company_name} · {s.site_name}</p>

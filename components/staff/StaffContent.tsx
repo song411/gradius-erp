@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { db } from '@/lib/supabase/api'
+import { toast } from 'sonner'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -76,10 +78,12 @@ interface FilterState {
 }
 
 export default function StaffContent() {
+  // 통합검색 결과에서 넘어올 때 그 사람만 바로 보이게 한다
+  const searchParams = useSearchParams()
   const [staffList, setStaffList]     = useState<Staff[]>([])
   const [loading, setLoading]         = useState(true)
   const [filters, setFilters]         = useState<FilterState>({
-    search: '', recommend: '', gender: '', english: '', minScore: '', job: '', showFilters: false,
+    search: searchParams.get('search') || '', recommend: '', gender: '', english: '', minScore: '', job: '', showFilters: false,
   })
   const [profileStaff, setProfileStaff] = useState<Staff | null>(null) // 프로필 카드용
   const [showModal, setShowModal]     = useState(false)
@@ -199,13 +203,19 @@ export default function StaffContent() {
 
     setSaving(false)
     setShowModal(false)
+    toast.success(editTarget ? '수정되었습니다.' : '등록되었습니다.')
     load()
   }
 
   async function handleDelete(id: string) {
     if (!confirm('이 크루 정보를 삭제하시겠습니까?')) return
-    await db.delete('staff', id)
-    load()
+    try {
+      await db.delete('staff', id)
+      toast.success('삭제되었습니다.')
+      load()
+    } catch (e) {
+      toast.error(`삭제 실패: ${(e as Error).message}`)
+    }
   }
 
   // 다중 필터 적용

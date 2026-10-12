@@ -8,13 +8,13 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
-  Search, Edit2, Receipt, CheckCircle, AlertCircle, Clock,
+  Search, Edit2, Receipt, CheckCircle, AlertCircle, Clock, Copy,
 } from 'lucide-react'
 import type { Settlement, Inquiry, Customer } from '@/lib/supabase/types'
 import ClosingForm from './ClosingForm'
 
 type SettRow = Settlement & { inquiries?: Inquiry }
-type TabKey = 'not_issued' | 'issued'
+type TabKey = 'not_issued' | 'issued' | 'all'
 
 export default function ClosingsContent() {
   const [settlements, setSettlements] = useState<SettRow[]>([])
@@ -67,7 +67,17 @@ export default function ClosingsContent() {
   const TABS = [
     { key: 'not_issued' as TabKey, label: '세금계산서 미발행', icon: <AlertCircle className="h-4 w-4" />, count: notIssued },
     { key: 'issued'     as TabKey, label: '발행 완료',          icon: <CheckCircle  className="h-4 w-4" />, count: issued },
+    { key: 'all'        as TabKey, label: '전체',               icon: <Receipt      className="h-4 w-4" />, count: settlements.length },
   ]
+
+  async function copyBizNumber(value: string) {
+    try {
+      await navigator.clipboard.writeText(value)
+      toast.success(`사업자번호 복사됨: ${value}`)
+    } catch {
+      toast.error('복사에 실패했습니다. 직접 선택해서 복사해 주세요.')
+    }
+  }
 
   return (
     <>
@@ -144,7 +154,18 @@ export default function ClosingsContent() {
                     <tr key={s.id} className={`transition-colors ${s.tax_invoice_issued ? 'hover:bg-gray-50' : 'hover:bg-red-50'}`}>
                       <td className="font-medium">{s.company_name || s.corp_name || '-'}</td>
                       <td className="text-sm text-gray-600">{s.inquiries?.event_name || s.site_name || '-'}</td>
-                      <td className="font-mono text-sm">{s.biz_number || <span className="text-gray-300 text-xs italic">미입력</span>}</td>
+                      <td className="font-mono text-sm">
+                        {s.biz_number
+                          ? <button
+                              type="button"
+                              onClick={() => copyBizNumber(s.biz_number!)}
+                              title="클릭하면 복사됩니다"
+                              className="inline-flex items-center gap-1 hover:text-blue-600"
+                            >
+                              {s.biz_number}<Copy className="h-3 w-3 text-gray-400" />
+                            </button>
+                          : <span className="text-gray-300 text-xs italic">미입력</span>}
+                      </td>
                       <td className="text-sm">{s.rep_name || '-'}</td>
                       <td className="text-sm text-amber-700 max-w-[160px] truncate" title={s.invoice_request || ''}>
                         {s.invoice_request || <span className="text-gray-300 text-xs">-</span>}

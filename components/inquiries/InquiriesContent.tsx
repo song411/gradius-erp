@@ -271,8 +271,13 @@ export default function InquiriesContent() {
   }
 
   async function handleStatusChange(id: string, status: InquiryStatus) {
-    await db.update('inquiries', id, { status })
-    setInquiries(prev => prev.map(i => i.id === id ? { ...i, status } : i))
+    try {
+      await db.update('inquiries', id, { status })
+      setInquiries(prev => prev.map(i => i.id === id ? { ...i, status } : i))
+      toast.success(`상태를 '${status}'(으)로 바꿨습니다.`)
+    } catch (e) {
+      toast.error(`상태 변경 실패: ${(e as Error).message}`)
+    }
   }
 
   return (
@@ -346,7 +351,7 @@ export default function InquiriesContent() {
                 </thead>
                 <tbody>
                   {filtered.length === 0 ? (
-                    <tr><td colSpan={9}><div className="erp-empty"><Search className="h-10 w-10" /><p>검색 결과가 없습니다.</p></div></td></tr>
+                    <tr><td colSpan={10}><div className="erp-empty"><Search className="h-10 w-10" /><p>검색 결과가 없습니다.</p></div></td></tr>
                   ) : (
                     filtered.map(inq => (
                       <tr key={inq.id}>

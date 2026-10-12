@@ -180,8 +180,11 @@ export default function PayoutsContent() {
   useEffect(() => { load() }, [load])
 
   const grouped = groupByInquiry(inquiries, assignments, payouts)
+  const searchLower = search.toLowerCase()
   const searchFiltered = grouped.filter(({ inq }) =>
-    !search || (inq.company_name || '').includes(search) || (inq.event_name || '').includes(search)
+    !searchLower ||
+    (inq.company_name || '').toLowerCase().includes(searchLower) ||
+    (inq.event_name || '').toLowerCase().includes(searchLower)
   )
 
   // 탭별 분류
@@ -263,6 +266,7 @@ export default function PayoutsContent() {
   async function handleBulkPaid() {
     const toPay = currentPayouts.filter(p => p.status === '검토완료' || p.status === '확인완료')
     if (!toPay.length) { toast.info('입금 처리할 검토완료 건이 없습니다.'); return }
+    if (!confirm(`검토완료 ${toPay.length}건을 모두 입금완료로 바꾸겠습니까?`)) return
     await Promise.all(toPay.map(p => db.update('payouts', p.id, { status: '완료' })))
     toast.success(`${toPay.length}건 입금 완료 처리`)
     if (selectedId) await checkAndAutoSettle(selectedId)

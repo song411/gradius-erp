@@ -65,10 +65,8 @@ export default function StaffSearchModal({ open, onClose, jobType, defaultPayRat
 
   const loadStaff = useCallback(async () => {
     setLoading(true)
-    const list = await db.list<Staff>('staff', {
-      neqFilter: { recommend: '보류' },
-      order: 'name', asc: true,
-    })
+    // 보류 인원도 받아 두고 화면에서 거른다 — 추천 필터에서 '보류'를 고르면 볼 수 있어야 한다
+    const list = await db.list<Staff>('staff', { order: 'name', asc: true })
     setStaffList(list)
     setLoading(false)
   }, [])
@@ -92,7 +90,8 @@ export default function StaffSearchModal({ open, onClose, jobType, defaultPayRat
     const genderOk = filterGender === '전체' || s.gender === filterGender
     const jobOk = filterJob === '전체' || jobs.some(j => j.includes(filterJob) || filterJob.includes(j))
     const regionOk = filterRegion === '전체' || (s.region || '').includes(filterRegion)
-    const recOk = filterRecommend === '전체' || s.recommend === filterRecommend
+    // '전체'는 예전처럼 보류를 뺀 전체다
+    const recOk = filterRecommend === '전체' ? s.recommend !== '보류' : s.recommend === filterRecommend
     const scoreOk = !minScore || (s.total_score || 0) >= minScore
     return nameOk && genderOk && jobOk && regionOk && recOk && scoreOk
   })

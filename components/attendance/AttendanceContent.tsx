@@ -5,7 +5,7 @@ import { db } from '@/lib/supabase/api'
 import type { Inquiry, Assignment, Attendance, Evaluation, Staff } from '@/lib/supabase/types'
 import type { AttendanceStatus } from '@/lib/supabase/types'
 import { formatDate, formatKRW } from '@/lib/utils'
-import { eventDatesOf, worksOnDate } from '@/components/schedule/matrixCore'
+import { eventDatesOf, worksOnDate, todayLocal } from '@/components/schedule/matrixCore'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -283,8 +283,11 @@ export default function AttendanceContent() {
     setEditMap({})
     setEvalMap({})
 
-    // 날짜 탭 초기화 (행사 시작일로 설정)
-    const initDate = inq.event_start || new Date().toISOString().slice(0, 10)
+    // 날짜 탭 초기화 — 오늘이 운영일이면 오늘, 아니면 행사 시작일.
+    // 현장에서 출석 찍을 때 매번 오늘 탭을 찾아 누르던 수고를 없앤다.
+    const today = todayLocal()
+    const dates = eventDatesOf(inq)
+    const initDate = dates.includes(today) ? today : (inq.event_start || today)
     setSelectedDate(initDate)
 
     const [asgns, atts, evals] = await Promise.all([
@@ -559,10 +562,11 @@ export default function AttendanceContent() {
     }
   }
 
+  const searchLower = searchText.toLowerCase()
   const filteredInquiries = inquiries.filter(i =>
-    !searchText ||
-    (i.company_name || '').includes(searchText) ||
-    (i.event_name || '').includes(searchText)
+    !searchLower ||
+    (i.company_name || '').toLowerCase().includes(searchLower) ||
+    (i.event_name || '').toLowerCase().includes(searchLower)
   )
 
   // 선택한 날짜의 근무자 — 날짜 탭을 바꾸면 명단도 바뀐다

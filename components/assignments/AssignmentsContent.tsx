@@ -966,10 +966,11 @@ export default function AssignmentsContent() {
   }
 
   // 문의 목록 필터
+  const searchLower = searchText.toLowerCase()
   const filteredInquiries = inquiries.filter(i =>
-    !searchText ||
-    (i.company_name || '').includes(searchText) ||
-    (i.event_name || '').includes(searchText)
+    !searchLower ||
+    (i.company_name || '').toLowerCase().includes(searchLower) ||
+    (i.event_name || '').toLowerCase().includes(searchLower)
   )
 
   // 이 행사의 운영일 — 배정 근무일을 고를 때 후보가 된다.

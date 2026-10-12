@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, Fragment } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { db } from '@/lib/supabase/api'
 import { formatKRW, calcWithholdingTax, STATUS_COLORS } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
@@ -57,7 +58,9 @@ export default function SettlementsContent() {
   const [expenses, setExpenses]       = useState<EventExpense[]>([])
   const [allAssignments, setAllAssignments] = useState<Assignment[]>([])
   const [loading, setLoading]         = useState(true)
-  const [searchText, setSearchText]   = useState('')
+  // 통합검색 결과에서 넘어올 때 그 업체만 바로 보이게 한다
+  const searchParams = useSearchParams()
+  const [searchText, setSearchText]   = useState(searchParams.get('search') || '')
   const [filterDeposit, setFilterDeposit] = useState('')
   const [filterProgress, setFilterProgress] = useState('')
 
@@ -470,7 +473,7 @@ export default function SettlementsContent() {
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <Input
-            placeholder="업체명, 현장명 검색..."
+            placeholder="업체명, 현장명, 행사명 검색..."
             className="pl-9"
             value={searchText}
             onChange={e => setSearchText(e.target.value)}

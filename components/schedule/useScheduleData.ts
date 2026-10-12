@@ -138,7 +138,8 @@ export function useScheduleData(from: string, to: string): ScheduleData {
       memos.forEach(m => {
         if (!m.content || m.content.startsWith(CONFIG_TAG)) return
         const cur = memoByInq.get(m.inquiry_id)
-        if (cur) cur.count += 1
+        // created_at 오름차순으로 읽으므로 뒤에 오는 것이 더 최신이다 — 덮어써야 '최신 메모'가 맞다
+        if (cur) { cur.count += 1; cur.latest = m.content }
         else memoByInq.set(m.inquiry_id, { count: 1, latest: m.content })
       })
 

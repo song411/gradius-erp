@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { db } from '@/lib/supabase/api'
+import { HQ_STAFF_NAMES } from '@/lib/finance'
 import type { Inquiry, Settlement, Payout, Assignment, Customer, EstimateItem, Estimate, EventExpense } from '@/lib/supabase/types'
 import { BarChart3, Receipt, Banknote, Building2, TrendingUp } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -36,13 +38,28 @@ const TABS = [
 
 type TabId = typeof TABS[number]['id']
 
-export default function CeoContent() {
-  const [tab, setTab]         = useState<TabId>('overview')
-  const [data, setData]       = useState<Omit<CeoData, 'reload'> | null>(null)
-  const [loading, setLoading] = useState(true)
+function isTabId(v: string | null): v is TabId {
+  return TABS.some(t => t.id === v)
+}
 
+export default function CeoContent() {
+  // 탭을 URL(?tab=)에 남긴다 — 새로고침하거나 링크를 공유해도 보던 탭이 유지된다
+  const searchParams = useSearchParams()
+  const initialTab = searchParams.get('tab')
+  const [tab, setTabState]    = useState<TabId>(isTabId(initialTab) ? initialTab : 'overview')
+  const [data, setData]       = useState<Omit<CeoData, 'reload'> | null>(null)
+
+  function setTab(id: TabId) {
+    setTabState(id)
+    const url = new URL(window.location.href)
+    if (id === 'overview') url.searchParams.delete('tab')
+    else url.searchParams.set('tab', id)
+    window.history.replaceState(null, '', url.toString())
+  }
+
+  // 처음 한 번만 전체 스피너를 보여준다. 버튼을 눌러 다시 불러올 때는 데이터를 그대로 둔 채
+  // 뒤에서 갱신한다 — 예전엔 매번 스피너로 바뀌면서 탭이 다시 마운트돼 검색어·기간·정렬이 전부 초기화됐다.
   const load = useCallback(async () => {
-    setLoading(true)
     const [inquiries, settlements, payouts, assignments, customers, estimateItems, estimates, expenses] = await Promise.all([
       db.list<Inquiry>('inquiries'),
       db.list<Settlement>('settlements'),
@@ -55,7 +72,6 @@ export default function CeoContent() {
       db.list<EventExpense>('event_expenses', { order: 'created_at', asc: false }).catch(() => []),
     ])
     setData({ inquiries, settlements, payouts, assignments, customers, estimateItems, estimates, expenses })
-    setLoading(false)
   }, [])
 
   useEffect(() => { load() }, [load])
@@ -73,9 +89,8 @@ export default function CeoContent() {
     }
     if (id === 'payment') {
       // 본사 인원 제외, 미지급(대기+검토완료) 건수
-      const HQ = new Set(['최규성', '송무재', '여지은', '김영찬'])
       return data.payouts.filter(p =>
-        !(p.staff_name && HQ.has(p.staff_name)) &&
+        !(p.staff_name && HQ_STAFF_NAMES.has(p.staff_name)) &&
         !['지급완료', '완료'].includes(p.status)
       ).length
     }
@@ -85,15 +100,13 @@ export default function CeoContent() {
     return 0
   }
 
-  if (loading) {
+  if (!data) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500" />
       </div>
     )
   }
-
-  if (!data) return null
 
   const ceoData: CeoData = { ...data, reload: load }
 
