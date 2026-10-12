@@ -5,7 +5,7 @@ import { db } from '@/lib/supabase/api'
 import { formatKRW } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ChevronDown, ChevronRight, CheckCircle2, AlertCircle, Receipt, MapPin, Building2, Search } from 'lucide-react'
+import { ChevronDown, ChevronRight, CheckCircle2, AlertCircle, Receipt, MapPin, Building2, Search, Copy, Layers, X } from 'lucide-react'
 import type { CeoData } from './CeoContent'
 import type { Settlement, Inquiry, Customer, EstimateItem, Estimate } from '@/lib/supabase/types'
 import { toast } from 'sonner'
@@ -24,6 +24,30 @@ interface SettRow extends Settlement {
 
 type ViewTab = 'unissued' | 'issued' | 'all'
 type SortKey = '기본순' | '경과일순(긴급)' | '최신순'
+
+// ── 합산 발행 ────────────────────────────────────────────
+// 같은 거래처 판정 키. 사업자번호가 있으면 숫자만 남겨 비교하고, 없으면 상호, 그것도 없으면 업체명.
+// 어떤 건은 업체명만, 어떤 건은 사업자번호만 들어 있는 경우가 실제로 있어 완벽하진 않다 —
+// 그래서 최종 선택은 사람이 체크박스로 한다. 키는 '같은 업체 N건' 힌트와 전체 선택에만 쓴다.
+function bizKey(s: Settlement & { inquiry?: Inquiry }): string {
+  const num = (s.biz_number || '').replace(/[^0-9]/g, '')
+  if (num.length >= 10) return `n:${num}`
+  const name = (s.corp_name || s.company_name || s.inquiry?.company_name || '').trim().toLowerCase()
+  return name ? `c:${name}` : `id:${s.id}`
+}
+
+function newGroupId(): string {
+  const d = new Date()
+  const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
+  return `TXG-${ymd}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
+}
+
+// 016 마이그레이션 전이면 새 칸이 없어 PATCH가 실패한다. 그때는 발행완료만 기록하고 묶음 번호는 포기한다 —
+// 발행 업무가 SQL 실행 순서 때문에 멈추면 안 된다.
+function isMissingColumn(e: unknown): boolean {
+  const msg = (e as Error)?.message || ''
+  return /column|schema cache|does not exist/i.test(msg)
+}
 
 // 경과일 계산 유틸
 function elapsedDays(dateStr?: string | null): number | null {
@@ -50,6 +74,8 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
   const [processing, setProcessing]   = useState<string | null>(null)
   const [search, setSearch]           = useState('')
   const [periodState, setPeriodState] = useState<PeriodState>({ period: '전체', customFrom: '', customTo: '' })
+  // 합산 발행용 선택 (미발행 탭에서만)
+  const [selected, setSelected]       = useState<Set<string>>(new Set())
 
   // 고객사 맵 (id → customer)
   const customerMap = new Map(customers.map(c => [c.id, c]))
@@ -101,28 +127,112 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
   const base    = viewTab === 'unissued' ? unissued : viewTab === 'issued' ? issued : periodFiltered
   const current = sortList(applySearch(base))
 
+  // 같은 업체가 2건 이상인 키 → 건수 (지금 보고 있는 미발행 목록 기준)
+  const dupCount = new Map<string, number>()
+  if (viewTab === 'unissued') {
+    current.forEach(s => { const k = bizKey(s); dupCount.set(k, (dupCount.get(k) || 0) + 1) })
+  }
+  const selectedRows = current.filter(s => selected.has(s.id))
+  const selectedKey  = selectedRows.length ? bizKey(selectedRows[0]) : null
+  const selSupply = selectedRows.reduce((a, s) => a + (s.supply_price || 0), 0)
+  const selVat    = selectedRows.reduce((a, s) => a + (s.vat || 0), 0)
+  const selTotal  = selectedRows.reduce((a, s) => a + (s.invoice_amount || s.supply_price + s.vat), 0)
+
+  function toggleSelect(row: SettRow) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(row.id)) { next.delete(row.id); return next }
+      // 다른 업체 건과는 섞이지 않게 — 세금계산서는 거래처 한 곳에 한 장이다
+      if (selectedKey && bizKey(row) !== selectedKey) {
+        toast.info('같은 업체 건끼리만 묶을 수 있습니다. 먼저 선택을 해제해 주세요.')
+        return prev
+      }
+      next.add(row.id); return next
+    })
+  }
+  function selectAllOf(row: SettRow) {
+    const k = bizKey(row)
+    setSelected(new Set(current.filter(s => bizKey(s) === k).map(s => s.id)))
+  }
+
+  // 홈택스 품목란에 붙일 문구 — "행사A 외 3건 행사인력 용역"
+  function itemText(list: SettRow[]): string {
+    const names = list.map(r => r.inquiry?.event_name || r.site_name || '').filter(Boolean)
+    if (!names.length) return '행사인력 용역'
+    return names.length === 1 ? `${names[0]} 행사인력 용역` : `${names[0]} 외 ${names.length - 1}건 행사인력 용역`
+  }
+  async function copyText(text: string, what: string) {
+    try { await navigator.clipboard.writeText(text); toast.success(`${what} 복사됨`) }
+    catch { toast.error('복사에 실패했습니다.') }
+  }
+
+  // 발행완료 기록. 새 칸(발행일·묶음)이 아직 없으면 발행 여부만 남긴다.
+  async function markIssued(ids: string[], group: string | null) {
+    const full: Record<string, unknown> = { tax_invoice_issued: true, tax_invoice_issued_at: new Date().toISOString() }
+    if (group) full.tax_invoice_group = group
+    try {
+      await db.updateMany('settlements', ids, full)
+      return true
+    } catch (e) {
+      if (!isMissingColumn(e)) throw e
+      await db.updateMany('settlements', ids, { tax_invoice_issued: true })
+      toast.warning('발행완료는 기록했지만 묶음 번호·발행일은 저장하지 못했습니다. 016 SQL을 아직 실행하지 않은 것 같습니다.', { duration: 8000 })
+      return false
+    }
+  }
+
   async function handleIssue(id: string) {
     setProcessing(id)
     try {
-      await db.update('settlements', id, { tax_invoice_issued: true })
+      await markIssued([id], null)
       toast.success('발행완료로 처리되었습니다.')
+      setSelected(prev => { const n = new Set(prev); n.delete(id); return n })
       reload()
-    } catch {
-      toast.error('처리 중 오류가 발생했습니다.')
+    } catch (e) {
+      toast.error(`처리 중 오류가 발생했습니다: ${(e as Error).message}`)
     } finally {
       setProcessing(null)
     }
   }
 
-  async function handleRevert(id: string) {
-    if (!confirm('발행완료를 취소하고 미발행으로 되돌리시겠습니까?')) return
-    setProcessing(id)
+  async function handleIssueGroup() {
+    if (selectedRows.length < 2) return
+    const label = selectedRows[0].company_name || selectedRows[0].corp_name || selectedRows[0].inquiry?.company_name || '이 업체'
+    if (!confirm(`${label} ${selectedRows.length}건을 세금계산서 한 장(공급가 ${formatKRW(selSupply)})으로 발행완료 처리합니다. 계속할까요?`)) return
+    setProcessing('group')
     try {
-      await db.update('settlements', id, { tax_invoice_issued: false })
-      toast.success('미발행으로 되돌렸습니다.')
+      const gid = newGroupId()
+      const saved = await markIssued(selectedRows.map(r => r.id), gid)
+      toast.success(saved ? `${selectedRows.length}건 합산 발행완료 (묶음 ${gid})` : `${selectedRows.length}건 발행완료`)
+      setSelected(new Set())
       reload()
-    } catch {
-      toast.error('처리 중 오류가 발생했습니다.')
+    } catch (e) {
+      toast.error(`처리 중 오류가 발생했습니다: ${(e as Error).message}`)
+    } finally {
+      setProcessing(null)
+    }
+  }
+
+  async function handleRevert(row: SettRow) {
+    // 묶음으로 발행한 건은 한 장을 취소하는 것이므로 묶음 전체를 되돌린다
+    const mates = row.tax_invoice_group ? rows.filter(r => r.tax_invoice_group === row.tax_invoice_group) : [row]
+    const msg = mates.length > 1
+      ? `같이 발행된 ${mates.length}건을 모두 미발행으로 되돌립니다. 계속할까요?`
+      : '발행완료를 취소하고 미발행으로 되돌리시겠습니까?'
+    if (!confirm(msg)) return
+    setProcessing(row.id)
+    try {
+      const ids = mates.map(m => m.id)
+      try {
+        await db.updateMany('settlements', ids, { tax_invoice_issued: false, tax_invoice_group: null, tax_invoice_issued_at: null })
+      } catch (e) {
+        if (!isMissingColumn(e)) throw e
+        await db.updateMany('settlements', ids, { tax_invoice_issued: false })
+      }
+      toast.success(mates.length > 1 ? `${mates.length}건을 미발행으로 되돌렸습니다.` : '미발행으로 돌렸습니다.')
+      reload()
+    } catch (e) {
+      toast.error(`처리 중 오류가 발생했습니다: ${(e as Error).message}`)
     } finally {
       setProcessing(null)
     }
@@ -271,6 +381,12 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
                 key={s.id}
                 row={s}
                 issued={viewTab === 'issued'}
+                selectable={viewTab === 'unissued'}
+                selected={selected.has(s.id)}
+                onToggle={() => toggleSelect(s)}
+                dupCount={viewTab === 'unissued' ? (dupCount.get(bizKey(s)) || 0) : 0}
+                onSelectDup={() => selectAllOf(s)}
+                groupMates={s.tax_invoice_group ? rows.filter(r => r.tax_invoice_group === s.tax_invoice_group && r.id !== s.id) : []}
                 action={viewTab === 'unissued' ? (
                   <Button
                     size="sm"
@@ -284,7 +400,7 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
                   <Button
                     size="sm" variant="ghost"
                     className="text-xs text-gray-500 hover:text-red-600"
-                    onClick={() => handleRevert(s.id)}
+                    onClick={() => handleRevert(s)}
                     disabled={processing === s.id}
                   >
                     되돌리기
@@ -295,6 +411,47 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
           </div>
         )}
       </div>
+
+      {/* 합산 발행 바 — 미발행 탭에서 1건 이상 고르면 화면 아래에 붙는다 */}
+      {viewTab === 'unissued' && selectedRows.length > 0 && (
+        <div className="sticky bottom-3 z-10 bg-gray-900 text-white rounded-xl shadow-xl px-5 py-3 flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Layers className="h-4 w-4 text-amber-300" />
+            <span className="font-bold text-sm">
+              {selectedRows[0].company_name || selectedRows[0].corp_name || selectedRows[0].inquiry?.company_name || '업체'} · {selectedRows.length}건 선택
+            </span>
+          </div>
+          <div className="flex items-center gap-3 text-xs text-gray-300">
+            <span>공급가 <b className="text-white">{formatKRW(selSupply)}</b></span>
+            <span>부가세 <b className="text-white">{formatKRW(selVat)}</b></span>
+            <span>합계 <b className="text-amber-300 text-sm">{formatKRW(selTotal)}</b></span>
+          </div>
+          <div className="flex items-center gap-2 ml-auto">
+            <button
+              onClick={() => copyText(String(selSupply), '공급가액')}
+              className="text-xs px-2.5 py-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 flex items-center gap-1">
+              <Copy className="h-3 w-3" />공급가 복사
+            </button>
+            <button
+              onClick={() => copyText(itemText(selectedRows), '품목 문구')}
+              title={itemText(selectedRows)}
+              className="text-xs px-2.5 py-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 flex items-center gap-1">
+              <Copy className="h-3 w-3" />품목 문구 복사
+            </button>
+            <Button
+              size="sm"
+              onClick={handleIssueGroup}
+              disabled={selectedRows.length < 2 || processing === 'group'}
+              title={selectedRows.length < 2 ? '2건 이상 골라야 합산할 수 있습니다' : undefined}
+              className="bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold">
+              {processing === 'group' ? '처리중...' : `${selectedRows.length}건 합산 발행완료`}
+            </Button>
+            <button onClick={() => setSelected(new Set())} className="p-1.5 rounded-lg hover:bg-gray-700" title="선택 해제">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -302,10 +459,17 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
 // 세금계산서 행 컴포넌트
 function TaxRow({
   row, action, issued = false,
+  selectable = false, selected = false, onToggle, dupCount = 0, onSelectDup, groupMates = [],
 }: {
   row: SettRow
   action: React.ReactNode
   issued?: boolean
+  selectable?: boolean
+  selected?: boolean
+  onToggle?: () => void
+  dupCount?: number          // 미발행 목록에서 같은 업체가 몇 건인지 (자기 포함)
+  onSelectDup?: () => void   // 같은 업체 건 전부 선택
+  groupMates?: SettRow[]     // 같은 묶음으로 발행된 다른 건들
 }) {
   const [open, setOpen] = useState(false)
 
@@ -343,9 +507,19 @@ function TaxRow({
   return (
     <div>
       <div
-        className="flex items-start gap-3 px-4 py-3.5 hover:bg-gray-50 cursor-pointer"
+        className={`flex items-start gap-3 px-4 py-3.5 hover:bg-gray-50 cursor-pointer ${selected ? 'bg-amber-50' : ''}`}
         onClick={() => setOpen(v => !v)}
       >
+        {selectable && (
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggle}
+            onClick={e => e.stopPropagation()}
+            className="mt-1.5 h-4 w-4 accent-emerald-600 shrink-0 cursor-pointer"
+            title="합산 발행할 건 고르기"
+          />
+        )}
         <div className="shrink-0 text-gray-400 mt-1">
           {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
         </div>
@@ -371,6 +545,21 @@ function TaxRow({
             )}
             {issued && (
               <span className="text-xs text-green-700 font-semibold bg-green-50 px-1.5 py-0.5 rounded">✓ 발행완료</span>
+            )}
+            {row.tax_invoice_group && (
+              <span
+                className="text-xs text-indigo-700 font-semibold bg-indigo-50 px-1.5 py-0.5 rounded inline-flex items-center gap-1"
+                title={`묶음 ${row.tax_invoice_group}${groupMates.length ? ' · 같이 발행: ' + groupMates.map(m => m.inquiry?.event_name || m.site_name || '').join(', ') : ''}`}>
+                <Layers className="h-3 w-3" />합산 발행 {groupMates.length + 1}건
+              </span>
+            )}
+            {selectable && dupCount >= 2 && (
+              <button
+                onClick={e => { e.stopPropagation(); onSelectDup?.() }}
+                className="text-xs text-amber-800 font-semibold bg-amber-100 hover:bg-amber-200 px-1.5 py-0.5 rounded inline-flex items-center gap-1"
+                title="이 업체의 미발행 건을 모두 선택">
+                <Layers className="h-3 w-3" />같은 업체 {dupCount}건 모두 선택
+              </button>
             )}
             {/* 입금 상태 배지 — 메인 행에 바로 표시 */}
             {row.deposit_status === '입금완료'
@@ -487,6 +676,23 @@ function TaxRow({
               </div>
             )}
           </div>
+
+          {/* 같이 발행된 건 */}
+          {groupMates.length > 0 && (
+            <div className="bg-indigo-50 border-2 border-indigo-200 rounded-lg px-4 py-3">
+              <p className="text-xs text-indigo-700 font-bold mb-1.5">🧾 세금계산서 한 장으로 같이 발행된 건 ({groupMates.length + 1}건 · 묶음 {row.tax_invoice_group})</p>
+              <ul className="text-sm text-gray-700 space-y-0.5">
+                <li className="font-semibold">· {row.inquiry?.event_name || row.site_name || '-'} — {formatKRW(row.supply_price)} (이 건)</li>
+                {groupMates.map(m => (
+                  <li key={m.id}>· {m.inquiry?.event_name || m.site_name || '-'} — {formatKRW(m.supply_price)}</li>
+                ))}
+              </ul>
+              <p className="text-xs text-indigo-600 mt-1.5">
+                공급가 합계 <b>{formatKRW(row.supply_price + groupMates.reduce((a, m) => a + (m.supply_price || 0), 0))}</b>
+                {row.tax_invoice_issued_at && <> · 발행일 {row.tax_invoice_issued_at.slice(0, 10)}</>}
+              </p>
+            </div>
+          )}
 
           {/* 메모 */}
           {row.invoice_request && (

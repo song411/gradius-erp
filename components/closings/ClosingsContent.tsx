@@ -176,7 +176,12 @@ export default function ClosingsContent() {
                       <td><ProgressBadge progress={s.progress} /></td>
                       <td>
                         {s.tax_invoice_issued
-                          ? <span className="text-xs text-green-600 font-semibold flex items-center gap-1"><CheckCircle className="h-3 w-3" />발행완료</span>
+                          ? <span className="text-xs text-green-600 font-semibold flex items-center gap-1 whitespace-nowrap">
+                              <CheckCircle className="h-3 w-3" />발행완료
+                              {s.tax_invoice_group && (
+                                <span className="ml-1 text-indigo-700 bg-indigo-50 px-1 py-0.5 rounded" title={`묶음 ${s.tax_invoice_group} — CEO 세금계산서 탭에서 같이 발행된 건을 볼 수 있습니다`}>합산</span>
+                              )}
+                            </span>
                           : <span className="text-xs text-red-500 font-semibold">미발행</span>}
                       </td>
                       <td className="text-right">

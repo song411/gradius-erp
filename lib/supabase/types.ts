@@ -305,6 +305,8 @@ export interface Settlement {
   invoice_request?: string
   biz_reg_url?: string
   biz_address?: string      // 사업장주소 (세금계산서용)
+  tax_invoice_group?: string | null      // 합산 발행 묶음 번호 — 같은 번호면 세금계산서 한 장으로 같이 발행된 건 (016)
+  tax_invoice_issued_at?: string | null  // 발행완료 처리 시각 (016). 예전 건은 비어 있다
   created_at: string
   updated_at: string
 }
