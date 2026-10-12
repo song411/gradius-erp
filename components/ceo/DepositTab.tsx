@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, Fragment } from 'react'
 import { db } from '@/lib/supabase/api'
 import { formatKRW } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -286,9 +286,8 @@ export default function DepositTab({ data }: { data: CeoData }) {
                 const isExpanded = expandedId === s.id
                 const inqItems = estimateItems.filter(it => it.inquiry_id === s.inquiry_id)
                 return (
-                  <>
+                  <Fragment key={s.id}>
                   <tr
-                    key={s.id}
                     className={`hover:bg-amber-50 cursor-pointer transition-colors ${isExpanded ? 'bg-amber-50' : ''}`}
                     onClick={e => {
                       // 입금액 수정 버튼/입력 클릭 시 토글 방지
@@ -458,7 +457,7 @@ export default function DepositTab({ data }: { data: CeoData }) {
                       </td>
                     </tr>
                   )}
-                  </>
+                  </Fragment>
                 )
               })}
             </tbody>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, Fragment } from 'react'
 import { formatKRW } from '@/lib/utils'
 import { ChevronDown, ChevronRight, TrendingUp, TrendingDown, Minus, Clock, Users, Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
@@ -330,9 +330,8 @@ export default function ProfitTab({ data }: { data: CeoData }) {
               // 배정이 없어도 부대비용만 있으면 펼쳐볼 수 있어야 한다
               const canOpen = r.payoutCase !== 'none' || r.totalExpense > 0
               return (
-                <>
+                <Fragment key={r.inquiry.id}>
                   <tr
-                    key={r.inquiry.id}
                     className={`transition-colors ${canOpen ? 'hover:bg-gray-50 cursor-pointer' : ''}`}
                     onClick={() => canOpen && toggleRow(r.inquiry.id)}
                   >
@@ -464,7 +463,7 @@ export default function ProfitTab({ data }: { data: CeoData }) {
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               )
             })}
           </tbody>
