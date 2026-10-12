@@ -486,7 +486,11 @@ export default function EstimateBuilder({
       } else {
         const ins = await db.insert<Estimate>('estimates', payload)
         estId = ins[0].id
-        await db.update('inquiries', form.inquiry_id, { status: '견적' })
+        // '접수'일 때만 '견적'으로 올린다. 예전엔 무조건 덮어써서, 체결·배정완료·정산완료 뒤에
+        // 변경 견적을 한 장 더 만들면 문의가 '견적'으로 되돌아갔다 (문의 상세의 같은 기능은 원래 조건부).
+        if (selectedInq?.status === '접수') {
+          await db.update('inquiries', form.inquiry_id, { status: '견적' })
+        }
       }
 
       const itemsPayload = items.map((row, idx) => ({
