@@ -78,8 +78,16 @@ export default function ClosingForm({ open, onClose, onSaved, editTarget, custom
     setSaving(true); setError('')
 
     const tid = toast.loading('저장 중...')
+    // 발행 체크가 바뀔 때만 처리 시각을 같이 적는다. 켜면 지금 시각, 끄면 시각·묶음 번호를 지운다.
+    // 바뀌지 않았으면 건드리지 않는다 — CEO 세금계산서 탭에서 누른 시각을 덮어쓰면 안 된다.
+    const wasIssued = editTarget.tax_invoice_issued ?? false
+    const issuedChange = form.tax_invoice_issued === wasIssued ? {}
+      : form.tax_invoice_issued
+        ? { tax_invoice_issued_at: new Date().toISOString() }
+        : { tax_invoice_issued_at: null, tax_invoice_group: null }
     try {
       await db.update('settlements', editTarget.id, {
+        ...issuedChange,
         biz_number:         form.biz_number || null,
         rep_name:           form.rep_name || null,
         corp_name:          form.corp_name || null,

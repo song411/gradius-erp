@@ -23,7 +23,7 @@ interface SettRow extends Settlement {
 }
 
 type ViewTab = 'unissued' | 'issued' | 'all'
-type SortKey = '기본순' | '경과일순(긴급)' | '최신순'
+type SortKey = '기본순' | '경과일순(긴급)' | '최신순' | '처리순'
 
 // ── 합산 발행 ────────────────────────────────────────────
 // 같은 거래처 판정 키. 사업자번호가 있으면 숫자만 남겨 비교하고, 없으면 상호, 그것도 없으면 업체명.
@@ -47,6 +47,20 @@ function newGroupId(): string {
 function isMissingColumn(e: unknown): boolean {
   const msg = (e as Error)?.message || ''
   return /column|schema cache|does not exist/i.test(msg)
+}
+
+// 발행 처리 시각 — DB는 UTC로 저장되므로 한국시간으로 바꿔 "10-20 20:45"처럼 보여준다
+function formatIssuedAt(iso?: string | null, withYear = false): string | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return null
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Seoul', hour12: false,
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+  }).formatToParts(d)
+  const get = (t: string) => parts.find(x => x.type === t)?.value || ''
+  const date = `${get('month')}-${get('day')}`
+  return `${withYear ? get('year') + '-' : ''}${date} ${get('hour')}:${get('minute')}`
 }
 
 // 경과일 계산 유틸
@@ -120,6 +134,10 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
       return [...list].sort((a, b) =>
         (b.inquiry?.event_start || b.created_at || '').localeCompare(a.inquiry?.event_start || a.created_at || '')
       )
+    }
+    if (sortKey === '처리순') {
+      // 발행완료를 누른 시각 기준 — 방금 누른 게 맨 위. 시각 기록이 없는 예전 건은 뒤로 보낸다
+      return [...list].sort((a, b) => (b.tax_invoice_issued_at || '').localeCompare(a.tax_invoice_issued_at || ''))
     }
     return list  // 기본순: event_start 오름차순 (이미 rows에서 정렬됨)
   }
@@ -271,8 +289,9 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
         {/* 정렬 */}
         <div className="flex items-center gap-2">
           <span className="text-xs text-gray-500 font-bold shrink-0">정렬:</span>
-          {(['기본순', '경과일순(긴급)', '최신순'] as SortKey[]).map(s => (
+          {(['기본순', '경과일순(긴급)', '최신순', ...(viewTab === 'unissued' ? [] : ['처리순' as const])] as SortKey[]).map(s => (
             <button key={s} onClick={() => setSortKey(s)}
+              title={s === '처리순' ? '발행완료를 누른 시각 순 — 방금 처리한 건이 맨 위' : undefined}
               className={`text-xs px-3 py-1.5 rounded-full border-2 font-semibold transition-colors ${sortKey === s ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-300 hover:border-gray-600'}`}>
               {s}
             </button>
@@ -286,7 +305,7 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
       {/* 탭 전환 — 미발행 / 발행완료 / 전체 */}
       <div className="grid grid-cols-3 gap-3">
         <button
-          onClick={() => setViewTab('unissued')}
+          onClick={() => { setViewTab('unissued'); if (sortKey === '처리순') setSortKey('기본순') }}
           className={`rounded-xl p-4 flex items-start gap-3 border-2 transition-all text-left ${
             viewTab === 'unissued'
               ? 'bg-red-50 border-red-400 shadow-md ring-2 ring-red-300'
@@ -309,7 +328,7 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
         </button>
 
         <button
-          onClick={() => setViewTab('issued')}
+          onClick={() => { setViewTab('issued'); setSortKey('처리순') }}
           className={`rounded-xl p-4 flex items-start gap-3 border-2 transition-all text-left ${
             viewTab === 'issued'
               ? 'bg-green-50 border-green-400 shadow-md ring-2 ring-green-300'
@@ -546,6 +565,11 @@ function TaxRow({
             {issued && (
               <span className="text-xs text-green-700 font-semibold bg-green-50 px-1.5 py-0.5 rounded">✓ 발행완료</span>
             )}
+            {row.tax_invoice_issued && (
+              formatIssuedAt(row.tax_invoice_issued_at)
+                ? <span className="text-xs text-gray-500 font-medium" title={`발행완료 처리 ${formatIssuedAt(row.tax_invoice_issued_at, true)}`}>🕒 {formatIssuedAt(row.tax_invoice_issued_at)}</span>
+                : <span className="text-xs text-gray-400" title="시각 기록 칸이 생기기 전에 처리됐거나, 마감 편집 폼 체크로 처리된 건">처리시각 기록 없음</span>
+            )}
             {row.tax_invoice_group && (
               <span
                 className="text-xs text-indigo-700 font-semibold bg-indigo-50 px-1.5 py-0.5 rounded inline-flex items-center gap-1"
@@ -611,6 +635,9 @@ function TaxRow({
               <InfoItem label="📧 이메일"        value={row.email} />
               <InfoItem label="📞 연락처"        value={row.contact_phone} />
               <InfoItem label="📋 내용(품목)"    value={row.item_description} />
+              {row.tax_invoice_issued && (
+                <InfoItem label="🕒 발행완료 처리" value={formatIssuedAt(row.tax_invoice_issued_at, true) || '기록 없음'} />
+              )}
             </div>
           </div>
 
@@ -689,7 +716,7 @@ function TaxRow({
               </ul>
               <p className="text-xs text-indigo-600 mt-1.5">
                 공급가 합계 <b>{formatKRW(row.supply_price + groupMates.reduce((a, m) => a + (m.supply_price || 0), 0))}</b>
-                {row.tax_invoice_issued_at && <> · 발행일 {row.tax_invoice_issued_at.slice(0, 10)}</>}
+                {formatIssuedAt(row.tax_invoice_issued_at, true) && <> · 처리 {formatIssuedAt(row.tax_invoice_issued_at, true)}</>}
               </p>
             </div>
           )}
