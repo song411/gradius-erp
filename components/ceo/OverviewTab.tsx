@@ -244,7 +244,7 @@ export default function OverviewTab({ data }: { data: CeoData }) {
               <thead>
                 <tr>
                   <th>월</th><th>매출</th><th>수익</th><th>수익률</th>
-                  <th>지급액</th><th>문의수</th><th>완료수</th>
+                  <th>지급액</th><th>부대비용</th><th>문의수</th><th>완료수</th>
                 </tr>
               </thead>
               <tbody>
@@ -263,6 +263,8 @@ export default function OverviewTab({ data }: { data: CeoData }) {
                       )}
                     </td>
                     <td>{row.payout > 0 ? formatKRW(row.payout) : '-'}</td>
+                    {/* 매출 − 지급 ≠ 수익인 이유가 이 열이다. 없으면 숫자가 안 맞아 보인다 */}
+                    <td className="text-gray-600">{row.expense > 0 ? formatKRW(row.expense) : '-'}</td>
                     <td className="text-center">{row.inquiryCount || '-'}</td>
                     <td className="text-center">{row.completedCount || '-'}</td>
                   </tr>

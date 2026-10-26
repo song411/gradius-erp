@@ -5,13 +5,13 @@ import { db } from '@/lib/supabase/api'
 import { formatKRW } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Building2, AlertCircle, CheckCircle2, Clock, Search, Download, ChevronDown, ChevronRight, MapPin, User, Package } from 'lucide-react'
+import { Building2, AlertCircle, CheckCircle2, Clock, Search, Download, ChevronDown, ChevronRight, MapPin, User } from 'lucide-react'
+import EstimateItemsTable from './EstimateItemsTable'
 import type { CeoData } from './CeoContent'
 import type { Settlement, Inquiry } from '@/lib/supabase/types'
 import { toast } from 'sonner'
 import * as XLSX from 'xlsx'
 import { PeriodFilter, isInPeriodFn, type PeriodState } from './PeriodFilter'
-import { qtyUnit, daysUnit } from '@/lib/estimateUnits'
 import { itemsOfInquiry } from '@/lib/estimateItems'
 
 type DepositStatus = '입금완료' | '부분입금' | '미입금'
@@ -98,18 +98,22 @@ export default function DepositTab({ data }: { data: CeoData }) {
   // 엑셀 내보내기
   function exportExcel() {
     if (rows.length === 0) { toast.error('내보낼 데이터가 없습니다.'); return }
-    const headers = ['업체명', '행사명', '청구금액', '받은금액', '미수금', '입금상태']
+    const headers = ['업체명', '행사명', '행사일', '청구금액', '받은금액', '미수금', '입금상태', '세금계산서', '연락처', '메모']
     const data = rows.map(s => [
       s.company_name || s.inquiry?.company_name || '-',
       s.inquiry?.event_name || '-',
+      s.inquiry?.event_start?.slice(0, 10) || '',
       s.invoice_amount || s.supply_price || 0,
       s.received_amount || 0,
       Math.max(0, (s.invoice_amount || s.supply_price || 0) - (s.received_amount || 0)),
       s.deposit_status || '-',
+      s.tax_invoice_issued ? '발행완료' : '미발행',
+      s.contact_phone || s.inquiry?.phone || '',
+      s.invoice_request || '',
     ])
-    data.push(['합계', '', filteredBilled, filteredReceived, filteredBalance, ''])
+    data.push(['합계', '', '', filteredBilled, filteredReceived, filteredBalance, '', '', '', ''])
     const ws = XLSX.utils.aoa_to_sheet([headers, ...data])
-    ws['!cols'] = [{ wch: 16 }, { wch: 24 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 10 }]
+    ws['!cols'] = [{ wch: 16 }, { wch: 24 }, { wch: 11 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 30 }]
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, '업체입금현황')
     XLSX.writeFile(wb, `업체입금현황_${new Date().toLocaleDateString('ko-KR').replace(/\. /g, '-').replace('.', '')}.xlsx`)
@@ -417,43 +421,28 @@ export default function DepositTab({ data }: { data: CeoData }) {
                             ))}
                           </div>
 
-                          {/* 품목 목록 */}
-                          {inqItems.length > 0 && (
-                            <div className="bg-white rounded-lg border border-amber-100 overflow-hidden">
-                              <div className="px-3 py-2 bg-gray-50 border-b flex items-center gap-1.5">
-                                <Package className="h-3.5 w-3.5 text-gray-500" />
-                                <span className="text-xs font-bold text-gray-700">견적 품목 ({inqItems.length}개)</span>
-                              </div>
-                              <table className="w-full text-xs">
-                                <thead>
-                                  <tr className="bg-gray-800 text-white">
-                                    {['품목', '일', '명', '청구단가', '지급단가', '합계'].map(h => (
-                                      <th key={h} className="px-3 py-1.5 text-right first:text-left font-semibold">{h}</th>
-                                    ))}
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {inqItems.map((it, idx) => (
-                                    <tr key={it.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                                      <td className="px-3 py-1.5 font-medium text-gray-800">
-                                        {it.is_leader && <span className="text-2xs text-amber-600 font-bold mr-1">[팀장]</span>}
-                                        {it.role_name || '-'}
-                                      </td>
-                                      <td className="px-3 py-1.5 text-right text-gray-600">{it.days}{daysUnit(it.days_unit)}</td>
-                                      <td className="px-3 py-1.5 text-right text-gray-600">{it.quantity}{qtyUnit(it.quantity_unit)}</td>
-                                      <td className="px-3 py-1.5 text-right text-gray-700">{it.unit_price.toLocaleString()}</td>
-                                      <td className="px-3 py-1.5 text-right text-gray-500">{it.pay_unit_price.toLocaleString()}</td>
-                                      <td className="px-3 py-1.5 text-right font-bold text-blue-700">
-                                        {(it.quantity * it.days * it.unit_price).toLocaleString()}
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
+                          {/* 품목 목록 — 세금계산서 탭과 같은 표 */}
+                          <EstimateItemsTable items={inqItems} />
+
+                          {/* 입금 독촉에 필요한 것: 연락처 · 메모. 정산 화면에서 적은 "입금예정일" 메모가
+                              여기서 안 보여서 독촉할 때마다 정산 화면을 다시 열어야 했다 */}
+                          {(s.contact_phone || s.email || s.inquiry?.phone || s.invoice_request) && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {(s.contact_phone || s.email || s.inquiry?.phone) && (
+                                <div className="bg-white rounded-lg p-3 border border-amber-100">
+                                  <p className="text-2xs text-gray-400 font-semibold uppercase mb-1">연락처</p>
+                                  <p className="text-sm text-gray-700">
+                                    {[s.contact_phone || s.inquiry?.phone, s.email].filter(Boolean).join(' · ')}
+                                  </p>
+                                </div>
+                              )}
+                              {s.invoice_request && (
+                                <div className="bg-yellow-50 rounded-lg p-3 border border-yellow-200">
+                                  <p className="text-2xs text-yellow-700 font-semibold uppercase mb-1">📝 메모 (정산·발행)</p>
+                                  <p className="text-sm text-gray-700 whitespace-pre-line">{s.invoice_request}</p>
+                                </div>
+                              )}
                             </div>
-                          )}
-                          {inqItems.length === 0 && (
-                            <p className="text-xs text-gray-400 text-center py-2">등록된 견적 품목이 없습니다.</p>
                           )}
                         </div>
                       </td>

@@ -21,8 +21,9 @@ import {
   Plus, Trash2, ChevronRight, AlertCircle, Zap, ArrowRight, MessageSquare
 } from 'lucide-react'
 import Link from 'next/link'
-import type { Inquiry, Estimate, EstimateItem, Assignment, Settlement, InquiryStatus, Payout, EventExpense } from '@/lib/supabase/types'
+import type { Inquiry, Estimate, EstimateItem, Assignment, Settlement, InquiryStatus, Payout, EventExpense, Staff } from '@/lib/supabase/types'
 import ProjectMemoPanel from '@/components/memos/ProjectMemoPanel'
+import CrewProfileCard from '@/components/staff/CrewProfileCard'
 import { qtyUnit, daysUnit } from '@/lib/estimateUnits'
 import { attachItems, representativeEstimate } from '@/lib/estimateItems'
 import { isHeadOfficePayout } from '@/lib/finance'
@@ -44,6 +45,7 @@ export default function InquiryDetail({ id }: { id: string }) {
   const [settlement, setSettlement] = useState<Settlement | null>(null)
   const [payouts, setPayouts] = useState<Payout[]>([])
   const [expenses, setExpenses] = useState<EventExpense[]>([])
+  const [profileStaff, setProfileStaff] = useState<Staff | null>(null)
   const [loading, setLoading] = useState(true)
 
   // 모달 상태
@@ -213,10 +215,20 @@ export default function InquiryDetail({ id }: { id: string }) {
     if (!assignForm.staff_name.trim()) { setError('직원명을 입력해주세요.'); return }
     setSaving(true); setError('')
 
+    // 이름이 크루 명단에 딱 한 명 있으면 staff_id 를 붙인다. 예전엔 이름만 저장돼서
+    // 그 사람의 참여 이력·추천 점수에서 이 행사가 빠졌다
+    const name = assignForm.staff_name.trim()
+    let staffId: string | null = null
+    try {
+      const found = await db.list<Staff>('staff', { filters: { name }, limit: 2 })
+      if (found.length === 1) staffId = found[0].id
+    } catch { /* 연결 실패는 배정을 막지 않는다 */ }
+
     await db.insert('assignments', {
       inquiry_id:     id,
       event_name:     inquiry.event_name,
-      staff_name:     assignForm.staff_name.trim(),
+      staff_id:       staffId,
+      staff_name:     name,
       staff_type:     assignForm.staff_type,
       job_type:       assignForm.job_type    || null,
       phone:          assignForm.phone       || null,
@@ -302,6 +314,14 @@ export default function InquiryDetail({ id }: { id: string }) {
     load()
   }
 
+  // 배정 행의 이름을 누르면 크루 프로필 — 인원 배정 화면과 같은 카드
+  async function openCrewProfile(a: Assignment) {
+    if (!a.staff_id) { toast.info('크루 명단과 연결되지 않은 배정입니다. 크루 관리에서 이름으로 찾아보세요.'); return }
+    const s = await db.single<Staff>('staff', a.staff_id)
+    if (!s) { toast.error('크루 정보를 찾지 못했습니다.'); return }
+    setProfileStaff(s)
+  }
+
   if (loading) return (
     <div className="flex items-center justify-center h-64">
       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
@@ -317,7 +337,9 @@ export default function InquiryDetail({ id }: { id: string }) {
     </div>
   )
 
-  const payDetail = extractPayDetail(inquiry.notes)
+  // 페이는 pay_detail 칸이 원본이다 (영업 보드가 거기에 쓴다). 그 칸이 비어 있는 예전 건만
+  // notes 의 [페이: ...] 태그에서 꺼낸다 — 두 곳이 다르면 화면마다 다른 값이 보였다
+  const payDetail = inquiry.pay_detail?.trim() || (extractPayDetail(inquiry.notes) ? `${extractPayDetail(inquiry.notes)}만원` : '')
   const progress = getStatusProgress(inquiry.status)
   const confirmedCount = assignments.filter(a => a.status === '확정').length
   const totalPayAmount = assignments.filter(a => a.is_payable !== false).reduce((s, a) => s + (a.total_pay || a.pay_rate * a.work_days), 0)
@@ -339,7 +361,14 @@ export default function InquiryDetail({ id }: { id: string }) {
                 {inquiry.status}
               </span>
             </div>
-            <p className="text-gray-500 mt-1 text-lg">{inquiry.company_name}</p>
+            <p className="text-gray-500 mt-1 text-lg">
+              {inquiry.company_name ? (
+                <Link href={`/customers?search=${encodeURIComponent(inquiry.company_name)}`} className="hover:text-blue-700 hover:underline" title="고객사 화면에서 이 업체 보기">
+                  {inquiry.company_name}
+                </Link>
+              ) : null}
+              {inquiry.inquiry_code && <span className="ml-2 text-xs font-mono text-gray-400">{inquiry.inquiry_code}</span>}
+            </p>
             <div className="flex flex-wrap gap-4 mt-3 text-sm text-gray-600">
               {inquiry.event_start && (
                 <span>📅 {formatDate(inquiry.event_start)}{inquiry.event_end && inquiry.event_end !== inquiry.event_start ? ` ~ ${formatDate(inquiry.event_end)}` : ''}</span>
@@ -347,8 +376,22 @@ export default function InquiryDetail({ id }: { id: string }) {
               {inquiry.location && <span>📍 {inquiry.location}</span>}
               {inquiry.event_time && <span>🕐 {inquiry.event_time}</span>}
               {inquiry.required_staff && <span>👥 {inquiry.required_staff}명</span>}
-              {payDetail && <span className="font-semibold text-blue-700">💰 {payDetail}만원</span>}
+              {payDetail && <span className="font-semibold text-blue-700">💰 {payDetail}</span>}
+              {inquiry.event_dates && inquiry.event_dates.length > 0 && (
+                <span title="실제 운영일 (띄엄띄엄 행사)">🗓 운영 {inquiry.event_dates.length}일: {inquiry.event_dates.map(d => d.slice(5)).join(', ')}</span>
+              )}
+              {!inquiry.event_start && inquiry.date_memo && <span>📅 {inquiry.date_memo}</span>}
             </div>
+            {(inquiry.next_action || inquiry.lost_reason) && (
+              <div className="flex flex-wrap gap-3 mt-2 text-xs">
+                {inquiry.next_action && (
+                  <span className="bg-amber-50 text-amber-800 px-2 py-0.5 rounded">
+                    다음 할 일: {inquiry.next_action}{inquiry.next_action_at ? ` (${inquiry.next_action_at.slice(0, 10)})` : ''}
+                  </span>
+                )}
+                {inquiry.lost_reason && <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded">미체결 사유: {inquiry.lost_reason}</span>}
+              </div>
+            )}
           </div>
 
           {/* 상태 변경 드롭다운 */}
@@ -429,7 +472,9 @@ export default function InquiryDetail({ id }: { id: string }) {
             <InfoRow label="복장"      value={inquiry.attire} />
             <InfoRow label="식사"      value={inquiry.meal} />
             <InfoRow label="주차"      value={inquiry.parking} />
-            <InfoRow label="페이"      value={payDetail ? `${payDetail}만원` : inquiry.expected_pay ? formatKRW(inquiry.expected_pay) : undefined} />
+            <InfoRow label="페이"      value={payDetail || (inquiry.expected_pay ? formatKRW(inquiry.expected_pay) : undefined)} />
+            <InfoRow label="분류"      value={inquiry.category} />
+            <InfoRow label="접수일"    value={inquiry.created_at ? formatDate(inquiry.created_at) : undefined} />
           </div>
           {inquiry.notes && (
             <div className="mt-4 p-3 bg-gray-50 rounded-lg">
@@ -473,13 +518,32 @@ export default function InquiryDetail({ id }: { id: string }) {
               {estimates.map(est => {
                 const rate = est.profit_rate || calcProfitRate(est.supply_price, est.cost_price)
                 return (
-                  <div key={est.id} className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+                  <div key={est.id} className={`p-4 rounded-xl border ${est.is_final ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-100'}`}>
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="font-medium text-sm">{est.site_name || inquiry.event_name}</p>
+                        <p className="font-medium text-sm flex items-center gap-1.5 flex-wrap">
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${est.is_final ? 'bg-amber-500 text-white' : 'bg-indigo-100 text-indigo-700'}`}>
+                            {est.version_label || 'A안'}
+                          </span>
+                          {est.is_final && <span className="text-xs text-amber-700 font-semibold">★ 최종 확정</span>}
+                          {est.site_name || inquiry.event_name}
+                          {est.send_status === '발송완료' && (
+                            <span className="text-2xs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded" title={est.sent_at ? `발송 ${formatDate(est.sent_at)}` : ''}>
+                              발송완료{est.sent_at ? ` ${formatDate(est.sent_at)}` : ''}
+                            </span>
+                          )}
+                          {est.estimate_code && <span className="text-2xs font-mono text-gray-400">{est.estimate_code}</span>}
+                        </p>
                         <p className="text-xs text-gray-500 mt-0.5">
                           품목 {est.estimate_items?.length || 0}개 · 공급가 {formatKRW(est.supply_price)} · 부가세 {formatKRW(est.vat)}
+                          {est.discount_type && est.discount_type !== 'none' && est.discount_value ? ` · ${est.discount_label || '할인'} ${est.discount_type === 'amount' ? formatKRW(est.discount_value) : `${est.discount_value}%`}` : ''}
                         </p>
+                        {est.prev_total_price != null && est.prev_total_price !== est.total_price && (
+                          <p className="text-2xs text-gray-400 mt-0.5">
+                            이전 {formatKRW(est.prev_total_price)} → 현재 {formatKRW(est.total_price)}
+                            {est.prev_items_summary ? ` (이전 품목: ${est.prev_items_summary})` : ''}
+                          </p>
+                        )}
                       </div>
                       <div className="text-right">
                         <p className="font-bold text-blue-700">{formatKRW(est.total_price)}</p>
@@ -515,9 +579,20 @@ export default function InquiryDetail({ id }: { id: string }) {
             배정 인력 ({assignments.length}명 · 확정 {confirmedCount}명)
           </CardTitle>
           <div className="flex items-center gap-2">
+            {inquiry.required_staff ? (
+              <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${confirmedCount >= inquiry.required_staff ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}
+                title="확정 인원 / 필요 인원">
+                {confirmedCount}/{inquiry.required_staff}명
+              </span>
+            ) : null}
             {totalPayAmount > 0 && (
               <span className="text-sm font-semibold text-blue-700">지급합계 {formatKRW(totalPayAmount)}</span>
             )}
+            <Link href={`/assignments?inq=${id}`}>
+              <Button variant="outline" size="sm" title="인원 배정 화면에서 이 행사 열기 (추천·섭외 문구·드래그 배정)">
+                배정 화면 →
+              </Button>
+            </Link>
             <Button variant="outline" size="sm" onClick={() => setShowAssignModal(true)}>
               <Plus className="h-3.5 w-3.5" /> 배정
             </Button>
@@ -550,12 +625,18 @@ export default function InquiryDetail({ id }: { id: string }) {
                   {assignments.map(a => (
                     <tr key={a.id}>
                       <td className="font-medium">
-                        <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openCrewProfile(a)}
+                          className="flex items-center gap-2 hover:text-blue-700"
+                          title={a.staff_id ? '크루 프로필 보기' : '크루 명단과 연결되지 않은 배정'}
+                        >
                           <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-xs font-bold">
                             {a.staff_name?.[0] || '?'}
                           </div>
                           {a.staff_name}
-                        </div>
+                          {!a.staff_id && <span className="text-2xs text-gray-400">(미연결)</span>}
+                        </button>
                       </td>
                       <td>
                         <span className={`text-xs px-1.5 py-0.5 rounded ${(a as any).role_type === '팀장' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600'}`}>
@@ -618,24 +699,106 @@ export default function InquiryDetail({ id }: { id: string }) {
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <InfoRow label="공급가액" value={formatKRW(settlement.supply_price)} />
-              <InfoRow label="부가세"   value={formatKRW(settlement.vat)} />
-              <InfoRow label="수금액"   value={formatKRW(settlement.received_amount)} />
-              <InfoRow label="잔액"     value={formatKRW(settlement.balance || 0)} />
-              <InfoRow label="지급액"   value={formatKRW(settlement.payout_amount)} />
-              <InfoRow label="원천세"   value={formatKRW(settlement.withholding_tax)} />
-              <InfoRow label="수익"     value={formatKRW(settlement.profit || 0)} />
-              <div>
-                <p className="text-xs text-gray-400 font-medium">입금 상태</p>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <InfoRow label="공급가액" value={formatKRW(settlement.supply_price)} />
+                <InfoRow label="부가세"   value={formatKRW(settlement.vat)} />
+                <InfoRow label="청구금액 (합계)" value={formatKRW(settlement.invoice_amount || settlement.supply_price + settlement.vat)} />
+                <InfoRow label="수금액"   value={formatKRW(settlement.received_amount)} />
+                <InfoRow label="잔액"     value={formatKRW(settlement.balance || 0)} />
+                <InfoRow label="등록 지급액" value={formatKRW(settlement.payout_amount)} />
+                <InfoRow label="원천세"   value={formatKRW(settlement.withholding_tax)} />
+                <InfoRow label="진행"     value={settlement.progress} />
+              </div>
+              {/* 입금·세금계산서 — 끝난 행사에서 제일 자주 묻는 두 가지. 예전엔 입금 상태만 보였다 */}
+              <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-gray-100">
                 <span className={`text-sm px-2 py-0.5 rounded-full ${STATUS_COLORS[settlement.deposit_status] || 'bg-gray-100 text-gray-600'}`}>
-                  {settlement.deposit_status}
+                  💰 {settlement.deposit_status}
                 </span>
+                {settlement.tax_invoice_issued ? (
+                  <span className="text-sm px-2 py-0.5 rounded-full bg-green-100 text-green-700">
+                    🧾 세금계산서 발행완료{settlement.tax_invoice_issued_at ? ` · ${formatDate(settlement.tax_invoice_issued_at)}` : ''}
+                  </span>
+                ) : (
+                  <span className="text-sm px-2 py-0.5 rounded-full bg-red-50 text-red-600">🧾 세금계산서 미발행</span>
+                )}
+                {settlement.tax_invoice_group && (
+                  <Link href={`/ceo?tab=tax&group=${encodeURIComponent(settlement.tax_invoice_group)}`}
+                    className="text-sm px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+                    title="같이 발행된 건을 모아 봅니다">
+                    합산 발행 묶음 →
+                  </Link>
+                )}
+                {settlement.invoice_request && (
+                  <span className="text-xs text-yellow-800 bg-yellow-50 px-2 py-0.5 rounded">📝 {settlement.invoice_request}</span>
+                )}
+                <Link href={`/settlements?search=${encodeURIComponent(inquiry.event_name || '')}`} className="ml-auto text-xs text-blue-600 hover:underline">
+                  정산/청구 화면에서 열기 →
+                </Link>
               </div>
             </div>
           )}
         </CardContent>
       </Card>
+
+      {/* ── 지급·부대비용 — "이 행사 다 끝났나"를 한 화면에서 ── */}
+      {(payouts.length > 0 || expenses.length > 0 || settlement) && (
+        <Card>
+          <CardHeader className="flex-row items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <CreditCard className="h-4 w-4 text-amber-600" />
+              인력비 지급 · 부대비용
+            </CardTitle>
+            <Link href="/payouts" className="text-xs text-blue-600 hover:underline">지급 관리로 →</Link>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {(() => {
+              const crewPays   = payouts.filter(p => !isHeadOfficePayout(p))
+              const occurred   = crewPays.reduce((s, p) => s + (p.final_pay || 0), 0)
+              const paid       = crewPays.filter(p => ['지급완료', '완료'].includes(p.status)).reduce((s, p) => s + (p.final_pay || 0), 0)
+              const expenseSum = expenses.reduce((s, e) => s + (e.amount || 0), 0)
+              const revenue    = settlement?.supply_price || 0
+              const profit     = revenue - occurred - expenseSum
+              return (
+                <>
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                    <InfoRow label="지급 (발생)" value={formatKRW(occurred)} />
+                    <InfoRow label="송금 완료"   value={formatKRW(paid)} />
+                    <InfoRow label="미송금"      value={occurred - paid > 0 ? formatKRW(occurred - paid) : '없음'} />
+                    <InfoRow label="부대비용"    value={expenseSum > 0 ? formatKRW(expenseSum) : '없음'} />
+                    <InfoRow label="수익 (공급가-지급-부대)" value={revenue > 0 ? `${formatKRW(profit)} (${Math.round(profit / revenue * 100)}%)` : '정산 없음'} />
+                  </div>
+                  {crewPays.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {crewPays.map(p => {
+                        const done = ['지급완료', '완료'].includes(p.status)
+                        return (
+                          <span key={p.id} className={`text-xs px-2 py-1 rounded-lg border ${done ? 'bg-green-50 border-green-200 text-green-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}
+                            title={done && p.paid_at ? `송금 ${formatDate(p.paid_at)}` : p.status}>
+                            {p.staff_name} {formatKRW(p.final_pay)} · {p.status}{done && p.paid_at ? ` ${formatDate(p.paid_at)}` : ''}
+                          </span>
+                        )
+                      })}
+                    </div>
+                  )}
+                  {payouts.length === 0 && (
+                    <p className="text-xs text-gray-400">지급 등록이 아직 없습니다. 배정 단가 기준 예상 지급은 위 배정 카드의 지급합계를 보세요.</p>
+                  )}
+                  {expenses.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {expenses.map(e => (
+                        <span key={e.id} className="text-xs px-2 py-1 rounded-lg bg-gray-50 border border-gray-200 text-gray-700" title={e.memo || ''}>
+                          {e.category} {formatKRW(e.amount)}{e.spent_on ? ` · ${e.spent_on.slice(0, 10)}` : ''}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )
+            })()}
+          </CardContent>
+        </Card>
+      )}
 
       {/* ── 프로젝트 메모 ── */}
       <Card>
@@ -649,6 +812,16 @@ export default function InquiryDetail({ id }: { id: string }) {
           <ProjectMemoPanel inquiryId={id} />
         </CardContent>
       </Card>
+
+      {/* 크루 프로필 모달 — 인원 배정 화면과 같은 카드 */}
+      {profileStaff && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setProfileStaff(null)} />
+          <div className="relative z-10 w-full max-w-sm">
+            <CrewProfileCard staff={profileStaff} onClose={() => setProfileStaff(null)} onEdit={() => {}} />
+          </div>
+        </div>
+      )}
 
       {/* ════════════════════════════════════
           견적 작성 모달

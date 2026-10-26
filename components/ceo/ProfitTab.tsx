@@ -6,7 +6,7 @@ import { ChevronDown, ChevronRight, TrendingUp, TrendingDown, Minus, Clock, User
 import { Input } from '@/components/ui/input'
 import type { CeoData } from './CeoContent'
 import {
-  buildFinanceIndex, payoutOf, expenseOf, isCountable, isEstimated, isHeadOfficeAssignment,
+  buildFinanceIndex, payoutOf, expenseOf, isCountable, isEstimated, isHeadOfficeAssignment, isHeadOfficePayout,
   PAYOUT_STAGE_LABEL,
   type PayoutSource, type PayoutStage,
 } from '@/lib/finance'
@@ -182,7 +182,10 @@ export default function ProfitTab({ data }: { data: CeoData }) {
           payoutCase = 'none'                  // 배정 자체 없음
         }
 
-        return { inquiry: q, settlement: sett, payouts: donePaouts, supplyPrice, totalPayout, totalExpense, profit, profitRate, payoutCase, hqNames, payoutSource, payoutStage, paidAmount, pendingAmount }
+        // 드릴다운엔 지급완료만 보여주면서 합계는 대기분까지 더해 카드 합과 합계가 안 맞았다.
+        // 전부 보여주고 각 카드에 상태를 붙인다 (본사 인원 행은 비용이 아니라 뺀다)
+        void donePaouts
+        return { inquiry: q, settlement: sett, payouts: allPayouts.filter(p => !isHeadOfficePayout(p)), supplyPrice, totalPayout, totalExpense, profit, profitRate, payoutCase, hqNames, payoutSource, payoutStage, paidAmount, pendingAmount }
       })
       .filter(r => r.supplyPrice > 0)
       .sort((a, b) => {
@@ -404,16 +407,24 @@ export default function ProfitTab({ data }: { data: CeoData }) {
                           <>
                             <p className="text-2xs font-semibold text-gray-400 uppercase tracking-wider mb-2">지급 내역</p>
                             <div className="flex flex-wrap gap-2">
-                              {r.payouts.map(p => (
-                                <div key={p.id} className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-xs">
-                                  <p className="font-semibold text-gray-800">{p.staff_name || '이름 없음'}</p>
-                                  <p className="text-gray-500">{p.bank_name} {p.account_number}</p>
-                                  <p className="text-blue-700 font-bold mt-0.5">{formatKRW(p.final_pay)}</p>
-                                </div>
-                              ))}
+                              {r.payouts.map(p => {
+                                const paid = ['지급완료', '완료'].includes(p.status)
+                                return (
+                                  <div key={p.id} className={`bg-white border rounded-lg px-3 py-2 text-xs ${paid ? 'border-gray-200' : 'border-amber-200'}`}>
+                                    <p className="font-semibold text-gray-800 flex items-center gap-1">
+                                      {p.staff_name || '이름 없음'}
+                                      <span className={`text-2xs px-1 py-0.5 rounded ${paid ? 'bg-green-50 text-green-600' : 'bg-amber-50 text-amber-700'}`}>{p.status}</span>
+                                    </p>
+                                    <p className="text-gray-500">{p.bank_name} {p.account_number}</p>
+                                    <p className={`font-bold mt-0.5 ${paid ? 'text-blue-700' : 'text-amber-700'}`}>{formatKRW(p.final_pay)}</p>
+                                  </div>
+                                )
+                              })}
                               <div className="bg-slate-100 border border-slate-200 rounded-lg px-3 py-2 text-xs flex flex-col justify-center">
-                                <p className="text-gray-500">합계 지급</p>
+                                <p className="text-gray-500">합계 지급 (발생 기준)</p>
                                 <p className="font-bold text-gray-800">{formatKRW(r.totalPayout)}</p>
+                                {r.pendingAmount > 0 && <p className="text-2xs text-amber-700">미송금 {formatKRW(r.pendingAmount)}</p>}
+                                {r.totalExpense > 0 && <p className="text-2xs text-gray-500">부대비용 {formatKRW(r.totalExpense)} 별도 차감</p>}
                               </div>
                             </div>
                           </>

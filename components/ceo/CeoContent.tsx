@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { db } from '@/lib/supabase/api'
-import { HQ_STAFF_NAMES } from '@/lib/finance'
+import { HQ_STAFF_NAMES, needsTaxInvoice } from '@/lib/finance'
 import type { Inquiry, Settlement, Payout, Assignment, Customer, EstimateItem, Estimate, EventExpense } from '@/lib/supabase/types'
 import { BarChart3, Receipt, Banknote, Building2, TrendingUp } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -82,9 +82,7 @@ export default function CeoContent() {
     if (id === 'tax') {
       // settlements.tax_invoice_issued = false → 미발행
       return data.settlements.filter(s =>
-        ['체결', '배정완료', '진행중', '완료', '정산완료'].includes(
-          data.inquiries.find(q => q.id === s.inquiry_id)?.status || ''
-        ) && !s.tax_invoice_issued
+        needsTaxInvoice(data.inquiries.find(q => q.id === s.inquiry_id)) && !s.tax_invoice_issued
       ).length
     }
     if (id === 'payment') {

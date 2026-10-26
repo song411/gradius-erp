@@ -231,9 +231,11 @@ export default function ClosingForm({ open, onClose, onSaved, editTarget, custom
           </div>
         </section>
 
-        {/* 세금계산서 발행 메모 */}
+        {/* 메모 — 정산 화면의 "메모 (입금·발행 공통)"과 같은 칸(invoice_request)이다.
+            한쪽은 '발행 메모', 다른 쪽은 '입금 특이사항'이라고 불러서 "입금예정 10/5"가
+            발행 지시처럼 보이곤 했다. 이름을 맞춘다 */}
         <section>
-          <label className="label-xs">발행 메모</label>
+          <label className="label-xs">메모 (입금·발행 공통)</label>
           <div className="flex flex-wrap gap-1 mb-1.5">
             {INVOICE_REQUEST_PRESETS.map(p => (
               <button

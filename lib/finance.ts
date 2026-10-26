@@ -20,6 +20,13 @@ export function isCountable(inq: Inquiry | undefined): boolean {
   return !!inq && !NON_COUNTABLE.includes(inq.status as typeof NON_COUNTABLE[number])
 }
 
+/** 세금계산서를 챙겨야 하는 문의 상태 — 체결 이후. 취소·보류·미체결 건의 정산은 '미발행'으로 세지 않는다.
+ *  CEO 세금계산서 탭과 체결 관리 화면이 미발행 건수를 다르게 보여주던 원인이 이 목록이 한쪽에만 있던 것. */
+export const TAX_INVOICE_STATUSES = ['체결', '배정완료', '진행중', '완료', '정산완료'] as const
+export function needsTaxInvoice(inq: Pick<Inquiry, 'status'> | undefined): boolean {
+  return !!inq && (TAX_INVOICE_STATUSES as readonly string[]).includes(inq.status)
+}
+
 // ─── ①-2 체결율 ──────────────────────────────────────────
 /** 체결율을 세는 한 가지 방법.
  *

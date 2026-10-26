@@ -21,7 +21,7 @@ import type {
 } from '@/lib/supabase/types'
 import {
   buildFinanceIndex, dedupeSettlements, toRows, countableRows, sumRows, unpaidTotal,
-  payoutOf, PAYOUT_SOURCE_LABEL, PAYOUT_STAGE_LABEL, HQ_STAFF_NAMES,
+  payoutOf, expenseOf, PAYOUT_SOURCE_LABEL, PAYOUT_STAGE_LABEL, HQ_STAFF_NAMES,
 } from '@/lib/finance'
 import { toast } from 'sonner'
 import { findPrevBizInfo, uniqueBizOptions, searchBizOptions, bizInfoOf, fillEmptyBizFields, type BizInfo } from '@/lib/bizInfo'
@@ -527,7 +527,11 @@ export default function SettlementsContent() {
                       // 행의 수익도 합계와 같은 규칙으로 — 정산에 적힌 예상지급이 비어 있으면
                       // 예전에는 수익이 공급가 전액으로 보였다
                       const rowPay       = payoutOf(finIndex, s.inquiry_id, s.payout_amount)
-                      const profitRate   = calcProfitRate(s.supply_price, rowPay.amount)
+                      // 위의 총 수익 카드는 부대비용을 빼는데 행은 안 빼서, 교통·숙박이 큰 행사가
+                      // 행에서만 흑자로 보였다. 같은 규칙(lib/finance.ts)으로 맞춘다
+                      const rowExpense   = expenseOf(finIndex, s.inquiry_id)
+                      const rowProfit    = s.supply_price - rowPay.amount - rowExpense
+                      const profitRate   = calcProfitRate(s.supply_price, rowPay.amount + rowExpense)
                       const isMemoEditing = memoEditId === s.id
 
                       const isAmtEditing = amtEditId === s.id
@@ -614,7 +618,8 @@ export default function SettlementsContent() {
                               <ProfitRateBadge rate={profitRate} />
                             </div>
                             <p className="text-2xs text-gray-400 mt-0.5">
-                              {formatKRW(s.supply_price - rowPay.amount)}
+                              {formatKRW(rowProfit)}
+                              {rowExpense > 0 && <span className="ml-1 text-gray-400" title="부대비용 차감">(부대 -{formatKRW(rowExpense)})</span>}
                               {rowPay.stage !== 'paid' && (
                                 <span
                                   className={`ml-1 text-2xs ${
@@ -939,8 +944,10 @@ export default function SettlementsContent() {
               <Input value={form.manager} onChange={e => setForm(f => ({ ...f, manager: e.target.value }))} />
             </div>
             <div className="col-span-2">
-              <label className="text-xs font-medium text-gray-600 mb-1 block">사업장 주소 (세금계산서용 — 현장주소와 다를 수 있음)</label>
-              <Input value={form.site_address} onChange={e => setForm(f => ({ ...f, site_address: e.target.value }))} placeholder="세금계산서 발행용 사업장 주소" />
+              {/* site_address 는 현장주소다. 예전 라벨이 '사업장 주소(세금계산서용)'이라
+                  현장주소 칸에 사업장주소를 적게 유도했다. 사업장주소 칸은 아래 발행 정보에 따로 있다 */}
+              <label className="text-xs font-medium text-gray-600 mb-1 block">현장 주소 (행사 장소)</label>
+              <Input value={form.site_address} onChange={e => setForm(f => ({ ...f, site_address: e.target.value }))} placeholder="행사가 열리는 곳. 세금계산서용 사업장주소는 아래 발행 정보에" />
             </div>
 
             {/* 청구 금액 */}
@@ -1046,7 +1053,7 @@ export default function SettlementsContent() {
             </div>
 
             <div className="col-span-2">
-              <h4 className="text-xs font-semibold text-gray-700 mt-1 mb-2 border-t pt-3">메모 / 입금 특이사항</h4>
+              <h4 className="text-xs font-semibold text-gray-700 mt-1 mb-2 border-t pt-3">메모 (입금·발행 공통)</h4>
               <Textarea
                 value={form.invoice_request}
                 onChange={e => setForm(f => ({ ...f, invoice_request: e.target.value }))}

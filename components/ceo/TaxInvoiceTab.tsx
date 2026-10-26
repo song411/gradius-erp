@@ -1,7 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { db } from '@/lib/supabase/api'
+import EstimateItemsTable from './EstimateItemsTable'
 import { formatKRW } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,11 +12,9 @@ import type { CeoData } from './CeoContent'
 import type { Settlement, Inquiry, Customer, EstimateItem, Estimate } from '@/lib/supabase/types'
 import { toast } from 'sonner'
 import { itemsOfInquiry } from '@/lib/estimateItems'
-import { qtyUnit, daysUnit } from '@/lib/estimateUnits'
 
-// 체결 이후 단계만 세금계산서 관리 대상
-const TAX_STATUSES = ['체결', '배정완료', '진행중', '완료', '정산완료']
-
+// 체결 이후 단계만 세금계산서 관리 대상 — 기준은 lib/finance.ts (체결 관리 화면과 같은 것)
+import { needsTaxInvoice } from '@/lib/finance'
 import { PeriodFilter, isInPeriodFn, type PeriodState } from './PeriodFilter'
 
 interface SettRow extends Settlement {
@@ -92,6 +92,10 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
   const [periodState, setPeriodState] = useState<PeriodState>({ period: '전체', customFrom: '', customTo: '' })
   // 합산 발행용 선택 (미발행 탭에서만)
   const [selected, setSelected]       = useState<Set<string>>(new Set())
+  // 묶음 모아보기 — "합산 발행 N건" 배지를 누르면 그 묶음만 남긴다. 체결 관리 화면의
+  // '합산' 배지에서 ?group= 으로 넘어올 수도 있다
+  const searchParams = useSearchParams()
+  const [groupFilter, setGroupFilter] = useState<string | null>(searchParams.get('group'))
 
   // 고객사 맵 (id → customer)
   const customerMap = new Map(customers.map(c => [c.id, c]))
@@ -106,7 +110,7 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
       const finalEstimate = estimates.find(e => e.inquiry_id === s.inquiry_id && e.is_final)
       return { ...s, inquiry, customer, items, finalEstimate }
     })
-    .filter(s => TAX_STATUSES.includes(s.inquiry?.status || ''))
+    .filter(s => needsTaxInvoice(s.inquiry))
     .sort((a, b) => (a.inquiry?.event_start || '').localeCompare(b.inquiry?.event_start || ''))
 
   // 기간 필터 적용
@@ -145,8 +149,14 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
     return list  // 기본순: event_start 오름차순 (이미 rows에서 정렬됨)
   }
 
+  // 묶음을 보는 중이면 탭·기간·검색과 무관하게 그 묶음 전부 — 한 장으로 나간 건은 한 번에 봐야 한다
+  const groupRows = groupFilter ? rows.filter(r => r.tax_invoice_group === groupFilter) : []
   const base    = viewTab === 'unissued' ? unissued : viewTab === 'issued' ? issued : periodFiltered
-  const current = sortList(applySearch(base))
+  const current = groupFilter ? groupRows : sortList(applySearch(base))
+  const groupSupply = groupRows.reduce((a, r) => a + (r.supply_price || 0), 0)
+  const groupVat    = groupRows.reduce((a, r) => a + (r.vat || 0), 0)
+  const groupTotal  = groupRows.reduce((a, r) => a + (r.invoice_amount || r.supply_price + r.vat), 0)
+  const groupBalance = groupRows.reduce((a, r) => a + Math.max(0, r.balance ?? (r.invoice_amount - r.received_amount)), 0)
 
   // 같은 업체가 2건 이상인 키 → 건수 (지금 보고 있는 미발행 목록 기준)
   const dupCount = new Map<string, number>()
@@ -377,9 +387,45 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
         </button>
       </div>
 
+      {/* 묶음 모아보기 띠 */}
+      {groupFilter && (
+        <div className="bg-indigo-50 border-2 border-indigo-300 rounded-xl px-5 py-3 flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Layers className="h-4 w-4 text-indigo-600" />
+            <span className="font-bold text-sm text-indigo-800">
+              묶음 {groupFilter} · {groupRows.length}건
+              {groupRows[0] && <span className="font-medium text-indigo-600"> · {groupRows[0].company_name || groupRows[0].corp_name || groupRows[0].inquiry?.company_name || ''}</span>}
+            </span>
+          </div>
+          {groupRows.length === 0 ? (
+            <span className="text-xs text-indigo-600">이 묶음 번호로 발행된 건이 없습니다 (되돌렸거나 번호가 다릅니다)</span>
+          ) : (
+            <div className="flex items-center gap-3 text-xs text-indigo-700">
+              <span>공급가 <b>{formatKRW(groupSupply)}</b></span>
+              <span>부가세 <b>{formatKRW(groupVat)}</b></span>
+              <span>합계 <b className="text-sm">{formatKRW(groupTotal)}</b></span>
+              {groupBalance > 0 && <span className="text-red-600">미수 <b>{formatKRW(groupBalance)}</b></span>}
+              {groupRows[0]?.tax_invoice_issued_at && <span className="text-indigo-500">처리 {formatIssuedAt(groupRows[0].tax_invoice_issued_at, true)}</span>}
+            </div>
+          )}
+          <div className="flex items-center gap-2 ml-auto">
+            {groupRows.length > 0 && (
+              <button
+                onClick={() => copyText(itemText(groupRows), '품목 문구')}
+                className="text-xs px-2.5 py-1.5 rounded-lg bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-100 flex items-center gap-1">
+                <Copy className="h-3 w-3" />품목 문구 복사
+              </button>
+            )}
+            <button onClick={() => setGroupFilter(null)} className="text-xs px-2.5 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 flex items-center gap-1">
+              <X className="h-3 w-3" />묶음 보기 닫기
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 목록 */}
       <div className={`bg-white rounded-xl overflow-hidden shadow-sm border-2 ${
-        viewTab === 'unissued' ? 'border-red-200' : viewTab === 'issued' ? 'border-green-200' : 'border-blue-200'
+        groupFilter ? 'border-indigo-300' : viewTab === 'unissued' ? 'border-red-200' : viewTab === 'issued' ? 'border-green-200' : 'border-blue-200'
       }`}>
         <div className={`px-4 py-3 border-b-2 flex items-center gap-2 ${
           viewTab === 'unissued' ? 'bg-red-50 border-red-200' : viewTab === 'issued' ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'
@@ -388,7 +434,7 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
             : viewTab === 'issued' ? <CheckCircle2 className="h-4 w-4 text-green-600" />
             : <Receipt className="h-4 w-4 text-blue-600" />}
           <h3 className={`font-bold text-sm ${viewTab === 'unissued' ? 'text-red-700' : viewTab === 'issued' ? 'text-green-700' : 'text-blue-700'}`}>
-            {viewTab === 'unissued' ? `미발행 세금계산서 (${current.length}건)` : viewTab === 'issued' ? `발행완료 이력 (${current.length}건)` : `전체 목록 (${current.length}건)`}
+            {groupFilter ? `같이 발행된 건 (${current.length}건)` : viewTab === 'unissued' ? `미발행 세금계산서 (${current.length}건)` : viewTab === 'issued' ? `발행완료 이력 (${current.length}건)` : `전체 목록 (${current.length}건)`}
           </h3>
         </div>
 
@@ -402,14 +448,15 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
               <TaxRow
                 key={s.id}
                 row={s}
-                issued={viewTab === 'issued'}
-                selectable={viewTab === 'unissued'}
+                issued={viewTab === 'issued' || (!!groupFilter && !!s.tax_invoice_issued)}
+                selectable={viewTab === 'unissued' && !groupFilter}
                 selected={selected.has(s.id)}
                 onToggle={() => toggleSelect(s)}
-                dupCount={viewTab === 'unissued' ? (dupCount.get(bizKey(s)) || 0) : 0}
+                dupCount={viewTab === 'unissued' && !groupFilter ? (dupCount.get(bizKey(s)) || 0) : 0}
                 onSelectDup={() => selectAllOf(s)}
                 groupMates={s.tax_invoice_group ? rows.filter(r => r.tax_invoice_group === s.tax_invoice_group && r.id !== s.id) : []}
-                action={viewTab === 'unissued' ? (
+                onShowGroup={s.tax_invoice_group ? () => setGroupFilter(s.tax_invoice_group!) : undefined}
+                action={!s.tax_invoice_issued ? (
                   <Button
                     size="sm"
                     onClick={() => handleIssue(s.id)}
@@ -435,7 +482,7 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
       </div>
 
       {/* 합산 발행 바 — 미발행 탭에서 1건 이상 고르면 화면 아래에 붙는다 */}
-      {viewTab === 'unissued' && selectedRows.length > 0 && (
+      {viewTab === 'unissued' && !groupFilter && selectedRows.length > 0 && (
         <div className="sticky bottom-3 z-10 bg-gray-900 text-white rounded-xl shadow-xl px-5 py-3 flex items-center gap-4 flex-wrap">
           <div className="flex items-center gap-2">
             <Layers className="h-4 w-4 text-amber-300" />
@@ -481,7 +528,7 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
 // 세금계산서 행 컴포넌트
 function TaxRow({
   row, action, issued = false,
-  selectable = false, selected = false, onToggle, dupCount = 0, onSelectDup, groupMates = [],
+  selectable = false, selected = false, onToggle, dupCount = 0, onSelectDup, groupMates = [], onShowGroup,
 }: {
   row: SettRow
   action: React.ReactNode
@@ -492,6 +539,7 @@ function TaxRow({
   dupCount?: number          // 미발행 목록에서 같은 업체가 몇 건인지 (자기 포함)
   onSelectDup?: () => void   // 같은 업체 건 전부 선택
   groupMates?: SettRow[]     // 같은 묶음으로 발행된 다른 건들
+  onShowGroup?: () => void   // 묶음만 모아 보기
 }) {
   const [open, setOpen] = useState(false)
 
@@ -529,7 +577,7 @@ function TaxRow({
   return (
     <div>
       <div
-        className={`flex items-start gap-3 px-4 py-3.5 hover:bg-gray-50 cursor-pointer ${selected ? 'bg-amber-50' : ''}`}
+        className={`flex items-start gap-3 px-4 py-3.5 hover:bg-gray-50 cursor-pointer ${selected ? 'bg-amber-50' : ''} ${row.tax_invoice_group ? 'border-l-4 border-indigo-300' : ''}`}
         onClick={() => setOpen(v => !v)}
       >
         {selectable && (
@@ -574,11 +622,12 @@ function TaxRow({
                 : <span className="text-xs text-gray-400" title="시각 기록 칸이 생기기 전에 처리됐거나, 마감 편집 폼 체크로 처리된 건">처리시각 기록 없음</span>
             )}
             {row.tax_invoice_group && (
-              <span
-                className="text-xs text-indigo-700 font-semibold bg-indigo-50 px-1.5 py-0.5 rounded inline-flex items-center gap-1"
-                title={`묶음 ${row.tax_invoice_group}${groupMates.length ? ' · 같이 발행: ' + groupMates.map(m => m.inquiry?.event_name || m.site_name || '').join(', ') : ''}`}>
+              <button
+                onClick={e => { e.stopPropagation(); onShowGroup?.() }}
+                className="text-xs text-indigo-700 font-semibold bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.5 rounded inline-flex items-center gap-1"
+                title={`묶음 ${row.tax_invoice_group} — 누르면 같이 발행된 건만 모아 봅니다${groupMates.length ? '\n같이 발행: ' + groupMates.map(m => m.inquiry?.event_name || m.site_name || '').join(', ') : ''}`}>
                 <Layers className="h-3 w-3" />합산 발행 {groupMates.length + 1}건
-              </span>
+              </button>
             )}
             {selectable && dupCount >= 2 && (
               <button
@@ -707,6 +756,9 @@ function TaxRow({
             )}
           </div>
 
+          {/* 견적 품목 — 업체입금 탭과 같은 표. 홈택스 품목란을 채울 때 인원·단가를 여기서 본다 */}
+          <EstimateItemsTable items={row.items || []} />
+
           {/* 같이 발행된 건 */}
           {groupMates.length > 0 && (
             <div className="bg-indigo-50 border-2 border-indigo-200 rounded-lg px-4 py-3">
@@ -717,9 +769,12 @@ function TaxRow({
                   <li key={m.id}>· {m.inquiry?.event_name || m.site_name || '-'} — {formatKRW(m.supply_price)}</li>
                 ))}
               </ul>
-              <p className="text-xs text-indigo-600 mt-1.5">
-                공급가 합계 <b>{formatKRW(row.supply_price + groupMates.reduce((a, m) => a + (m.supply_price || 0), 0))}</b>
-                {formatIssuedAt(row.tax_invoice_issued_at, true) && <> · 처리 {formatIssuedAt(row.tax_invoice_issued_at, true)}</>}
+              <p className="text-xs text-indigo-600 mt-1.5 flex items-center gap-2 flex-wrap">
+                <span>공급가 합계 <b>{formatKRW(row.supply_price + groupMates.reduce((a, m) => a + (m.supply_price || 0), 0))}</b>
+                {formatIssuedAt(row.tax_invoice_issued_at, true) && <> · 처리 {formatIssuedAt(row.tax_invoice_issued_at, true)}</>}</span>
+                {onShowGroup && (
+                  <button onClick={e => { e.stopPropagation(); onShowGroup() }} className="underline hover:text-indigo-800">묶음만 모아 보기 →</button>
+                )}
               </p>
             </div>
           )}

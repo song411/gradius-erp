@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dialog'
 import { Plus, Search, Edit2, Trash2, Users } from 'lucide-react'
 import type { Assignment, AssignmentStatus, Inquiry, Staff } from '@/lib/supabase/types'
+import { isHeadOfficeAssignment } from '@/lib/finance'
 
 const STATUS_OPTIONS: AssignmentStatus[] = ['후보', '배정중', '확정', '취소']
 
@@ -192,8 +193,9 @@ export default function ContractsContent() {
     total: assignments.length,
     confirmed: assignments.filter(a => a.status === '확정').length,
     pending: assignments.filter(a => a.status === '후보').length,
+    // 본사 인원은 지급이 없다 — 돈 세는 규칙(lib/finance.ts)과 같은 판정
     totalPay: assignments
-      .filter(a => a.status === '확정' && a.is_payable)
+      .filter(a => a.status === '확정' && a.is_payable && !isHeadOfficeAssignment(a))
       .reduce((sum, a) => sum + (a.total_pay || a.pay_rate * a.work_days), 0),
   }
 
