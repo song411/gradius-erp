@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { db } from '@/lib/supabase/api'
 import { calcVAT, calcVATReverse, calcProfitRate, formatKRW, toKoreanAmount } from '@/lib/utils'
+import { snapshotPayload } from '@/lib/estimateHistory'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -523,6 +524,14 @@ export default function EstimateBuilder({
           .forEach(it => prevRoleMap.set(it.role_name!, (prevRoleMap.get(it.role_name!) || 0) + (it.quantity || 1)))
         const prevItemsSummary = Array.from(prevRoleMap.entries())
           .map(([name, qty]) => `${name} ${qty}명`).join(', ') || null
+
+        // 고치기 직전 상태를 통째로 남긴다 — 변경 이력은 이걸 비교해서 보여준다 (lib/estimateHistory.ts).
+        // 이력 저장이 실패해도 견적 저장은 막지 않는다
+        try {
+          await db.insert('estimate_versions', snapshotPayload(editTarget, oldItems))
+        } catch (e) {
+          console.warn('견적 이력 저장 실패:', e)
+        }
 
         await db.update('estimates', editTarget.id, {
           ...payload,

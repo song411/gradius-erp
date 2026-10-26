@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { db } from '@/lib/supabase/api'
 import { HQ_STAFF_NAMES, needsTaxInvoice } from '@/lib/finance'
-import type { Inquiry, Settlement, Payout, Assignment, Customer, EstimateItem, Estimate, EventExpense } from '@/lib/supabase/types'
+import type { Inquiry, Settlement, Payout, Assignment, Customer, EstimateItem, Estimate, EventExpense, EstimateVersion } from '@/lib/supabase/types'
 import { BarChart3, Receipt, Banknote, Building2, TrendingUp } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 
@@ -25,6 +25,7 @@ export interface CeoData {
   estimateItems: EstimateItem[]   // 견적서 품목 (inquiry_id 기준)
   estimates:     Estimate[]       // 견적서 (prev_total_price 등 변경 이력용)
   expenses:      EventExpense[]   // 행사별 부대비용 (실제 지출) — 수익에서 차감
+  revisions:     EstimateVersion[] // 견적 변경 스냅샷 (lib/estimateHistory.ts)
   reload:        () => void
 }
 
@@ -60,7 +61,7 @@ export default function CeoContent() {
   // 처음 한 번만 전체 스피너를 보여준다. 버튼을 눌러 다시 불러올 때는 데이터를 그대로 둔 채
   // 뒤에서 갱신한다 — 예전엔 매번 스피너로 바뀌면서 탭이 다시 마운트돼 검색어·기간·정렬이 전부 초기화됐다.
   const load = useCallback(async () => {
-    const [inquiries, settlements, payouts, assignments, customers, estimateItems, estimates, expenses] = await Promise.all([
+    const [inquiries, settlements, payouts, assignments, customers, estimateItems, estimates, expenses, revisions] = await Promise.all([
       db.list<Inquiry>('inquiries'),
       db.list<Settlement>('settlements'),
       db.list<Payout>('payouts', { order: 'created_at', asc: false }),
@@ -70,8 +71,9 @@ export default function CeoContent() {
       db.list<Estimate>('estimates'),
       // 010 마이그레이션 전이면 테이블이 없다 — 실패해도 빈 목록으로 넘어간다
       db.list<EventExpense>('event_expenses', { order: 'created_at', asc: false }).catch(() => []),
+      db.list<EstimateVersion>('estimate_versions', { order: 'created_at', asc: true }).catch(() => []),
     ])
-    setData({ inquiries, settlements, payouts, assignments, customers, estimateItems, estimates, expenses })
+    setData({ inquiries, settlements, payouts, assignments, customers, estimateItems, estimates, expenses, revisions })
   }, [])
 
   useEffect(() => { load() }, [load])

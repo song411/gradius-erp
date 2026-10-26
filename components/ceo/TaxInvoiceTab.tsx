@@ -4,6 +4,9 @@ import { useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { db } from '@/lib/supabase/api'
 import EstimateItemsTable from './EstimateItemsTable'
+import RelatedLinks from '@/components/ui/RelatedLinks'
+import EstimateHistoryList from '@/components/estimates/EstimateHistoryList'
+import { historyOf, type HistoryEntry } from '@/lib/estimateHistory'
 import { formatKRW } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -84,11 +87,15 @@ function ElapsedBadge({ days, label }: { days: number | null; label?: string }) 
 }
 
 export default function TaxInvoiceTab({ data }: { data: CeoData }) {
-  const { settlements, inquiries, customers, estimateItems, estimates, reload } = data
+  const { settlements, inquiries, customers, estimateItems, estimates, revisions, reload } = data
   const [viewTab, setViewTab]         = useState<ViewTab>('unissued')
   const [sortKey, setSortKey]         = useState<SortKey>('기본순')
   const [processing, setProcessing]   = useState<string | null>(null)
-  const [search, setSearch]           = useState('')
+  const [search, setSearch]           = useState(() => {
+    // 다른 화면의 바로가기(?q=행사명)로 들어오면 그 건만 보이게
+    if (typeof window === 'undefined') return ''
+    return new URLSearchParams(window.location.search).get('q') || ''
+  })
   const [periodState, setPeriodState] = useState<PeriodState>({ period: '전체', customFrom: '', customTo: '' })
   // 합산 발행용 선택 (미발행 탭에서만)
   const [selected, setSelected]       = useState<Set<string>>(new Set())
@@ -456,6 +463,7 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
                 onSelectDup={() => selectAllOf(s)}
                 groupMates={s.tax_invoice_group ? rows.filter(r => r.tax_invoice_group === s.tax_invoice_group && r.id !== s.id) : []}
                 onShowGroup={s.tax_invoice_group ? () => setGroupFilter(s.tax_invoice_group!) : undefined}
+                history={s.finalEstimate ? historyOf(s.finalEstimate, s.items || [], revisions) : []}
                 action={!s.tax_invoice_issued ? (
                   <Button
                     size="sm"
@@ -528,7 +536,7 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
 // 세금계산서 행 컴포넌트
 function TaxRow({
   row, action, issued = false,
-  selectable = false, selected = false, onToggle, dupCount = 0, onSelectDup, groupMates = [], onShowGroup,
+  selectable = false, selected = false, onToggle, dupCount = 0, onSelectDup, groupMates = [], onShowGroup, history = [],
 }: {
   row: SettRow
   action: React.ReactNode
@@ -540,6 +548,7 @@ function TaxRow({
   onSelectDup?: () => void   // 같은 업체 건 전부 선택
   groupMates?: SettRow[]     // 같은 묶음으로 발행된 다른 건들
   onShowGroup?: () => void   // 묶음만 모아 보기
+  history?: HistoryEntry[]   // 확정 견적의 변경 이력
 }) {
   const [open, setOpen] = useState(false)
 
@@ -677,6 +686,9 @@ function TaxRow({
       {/* 세금계산서 상세 정보 */}
       {open && (
         <div className="bg-slate-50 px-8 py-4 border-t-2 border-dashed border-gray-300 space-y-4">
+          {/* 발행하다 견적이 잘못된 걸 알면 여기서 바로 그 견적으로 — 새 탭이라 이 자리는 그대로 */}
+          <RelatedLinks inquiryId={row.inquiry_id} eventName={inq?.event_name} companyName={row.company_name || inq?.company_name} hide={['세금계산서']} />
+
           {/* 세금계산서 발행정보 */}
           <div className="bg-white rounded-lg border border-gray-200 p-4">
             <p className="text-xs font-bold text-gray-600 uppercase tracking-wider mb-3 border-b border-gray-100 pb-2">세금계산서 발행 정보</p>
@@ -729,28 +741,16 @@ function TaxRow({
               <AmountItem label="💰 청구금액(합계)" value={row.invoice_amount || row.supply_price + row.vat} highlight />
               <AmountItem label="🔴 잔액"           value={balance} danger={balance > 0} />
             </div>
-            {/* 견적 변경 이력 */}
-            {row.finalEstimate?.prev_total_price != null && (
+            {/* 견적 변경 이력 — 품목 단위로 "스탭 1명 → 2명", 고친 시각까지 */}
+            {row.finalEstimate && (history.length > 0 || row.finalEstimate.prev_total_price != null) && (
               <div className="mt-3 pt-3 border-t border-dashed border-gray-200 space-y-1">
-                <p className="text-2xs font-semibold text-gray-400 uppercase tracking-wider">견적 변경 이력</p>
-                <div className="flex items-center gap-2 text-xs flex-wrap">
-                  <span className="text-gray-400 line-through">{formatKRW(row.finalEstimate.prev_total_price)}</span>
-                  <span className="text-gray-400">→</span>
-                  <span className="font-bold text-blue-700">{formatKRW(row.invoice_amount || row.supply_price + row.vat)}</span>
-                  <span className={`text-2xs px-1.5 py-0.5 rounded font-semibold ${
-                    (row.invoice_amount || row.supply_price + row.vat) > row.finalEstimate.prev_total_price
-                      ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'
-                  }`}>
-                    {(row.invoice_amount || row.supply_price + row.vat) > row.finalEstimate.prev_total_price ? '▲' : '▼'}
-                    {formatKRW(Math.abs((row.invoice_amount || row.supply_price + row.vat) - row.finalEstimate.prev_total_price))}
-                  </span>
-                </div>
-                {row.finalEstimate.prev_items_summary && (
-                  <p className="text-2xs text-gray-400">
-                    이전 품목: <span className="line-through">{row.finalEstimate.prev_items_summary}</span>
-                    {' → '}
-                    <span className="text-gray-600 font-medium">{itemSummary || '(현재 품목)'}</span>
-                  </p>
+                <p className="text-2xs font-semibold text-gray-400 uppercase tracking-wider">견적 변경 이력 ({row.finalEstimate.version_label || 'A안'})</p>
+                <EstimateHistoryList
+                  entries={history}
+                  legacy={{ prevTotal: row.finalEstimate.prev_total_price, prevItems: row.finalEstimate.prev_items_summary, total: row.finalEstimate.total_price, updatedAt: row.finalEstimate.updated_at }}
+                />
+                {row.finalEstimate.total_price !== (row.invoice_amount || row.supply_price + row.vat) && (
+                  <p className="text-2xs text-orange-600">※ 확정 견적 합계 {formatKRW(row.finalEstimate.total_price)} 와 청구금액이 다릅니다</p>
                 )}
               </div>
             )}

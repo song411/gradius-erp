@@ -24,6 +24,7 @@ import {
   payoutOf, expenseOf, PAYOUT_SOURCE_LABEL, PAYOUT_STAGE_LABEL, HQ_STAFF_NAMES,
 } from '@/lib/finance'
 import { toast } from 'sonner'
+import RelatedLinks from '@/components/ui/RelatedLinks'
 import { findPrevBizInfo, uniqueBizOptions, searchBizOptions, bizInfoOf, fillEmptyBizFields, type BizInfo } from '@/lib/bizInfo'
 
 interface PaySegment { rate: number; days: number }
@@ -750,6 +751,7 @@ export default function SettlementsContent() {
                           <tr>
                             <td colSpan={11} className="p-0 border-b border-blue-100">
                               <div className="bg-blue-50 px-5 py-4">
+                                <RelatedLinks inquiryId={s.inquiry_id} eventName={s.inquiries?.event_name || s.site_name} companyName={s.company_name} hide={['정산']} className="mb-3" />
                                 {detailLoading === s.id ? (
                                   <div className="flex items-center gap-2 py-2 text-sm text-gray-500">
                                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500" />

@@ -21,9 +21,12 @@ import {
   Plus, Trash2, ChevronRight, AlertCircle, Zap, ArrowRight, MessageSquare
 } from 'lucide-react'
 import Link from 'next/link'
-import type { Inquiry, Estimate, EstimateItem, Assignment, Settlement, InquiryStatus, Payout, EventExpense, Staff } from '@/lib/supabase/types'
+import type { Inquiry, Estimate, EstimateItem, Assignment, Settlement, InquiryStatus, Payout, EventExpense, Staff, EstimateVersion } from '@/lib/supabase/types'
 import ProjectMemoPanel from '@/components/memos/ProjectMemoPanel'
 import CrewProfileCard from '@/components/staff/CrewProfileCard'
+import EstimateHistoryList from '@/components/estimates/EstimateHistoryList'
+import RelatedLinks from '@/components/ui/RelatedLinks'
+import { historyOf } from '@/lib/estimateHistory'
 import { qtyUnit, daysUnit } from '@/lib/estimateUnits'
 import { attachItems, representativeEstimate } from '@/lib/estimateItems'
 import { isHeadOfficePayout } from '@/lib/finance'
@@ -46,6 +49,7 @@ export default function InquiryDetail({ id }: { id: string }) {
   const [payouts, setPayouts] = useState<Payout[]>([])
   const [expenses, setExpenses] = useState<EventExpense[]>([])
   const [profileStaff, setProfileStaff] = useState<Staff | null>(null)
+  const [revisions, setRevisions] = useState<EstimateVersion[]>([])
   const [loading, setLoading] = useState(true)
 
   // 모달 상태
@@ -80,7 +84,7 @@ export default function InquiryDetail({ id }: { id: string }) {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [inqList, estList, itemList, asgnList, setList, payList, expList] = await Promise.all([
+    const [inqList, estList, itemList, asgnList, setList, payList, expList, revList] = await Promise.all([
       db.list<Inquiry>('inquiries', { filters: { id }, limit: 1 }),
       db.list<Estimate>('estimates', { filters: { inquiry_id: id }, order: 'created_at', asc: false }),
       // 품목은 따로 불러 견적별로 붙인다 — 예전엔 아예 안 불러서 카드가 늘 "품목 0개"였다
@@ -90,7 +94,9 @@ export default function InquiryDetail({ id }: { id: string }) {
       db.list<Payout>('payouts', { filters: { inquiry_id: id }, order: 'created_at', asc: false }),
       // 010 마이그레이션 전이면 테이블이 없다 — 실패해도 빈 목록으로
       db.list<EventExpense>('event_expenses', { filters: { inquiry_id: id }, order: 'created_at', asc: false }).catch(() => [] as EventExpense[]),
+      db.list<EstimateVersion>('estimate_versions', { filters: { inquiry_id: id }, order: 'created_at', asc: true }).catch(() => [] as EstimateVersion[]),
     ])
+    setRevisions(revList)
     setInquiry(inqList[0] ?? null)
     setEstimates(attachItems(estList, itemList))
     setAssignments(asgnList)
@@ -435,6 +441,9 @@ export default function InquiryDetail({ id }: { id: string }) {
         </div>
       </div>
 
+      {/* ── 관련 화면 바로가기 (새 탭) ── */}
+      <RelatedLinks inquiryId={id} eventName={inquiry.event_name} companyName={inquiry.company_name} hide={['문의']} />
+
       {/* ── 액션 버튼 (다음 단계) ── */}
       <div className="flex flex-wrap gap-3">
         <Button onClick={() => { setError(''); setShowEstimateModal(true) }} variant="outline">
@@ -538,12 +547,6 @@ export default function InquiryDetail({ id }: { id: string }) {
                           품목 {est.estimate_items?.length || 0}개 · 공급가 {formatKRW(est.supply_price)} · 부가세 {formatKRW(est.vat)}
                           {est.discount_type && est.discount_type !== 'none' && est.discount_value ? ` · ${est.discount_label || '할인'} ${est.discount_type === 'amount' ? formatKRW(est.discount_value) : `${est.discount_value}%`}` : ''}
                         </p>
-                        {est.prev_total_price != null && est.prev_total_price !== est.total_price && (
-                          <p className="text-2xs text-gray-400 mt-0.5">
-                            이전 {formatKRW(est.prev_total_price)} → 현재 {formatKRW(est.total_price)}
-                            {est.prev_items_summary ? ` (이전 품목: ${est.prev_items_summary})` : ''}
-                          </p>
-                        )}
                       </div>
                       <div className="text-right">
                         <p className="font-bold text-blue-700">{formatKRW(est.total_price)}</p>
@@ -563,6 +566,18 @@ export default function InquiryDetail({ id }: { id: string }) {
                         ))}
                       </div>
                     )}
+                    {/* 변경 이력 — "스탭 1명 → 2명" 식으로, 고친 시각과 함께 */}
+                    {(() => {
+                      const h = historyOf(est, est.estimate_items || [], revisions)
+                      const hasLegacy = est.prev_total_price != null || !!est.prev_items_summary
+                      if (!h.length && !hasLegacy) return null
+                      return (
+                        <div className="mt-3 border-t border-dashed border-gray-200 pt-2">
+                          <p className="text-2xs font-semibold text-indigo-500 uppercase tracking-wider mb-1">변경 이력</p>
+                          <EstimateHistoryList entries={h} legacy={{ prevTotal: est.prev_total_price, prevItems: est.prev_items_summary, total: est.total_price, updatedAt: est.updated_at }} compact />
+                        </div>
+                      )
+                    })()}
                   </div>
                 )
               })}

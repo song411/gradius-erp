@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, Fragment } from 'react'
 import { loadPrevBizInfo } from '@/lib/bizInfo'
 import { useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
@@ -11,8 +11,11 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Plus, Search, Edit2, Trash2, Eye, Package, FileText, TrendingUp, Send, Clock, CheckCircle, Star, Copy, RotateCcw, XCircle, LayoutList } from 'lucide-react'
-import type { Estimate, EstimateItem, Inquiry } from '@/lib/supabase/types'
+import type { Estimate, EstimateItem, Inquiry, EstimateVersion } from '@/lib/supabase/types'
 import { attachItems } from '@/lib/estimateItems'
+import { historyOf } from '@/lib/estimateHistory'
+import EstimateHistoryList from './EstimateHistoryList'
+import RelatedLinks from '@/components/ui/RelatedLinks'
 import EstimateBuilder from './EstimateBuilder'
 import EstimatePreview from './EstimatePreview'
 
@@ -75,6 +78,7 @@ export default function EstimatesContent() {
     : initialSearch ? 'all' : 'pending_inquiry'
 
   const [estimates, setEstimates] = useState<EstimateRow[]>([])
+  const [revisions, setRevisions] = useState<EstimateVersion[]>([])
   // 견적 없는 접수 문의 (견적 대기)
   const [pendingInquiries, setPendingInquiries] = useState<Inquiry[]>([])
   const [loading, setLoading] = useState(true)
@@ -131,12 +135,18 @@ export default function EstimatesContent() {
     // 두 안이 한 덩어리로 합쳐졌다.
     const inqIds = [...new Set(ests.map(e => e.inquiry_id).filter((id): id is string => !!id))]
     let items: EstimateItem[] = []
+    let revs: EstimateVersion[] = []
     if (inqIds.length > 0) {
-      items = await db.list<EstimateItem>('estimate_items', {
-        inFilter: { inquiry_id: inqIds },
-        order: 'sort_order', asc: true,
-      })
+      ;[items, revs] = await Promise.all([
+        db.list<EstimateItem>('estimate_items', {
+          inFilter: { inquiry_id: inqIds },
+          order: 'sort_order', asc: true,
+        }),
+        // 변경 이력 스냅샷 — 없어도(테이블 미생성 등) 목록은 떠야 한다
+        db.list<EstimateVersion>('estimate_versions', { inFilter: { inquiry_id: inqIds }, order: 'created_at', asc: true }).catch(() => [] as EstimateVersion[]),
+      ])
     }
+    setRevisions(revs)
     const enriched = attachItems(ests, items)
 
     setEstimates(enriched)
@@ -604,6 +614,7 @@ export default function EstimatesContent() {
                 <EstimateGroupTable
                   estimates={filteredEsts}
                   allEstimates={estimates}
+                  revisions={revisions}
                   onPreview={est => setPreviewTarget(est)}
                   onEdit={openEdit}
                   onDelete={est => handleDelete(est.id, est.company_name || est.event_name)}
@@ -645,12 +656,13 @@ export default function EstimatesContent() {
 
 // ── 견적 그룹 테이블 (문의별 그룹핑) ─────────────────────
 function EstimateGroupTable({
-  estimates, allEstimates,
+  estimates, allEstimates, revisions,
   onPreview, onEdit, onDelete, onMarkFinal, onUnmarkFinal, onAddVersion, onCreate, onToggleSent,
   selectedIds, onToggleSelect, onToggleGroup,
 }: {
   estimates: EstimateRow[]
   allEstimates: EstimateRow[]
+  revisions: EstimateVersion[]
   onPreview: (est: EstimateRow) => void
   onEdit: (est: EstimateRow) => void
   onDelete: (est: EstimateRow) => void
@@ -663,6 +675,12 @@ function EstimateGroupTable({
   onToggleSelect: (id: string) => void
   onToggleGroup: (ids: string[], on: boolean) => void
 }) {
+  // 펼쳐 둔 변경 이력
+  const [openHistory, setOpenHistory] = useState<Set<string>>(new Set())
+  const toggleHistory = (id: string) => setOpenHistory(prev => {
+    const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n
+  })
+
   if (estimates.length === 0) {
     return (
       <div className="text-center text-gray-400 py-16">
@@ -725,6 +743,7 @@ function EstimateGroupTable({
                   <span className="text-xs px-2 py-0.5 rounded-full bg-slate-200 text-slate-600 font-medium">
                     {totalForInquiry}개 견적
                   </span>
+                  <RelatedLinks inquiryId={first.inquiry_id} eventName={first.event_name || inq?.event_name} companyName={first.company_name} hide={['견적']} compact />
                   {hasFinal && (
                     <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold flex items-center gap-1">
                       <Star className="h-3 w-3 fill-amber-500 text-amber-500" />최종 확정됨
@@ -755,10 +774,14 @@ function EstimateGroupTable({
                     const items = est.estimate_items || []
                     const isFinal = !!est.is_final
                     const versionLabel = est.version_label || (idx === 0 ? 'A안' : `${idx + 1}안`)
+                    const history = historyOf(est, items, revisions)
+                    const hasLegacy = est.prev_total_price != null || !!est.prev_items_summary
+                    const histCount = history.length || (hasLegacy ? 1 : 0)
+                    const histOpen = openHistory.has(est.id)
 
                     return (
+                      <Fragment key={est.id}>
                       <tr
-                        key={est.id}
                         className={`border-b border-gray-100 transition-colors ${
                           selectedIds.has(est.id) ? 'bg-blue-50 hover:bg-blue-100'
                             : isFinal ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-gray-50'
@@ -828,8 +851,19 @@ function EstimateGroupTable({
                             </span>
                           </button>
                         </td>
-                        {/* 작성일 */}
-                        <td className="px-2 py-3 w-24 text-xs text-gray-400">{est.created_at?.slice(0, 10)}</td>
+                        {/* 작성일 + 변경 이력 토글 */}
+                        <td className="px-2 py-3 w-28 text-xs text-gray-400">
+                          <div>{est.created_at?.slice(0, 10)}</div>
+                          {histCount > 0 && (
+                            <button
+                              onClick={() => toggleHistory(est.id)}
+                              title="변경 이력 보기 — 품목·금액이 어떻게 바뀌었는지, 언제 고쳤는지"
+                              className={`mt-0.5 text-2xs px-1.5 py-0.5 rounded font-semibold ${histOpen ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'}`}
+                            >
+                              수정 {histCount}회
+                            </button>
+                          )}
+                        </td>
                         {/* 액션 */}
                         <td className="px-3 py-3 text-right">
                           <div className="flex items-center justify-end gap-1">
@@ -885,6 +919,18 @@ function EstimateGroupTable({
                           </div>
                         </td>
                       </tr>
+                      {histOpen && (
+                        <tr className="bg-indigo-50/40 border-b border-indigo-100">
+                          <td colSpan={9} className="px-6 py-3">
+                            <p className="text-2xs font-semibold text-indigo-500 uppercase tracking-wider mb-1.5">{versionLabel} 변경 이력 (최근 것부터)</p>
+                            <EstimateHistoryList
+                              entries={history}
+                              legacy={{ prevTotal: est.prev_total_price, prevItems: est.prev_items_summary, total: est.total_price, updatedAt: est.updated_at }}
+                            />
+                          </td>
+                        </tr>
+                      )}
+                      </Fragment>
                     )
                   })}
                 </tbody>

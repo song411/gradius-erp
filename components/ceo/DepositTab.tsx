@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Building2, AlertCircle, CheckCircle2, Clock, Search, Download, ChevronDown, ChevronRight, MapPin, User } from 'lucide-react'
 import EstimateItemsTable from './EstimateItemsTable'
+import RelatedLinks from '@/components/ui/RelatedLinks'
 import type { CeoData } from './CeoContent'
 import type { Settlement, Inquiry } from '@/lib/supabase/types'
 import { toast } from 'sonner'
@@ -48,7 +49,11 @@ export default function DepositTab({ data }: { data: CeoData }) {
   const [filter, setFilter]           = useState<'' | DepositStatus>('')
   const [sortKey, setSortKey]         = useState<SortKey>('입금상태순')
   const [periodState, setPeriodState] = useState<PeriodState>({ period: '전체', customFrom: '', customTo: '' })
-  const [search, setSearch]           = useState('')
+  const [search, setSearch]           = useState(() => {
+    // 다른 화면의 바로가기(?q=행사명)로 들어오면 그 건만 보이게
+    if (typeof window === 'undefined') return ''
+    return new URLSearchParams(window.location.search).get('q') || ''
+  })
   const [editId, setEditId]           = useState<string | null>(null)
   const [editAmt, setEditAmt]         = useState('')
   const [saving, setSaving]           = useState(false)
@@ -379,6 +384,7 @@ export default function DepositTab({ data }: { data: CeoData }) {
                     <tr key={`${s.id}-detail`}>
                       <td colSpan={10} className="px-0 pb-0 pt-0 bg-amber-50 border-b-2 border-amber-200">
                         <div className="px-6 py-4 space-y-4">
+                          <RelatedLinks inquiryId={s.inquiry_id} eventName={s.inquiry?.event_name} companyName={s.company_name || s.inquiry?.company_name} hide={['입금']} />
 
                           {/* 행사 기본 정보 */}
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

@@ -14,6 +14,7 @@ import type { Settlement, Inquiry, Customer } from '@/lib/supabase/types'
 import ClosingForm from './ClosingForm'
 import Link from 'next/link'
 import { needsTaxInvoice } from '@/lib/finance'
+import RelatedLinks from '@/components/ui/RelatedLinks'
 
 type SettRow = Settlement & { inquiries?: Inquiry }
 type TabKey = 'not_issued' | 'issued' | 'all'
@@ -259,14 +260,17 @@ export default function ClosingsContent() {
                           : <span className="text-xs text-red-500 font-semibold">미발행</span>}
                       </td>
                       <td className="text-right">
-                        <Button
-                          variant="ghost" size="icon"
-                          onClick={() => openEdit(s)}
-                          title="세금계산서 정보 편집"
-                          className="h-7 w-7"
-                        >
-                          <Edit2 className="h-3.5 w-3.5" />
-                        </Button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <RelatedLinks inquiryId={s.inquiries?.id} eventName={s.inquiries?.event_name || s.site_name} hide={['세금계산서', '고객사', '입금']} compact />
+                          <Button
+                            variant="ghost" size="icon"
+                            onClick={() => openEdit(s)}
+                            title="세금계산서 정보 편집"
+                            className="h-7 w-7"
+                          >
+                            <Edit2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
