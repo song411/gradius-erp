@@ -277,9 +277,12 @@ export default function CrewProfileCard({ staff, onClose, onEdit }: Props) {
                               </div>
                               <div className="text-right shrink-0">
                                 {payout ? (
-                                  <p className="text-xs font-semibold text-emerald-600">{formatKRW(payout.final_pay)}</p>
+                                  // 초록은 실제로 나간 돈만. 대기·검토완료는 금액은 잡혔지만 아직 안 보낸 것
+                                  ['지급완료', '완료'].includes(payout.status)
+                                    ? <p className="text-xs font-semibold text-emerald-600" title={payout.paid_at ? `송금 ${payout.paid_at.slice(0, 10)}` : '지급완료'}>{formatKRW(payout.final_pay)}</p>
+                                    : <p className="text-xs font-semibold text-amber-600" title={`${payout.status} — 아직 송금 전`}>{formatKRW(payout.final_pay)} <span className="text-2xs font-normal">({payout.status})</span></p>
                                 ) : (
-                                  <p className="text-xs text-gray-300">미지급</p>
+                                  <p className="text-xs text-gray-300">지급 등록 없음</p>
                                 )}
                                 <span className={`text-2xs px-1.5 py-0.5 rounded-full ${
                                   a.status === '확정' ? 'bg-green-100 text-green-600' :

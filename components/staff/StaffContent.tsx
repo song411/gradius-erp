@@ -13,8 +13,34 @@ import {
   Dialog, DialogHeader, DialogTitle, DialogContent, DialogFooter, DialogClose
 } from '@/components/ui/dialog'
 import { Plus, Search, Edit2, Trash2, Star, SlidersHorizontal, X, Eye, EyeOff, FileSpreadsheet } from 'lucide-react'
-import type { Staff, StaffRecommend } from '@/lib/supabase/types'
+import type { Staff, StaffRecommend, Assignment } from '@/lib/supabase/types'
 import CrewProfileCard from './CrewProfileCard'
+
+// 크루 한 명의 활동 — 배정에서 모아 온다. 목록에서 활동 중인 사람과 잠든 사람을
+// 프로필을 일일이 열지 않고 가를 수 있게 한다.
+interface Activity { events: number; lastDate?: string; daysSince?: number }
+type SortKey = '평점순' | '최근근무순' | '참여순' | '이름순'
+
+function buildActivity(assignments: Assignment[]): Map<string, Activity> {
+  const out = new Map<string, Activity>()
+  const seen = new Map<string, Set<string>>()   // 같은 행사에 행이 두 번 있어도 한 번으로
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  assignments.forEach(a => {
+    if (!a.staff_id || a.status === '취소') return
+    const act = out.get(a.staff_id) || { events: 0 }
+    const key = a.inquiry_id || a.id
+    const s = seen.get(a.staff_id) || new Set<string>()
+    if (!s.has(key)) { s.add(key); act.events++ }
+    seen.set(a.staff_id, s)
+    const d = (a.end_date || a.start_date || '').slice(0, 10)
+    if (d && (!act.lastDate || d > act.lastDate)) act.lastDate = d
+    out.set(a.staff_id, act)
+  })
+  out.forEach(act => {
+    if (act.lastDate) act.daysSince = Math.floor((today.getTime() - new Date(act.lastDate).getTime()) / 86400000)
+  })
+  return out
+}
 import StaffExcelUpload from './StaffExcelUpload'
 
 const RECOMMEND_OPTIONS: StaffRecommend[] = ['우선투입', '일반', '보류']
@@ -74,6 +100,8 @@ interface FilterState {
   english: string
   minScore: string
   job: string
+  /** 최근 N일 안에 근무한 사람만 ('' 이면 전체) */
+  activeDays: string
   showFilters: boolean
 }
 
@@ -83,8 +111,10 @@ export default function StaffContent() {
   const [staffList, setStaffList]     = useState<Staff[]>([])
   const [loading, setLoading]         = useState(true)
   const [filters, setFilters]         = useState<FilterState>({
-    search: searchParams.get('search') || '', recommend: '', gender: '', english: '', minScore: '', job: '', showFilters: false,
+    search: searchParams.get('search') || '', recommend: '', gender: '', english: '', minScore: '', job: '', activeDays: '', showFilters: false,
   })
+  const [activity, setActivity]       = useState<Map<string, Activity>>(new Map())
+  const [sortKey, setSortKey]         = useState<SortKey>('평점순')
   const [profileStaff, setProfileStaff] = useState<Staff | null>(null) // 프로필 카드용
   const [showModal, setShowModal]     = useState(false)
   const [editTarget, setEditTarget]   = useState<Staff | null>(null)
@@ -96,8 +126,12 @@ export default function StaffContent() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const staff = await db.list<Staff>('staff', { order: 'total_score', asc: false })
+    const [staff, asgns] = await Promise.all([
+      db.list<Staff>('staff', { order: 'total_score', asc: false }),
+      db.list<Assignment>('assignments', { select: 'id,staff_id,inquiry_id,status,start_date,end_date' }),
+    ])
     setStaffList(staff)
+    setActivity(buildActivity(asgns))
     setLoading(false)
   }, [])
 
@@ -238,7 +272,18 @@ export default function StaffContent() {
       const hit = (s.available_jobs || []).some(j => j.toLowerCase().includes(q))
       if (!hit) return false
     }
+    if (filters.activeDays) {
+      const n = Number(filters.activeDays)
+      const act = activity.get(s.id)
+      if (!isNaN(n) && n > 0 && (act?.daysSince === undefined || act.daysSince > n)) return false
+    }
     return true
+  }).sort((a, b) => {
+    const aa = activity.get(a.id), ab = activity.get(b.id)
+    if (sortKey === '최근근무순') return (ab?.lastDate || '').localeCompare(aa?.lastDate || '')
+    if (sortKey === '참여순')     return (ab?.events || 0) - (aa?.events || 0)
+    if (sortKey === '이름순')     return a.name.localeCompare(b.name, 'ko')
+    return 0  // 평점순: 불러온 순서 (total_score 내림차순)
   })
 
   const stats = {
@@ -249,7 +294,7 @@ export default function StaffContent() {
   }
 
   const activeFilterCount = [
-    filters.recommend, filters.gender, filters.english, filters.minScore, filters.job,
+    filters.recommend, filters.gender, filters.english, filters.minScore, filters.job, filters.activeDays,
   ].filter(Boolean).length
 
   return (
@@ -342,6 +387,16 @@ export default function StaffContent() {
               />
             </div>
             <div className="flex flex-col gap-1 min-w-[120px]">
+              <label className="text-2xs font-semibold text-gray-500 uppercase tracking-wider">최근 근무</label>
+              <Select value={filters.activeDays} onChange={e => setFilter('activeDays', e.target.value)} className="h-8 text-sm">
+                <option value="">전체</option>
+                <option value="30">30일 안에 근무</option>
+                <option value="90">90일 안에 근무</option>
+                <option value="180">180일 안에 근무</option>
+                <option value="365">1년 안에 근무</option>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1 min-w-[120px]">
               <label className="text-2xs font-semibold text-gray-500 uppercase tracking-wider">직무 포함</label>
               <Input
                 placeholder="예: 도우미"
@@ -355,7 +410,7 @@ export default function StaffContent() {
                 variant="ghost" size="sm"
                 className="text-red-500 gap-1 self-end h-8"
                 onClick={() => setFilters(f => ({
-                  ...f, recommend: '', gender: '', english: '', minScore: '', job: '',
+                  ...f, recommend: '', gender: '', english: '', minScore: '', job: '', activeDays: '',
                 }))}
               >
                 <X className="h-3.5 w-3.5" />필터 초기화
@@ -364,12 +419,21 @@ export default function StaffContent() {
           </div>
         )}
 
-        {/* 결과 카운트 */}
-        <p className="text-xs text-gray-400 px-1">
-          {filtered.length === staffList.length
-            ? `전체 ${staffList.length}명`
-            : `검색 결과 ${filtered.length}명 / 전체 ${staffList.length}명`}
-        </p>
+        {/* 결과 카운트 + 정렬 */}
+        <div className="flex items-center gap-2 px-1 flex-wrap">
+          <p className="text-xs text-gray-400">
+            {filtered.length === staffList.length
+              ? `전체 ${staffList.length}명`
+              : `검색 결과 ${filtered.length}명 / 전체 ${staffList.length}명`}
+          </p>
+          <span className="text-xs text-gray-500 font-bold ml-auto">정렬:</span>
+          {(['평점순', '최근근무순', '참여순', '이름순'] as SortKey[]).map(s => (
+            <button key={s} onClick={() => setSortKey(s)}
+              className={`text-xs px-3 py-1 rounded-full border-2 font-semibold transition-colors ${sortKey === s ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-300 hover:border-gray-600'}`}>
+              {s}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* 테이블 */}
@@ -391,13 +455,15 @@ export default function StaffContent() {
                   <th>가능직무</th>
                   <th>영어</th>
                   <th>평점</th>
+                  <th title="참여 행사 수 (취소 제외)">참여</th>
+                  <th title="마지막 근무일">최근 근무</th>
                   <th className="text-right">액션</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={9}><div className="erp-empty"><p>조건에 맞는 크루가 없습니다.</p></div></td>
+                    <td colSpan={11}><div className="erp-empty"><p>조건에 맞는 크루가 없습니다.</p></div></td>
                   </tr>
                   ) : (
                     filtered.map(s => (
@@ -458,6 +524,22 @@ export default function StaffContent() {
                             <span className="text-gray-300 font-normal">/5</span>
                           </span>
                         </td>
+                        {(() => {
+                          const act = activity.get(s.id)
+                          const days = act?.daysSince
+                          const tone = days === undefined ? 'text-gray-300'
+                            : days <= 90 ? 'text-green-700' : days <= 180 ? 'text-yellow-700' : 'text-gray-400'
+                          return (
+                            <>
+                              <td className="text-sm text-gray-700">{act?.events ? `${act.events}회` : <span className="text-gray-300">-</span>}</td>
+                              <td className={`text-xs whitespace-nowrap ${tone}`} title={act?.lastDate ? `${act.lastDate} (${days}일 전)` : '배정 기록 없음'}>
+                                {act?.lastDate
+                                  ? (days !== undefined && days < 0 ? `예정 ${act.lastDate.slice(5)}` : days === 0 ? '오늘' : `${days}일 전`)
+                                  : '-'}
+                              </td>
+                            </>
+                          )
+                        })()}
                         <td className="text-right" onClick={e => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-1">
                             <Button variant="ghost" size="icon" onClick={() => openEdit(s)} title="수정">
