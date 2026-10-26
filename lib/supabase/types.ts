@@ -392,6 +392,28 @@ export interface EventExpense {
 
 export type ProjectMemoType = '인원추천' | '운영메모' | '피드백' | '영업활동'
 
+export type FieldLogKind = '연장' | '인원변경' | '추가지급' | '부대비용' | '특이사항'
+
+/** 현장 기록 — 현장에서 적는 한 줄. 돈·인원의 원본이 아니라 후보 메모다 (017).
+ *  applied_at 이 비어 있으면 아직 사무실에서 반영 전. */
+export interface FieldLog {
+  id: string
+  inquiry_id: string
+  kind: FieldLogKind
+  content: string
+  hours?: number | null
+  headcount?: number | null
+  amount?: number | null
+  staff_name?: string | null
+  log_date?: string | null
+  author?: string | null
+  applied_at?: string | null
+  applied_to?: string | null
+  applied_note?: string | null
+  created_at: string
+  updated_at?: string
+}
+
 /** 운영 캘린더의 날짜 메모 — 행사에 딸리지 않고 날짜 자체에 붙는다.
  *  보기 전용이며 어떤 계산에도 들어가지 않는다. */
 export interface CalendarNote {

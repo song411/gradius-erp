@@ -18,10 +18,10 @@ import {
 } from '@/components/ui/dialog'
 import {
   ArrowLeft, FileText, Users, CreditCard, CheckCircle,
-  Plus, Trash2, ChevronRight, AlertCircle, Zap, ArrowRight, MessageSquare
+  Plus, Trash2, ChevronRight, AlertCircle, Zap, ArrowRight, MessageSquare, PenLine
 } from 'lucide-react'
 import Link from 'next/link'
-import type { Inquiry, Estimate, EstimateItem, Assignment, Settlement, InquiryStatus, Payout, EventExpense, Staff, EstimateVersion } from '@/lib/supabase/types'
+import type { Inquiry, Estimate, EstimateItem, Assignment, Settlement, InquiryStatus, Payout, EventExpense, Staff, EstimateVersion, FieldLog } from '@/lib/supabase/types'
 import ProjectMemoPanel from '@/components/memos/ProjectMemoPanel'
 import CrewProfileCard from '@/components/staff/CrewProfileCard'
 import EstimateHistoryList from '@/components/estimates/EstimateHistoryList'
@@ -50,6 +50,7 @@ export default function InquiryDetail({ id }: { id: string }) {
   const [expenses, setExpenses] = useState<EventExpense[]>([])
   const [profileStaff, setProfileStaff] = useState<Staff | null>(null)
   const [revisions, setRevisions] = useState<EstimateVersion[]>([])
+  const [fieldLogs, setFieldLogs] = useState<FieldLog[]>([])
   const [loading, setLoading] = useState(true)
 
   // 모달 상태
@@ -84,7 +85,7 @@ export default function InquiryDetail({ id }: { id: string }) {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [inqList, estList, itemList, asgnList, setList, payList, expList, revList] = await Promise.all([
+    const [inqList, estList, itemList, asgnList, setList, payList, expList, revList, logList] = await Promise.all([
       db.list<Inquiry>('inquiries', { filters: { id }, limit: 1 }),
       db.list<Estimate>('estimates', { filters: { inquiry_id: id }, order: 'created_at', asc: false }),
       // 품목은 따로 불러 견적별로 붙인다 — 예전엔 아예 안 불러서 카드가 늘 "품목 0개"였다
@@ -95,8 +96,11 @@ export default function InquiryDetail({ id }: { id: string }) {
       // 010 마이그레이션 전이면 테이블이 없다 — 실패해도 빈 목록으로
       db.list<EventExpense>('event_expenses', { filters: { inquiry_id: id }, order: 'created_at', asc: false }).catch(() => [] as EventExpense[]),
       db.list<EstimateVersion>('estimate_versions', { filters: { inquiry_id: id }, order: 'created_at', asc: true }).catch(() => [] as EstimateVersion[]),
+      // 017 전이면 테이블이 없다 — 빈 목록
+      db.list<FieldLog>('field_logs', { filters: { inquiry_id: id }, order: 'created_at', asc: false }).catch(() => [] as FieldLog[]),
     ])
     setRevisions(revList)
+    setFieldLogs(logList)
     setInquiry(inqList[0] ?? null)
     setEstimates(attachItems(estList, itemList))
     setAssignments(asgnList)
@@ -811,6 +815,34 @@ export default function InquiryDetail({ id }: { id: string }) {
                 </>
               )
             })()}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── 현장 기록 — 현장에서 적은 한 줄들. 반영은 /field 반영 대기함에서 ── */}
+      {fieldLogs.length > 0 && (
+        <Card>
+          <CardHeader className="flex-row items-center justify-between">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <PenLine className="h-4 w-4 text-amber-600" />
+              현장 기록 ({fieldLogs.length}건
+              {fieldLogs.some(l => !l.applied_at) && <span className="text-amber-700"> · 미반영 {fieldLogs.filter(l => !l.applied_at).length}건</span>})
+            </CardTitle>
+            <a href={`/field?tab=inbox`} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">반영 대기함 →</a>
+          </CardHeader>
+          <CardContent className="space-y-1.5">
+            {fieldLogs.map(l => (
+              <div key={l.id} className={`flex items-start gap-2 text-xs rounded-lg px-3 py-2 ${l.applied_at ? 'bg-gray-50 text-gray-500' : 'bg-amber-50 text-gray-800'}`}>
+                <span className="font-bold shrink-0">{l.kind}</span>
+                <span className="text-gray-400 shrink-0">{l.log_date?.slice(5) || ''}</span>
+                <span className="flex-1 whitespace-pre-line">{l.content}
+                  {[l.hours != null ? `${l.hours}시간` : '', l.headcount != null ? `${l.headcount > 0 ? '+' : ''}${l.headcount}명` : '', l.amount != null ? formatKRW(l.amount) : '', l.staff_name || ''].filter(Boolean).length > 0 && (
+                    <span className="text-gray-500"> ({[l.hours != null ? `${l.hours}시간` : '', l.headcount != null ? `${l.headcount > 0 ? '+' : ''}${l.headcount}명` : '', l.amount != null ? formatKRW(l.amount) : '', l.staff_name || ''].filter(Boolean).join(' · ')})</span>
+                  )}
+                </span>
+                <span className={`shrink-0 ${l.applied_at ? 'text-green-700' : 'text-amber-700 font-semibold'}`}>{l.applied_at ? `✓ ${l.applied_to}` : '미반영'}</span>
+              </div>
+            ))}
           </CardContent>
         </Card>
       )}

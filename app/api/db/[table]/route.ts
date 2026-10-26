@@ -13,6 +13,7 @@ const ALLOWED_TABLES = [
   'guard_profiles', 'dispatch_reports', 'project_memos',
   'pricing_history', 'event_expenses', 'calendar_notes',
   'sim_roles', 'sim_factors', 'sim_guides',
+  'field_logs',
 ]
 
 /** Supabase REST가 한 번에 돌려주는 최대 행 수. 클라이언트는 이 단위로 나눠 읽는다. */

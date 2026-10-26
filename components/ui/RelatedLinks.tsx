@@ -7,7 +7,7 @@
 
 import { ExternalLink } from 'lucide-react'
 
-type Target = '문의' | '견적' | '배정' | '정산' | '세금계산서' | '입금' | '고객사'
+type Target = '문의' | '견적' | '배정' | '정산' | '세금계산서' | '입금' | '고객사' | '현장기록'
 
 export default function RelatedLinks({
   inquiryId, eventName, companyName, hide = [], compact = false, className = '',
@@ -29,6 +29,7 @@ export default function RelatedLinks({
   if (eventName) links.push({ key: '세금계산서', href: `/ceo?tab=tax&q=${q}`, title: 'CEO 세금계산서 탭' })
   if (eventName) links.push({ key: '입금', href: `/ceo?tab=deposit&q=${q}`, title: 'CEO 업체 입금 탭' })
   if (companyName) links.push({ key: '고객사', href: `/customers?search=${encodeURIComponent(companyName)}`, title: '고객사 거래 이력' })
+  if (inquiryId) links.push({ key: '현장기록', href: `/field?inq=${inquiryId}`, title: '현장 기록 (연장·인원변경·추가지급·부대비용 한 줄 메모)' })
 
   const shown = links.filter(l => !hide.includes(l.key))
   if (!shown.length) return null

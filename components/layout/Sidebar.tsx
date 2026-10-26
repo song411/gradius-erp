@@ -8,7 +8,7 @@ import {
   LayoutDashboard, MessageSquare, FileText, Users, UserCheck,
   Calculator, CreditCard, ClipboardList, Search, TrendingUp,
   ChevronLeft, ChevronRight, Building2, Handshake, FlaskConical, ShieldAlert, ShieldCheck,
-  CalendarRange, Target, Sparkles
+  CalendarRange, Target, Sparkles, PenLine
 } from 'lucide-react'
 import { useState } from 'react'
 import dynamic from 'next/dynamic'
@@ -41,6 +41,7 @@ const navItems: NavItem[] = [
   { href: '/guards', label: '경호원 관리', icon: ShieldCheck },
   { href: '/customers', label: '고객 관리', icon: Building2 },
   { href: '/attendance', label: '출석부', icon: ClipboardList },
+  { href: '/field', label: '현장 기록', icon: PenLine },
   { href: '/search', label: '통합검색', icon: Search },
   // 가디는 어느 화면에서든 그 자리에서 열린다 — 보던 것을 두고 옮겨 가지 않는다
   { action: 'ai', label: 'AI비서 가디', icon: Sparkles },
