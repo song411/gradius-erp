@@ -12,6 +12,7 @@ import { toast } from 'sonner'
 import * as XLSX from 'xlsx'
 import { PeriodFilter, isInPeriodFn, type PeriodState } from './PeriodFilter'
 import { qtyUnit, daysUnit } from '@/lib/estimateUnits'
+import { itemsOfInquiry } from '@/lib/estimateItems'
 
 type DepositStatus = '입금완료' | '부분입금' | '미입금'
 type SortKey = '입금상태순' | '경과일순' | '최신순'
@@ -43,7 +44,7 @@ function ElapsedBadge({ days }: { days: number | null }) {
 }
 
 export default function DepositTab({ data }: { data: CeoData }) {
-  const { settlements, inquiries, estimateItems, reload } = data
+  const { settlements, inquiries, estimateItems, estimates, reload } = data
   const [filter, setFilter]           = useState<'' | DepositStatus>('')
   const [sortKey, setSortKey]         = useState<SortKey>('입금상태순')
   const [periodState, setPeriodState] = useState<PeriodState>({ period: '전체', customFrom: '', customTo: '' })
@@ -284,7 +285,8 @@ export default function DepositTab({ data }: { data: CeoData }) {
                 const isEditing = editId === s.id
                 const eventDate = s.inquiry?.event_start?.slice(0, 10)
                 const isExpanded = expandedId === s.id
-                const inqItems = estimateItems.filter(it => it.inquiry_id === s.inquiry_id)
+                // 확정 견적의 품목만 — 문의로 거르면 A안·B안 품목이 한 표에 섞인다
+                const inqItems = itemsOfInquiry(s.inquiry_id, estimates, estimateItems)
                 return (
                   <Fragment key={s.id}>
                   <tr

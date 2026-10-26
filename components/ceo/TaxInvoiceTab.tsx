@@ -9,6 +9,8 @@ import { ChevronDown, ChevronRight, CheckCircle2, AlertCircle, Receipt, MapPin, 
 import type { CeoData } from './CeoContent'
 import type { Settlement, Inquiry, Customer, EstimateItem, Estimate } from '@/lib/supabase/types'
 import { toast } from 'sonner'
+import { itemsOfInquiry } from '@/lib/estimateItems'
+import { qtyUnit, daysUnit } from '@/lib/estimateUnits'
 
 // 체결 이후 단계만 세금계산서 관리 대상
 const TAX_STATUSES = ['체결', '배정완료', '진행중', '완료', '정산완료']
@@ -99,7 +101,8 @@ export default function TaxInvoiceTab({ data }: { data: CeoData }) {
     .map(s => {
       const inquiry       = inquiries.find(q => q.id === s.inquiry_id)
       const customer      = inquiry?.customer_id ? customerMap.get(inquiry.customer_id) : undefined
-      const items         = estimateItems.filter(it => it.inquiry_id === s.inquiry_id)
+      // 확정 견적의 품목만 — 문의로 거르면 A안·B안 품목이 섞여 인원이 두 배로 보인다
+      const items         = itemsOfInquiry(s.inquiry_id, estimates, estimateItems)
       const finalEstimate = estimates.find(e => e.inquiry_id === s.inquiry_id && e.is_final)
       return { ...s, inquiry, customer, items, finalEstimate }
     })

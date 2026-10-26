@@ -72,6 +72,8 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
   const vat           = estimate.vat || 0
   const total         = estimate.total_price || supplyPrice + vat
   const hasVat        = vat > 0
+  // 부가세 포함가로 맞춘 견적 — 품목 금액이 부가세를 품고 있다 (빌더가 meta_json 에 남긴다)
+  const vatIncluded   = (estimate.meta_json as { vat_mode?: string } | undefined)?.vat_mode === 'included'
   const staffSubtotal = staffItems.reduce((s, i) => s + i.quantity * i.days * i.unit_price, 0)
   const extraSubtotal = extraItems.reduce((s, i) => s + i.quantity * i.days * i.unit_price, 0)
   const vatExemptSubtotal = [...staffItems, ...extraItems].filter(i => i.vat_exempt).reduce((s, i) => s + i.quantity * i.days * i.unit_price, 0)
@@ -118,7 +120,7 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
       ...supportItems.map(i => toSmsItem(i, 'support')),
     ],
     staffSubtotal, extraSubtotal, supplyPrice, vat,
-    includeVat: hasVat, finalTotal: total,
+    includeVat: hasVat, vatIncluded, finalTotal: total,
     hasDiscount, discountLabel,
     discountAmount: discountType === 'percentage'
       ? Math.round((supplyPrice * discountValue) / 100)
@@ -410,10 +412,10 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
                     <td style={{ padding: '8px 8px', border: '1px solid #fecaca' }} />
                   </tr>
                 )}
-                {/* 총 합계 */}
+                {/* 총 합계 — 포함가 견적은 품목 금액이 부가세를 품고 있으므로 총액으로 */}
                 <tr style={{ backgroundColor: '#1e3a5f' }}>
-                  <td colSpan={5} style={{ padding: '9px 8px', textAlign: 'center', fontWeight: '800', color: '#fff', fontSize: '13px', border: '1px solid #1e3a5f' }}>총 합계</td>
-                  <td style={{ padding: '9px 8px', textAlign: 'center', fontWeight: '800', color: '#fbbf24', fontSize: '13px', border: '1px solid #1e3a5f' }}>{supplyPrice.toLocaleString()}</td>
+                  <td colSpan={5} style={{ padding: '9px 8px', textAlign: 'center', fontWeight: '800', color: '#fff', fontSize: '13px', border: '1px solid #1e3a5f' }}>{vatIncluded ? '총 합계 (부가세 포함)' : '총 합계'}</td>
+                  <td style={{ padding: '9px 8px', textAlign: 'center', fontWeight: '800', color: '#fbbf24', fontSize: '13px', border: '1px solid #1e3a5f' }}>{(vatIncluded ? total : supplyPrice).toLocaleString()}</td>
                   <td style={{ border: '1px solid #1e3a5f' }} />
                 </tr>
               </tbody>
@@ -427,6 +429,7 @@ export default function EstimatePreview({ open, onClose, estimate, onStatusChang
                   <p>- 계약시급 기준 / 계약 이후 추가시간 발생 시 시간당 추가 금액 별도 청구</p>
                   <p>- 경호원 &amp; 경비지도사 : 30,000원 (VAT 별도) · STAFF : 20,000원 (VAT 별도)</p>
                   <p>- 복리후생비, 일반관리비, 직책수당 단가 포함</p>
+                  {vatIncluded && <p style={{ color: '#1e40af', fontWeight: 700 }}>- 위 단가 및 금액은 부가세가 포함된 금액입니다</p>}
                 </div>
               </div>
               <div style={{ width: '200px', border: '1px solid #d1d5db', borderRadius: '4px', overflow: 'hidden' }}>

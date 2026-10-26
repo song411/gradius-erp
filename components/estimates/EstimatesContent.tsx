@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Plus, Search, Edit2, Trash2, Eye, Package, FileText, TrendingUp, Send, Clock, CheckCircle, Star, Copy, RotateCcw, XCircle, LayoutList } from 'lucide-react'
 import type { Estimate, EstimateItem, Inquiry } from '@/lib/supabase/types'
+import { attachItems } from '@/lib/estimateItems'
 import EstimateBuilder from './EstimateBuilder'
 import EstimatePreview from './EstimatePreview'
 
@@ -125,27 +126,18 @@ export default function EstimatesContent() {
     // 견적 대기 = 접수 상태이면서 아직 견적 없는 것
     const pending = inqsForEst.filter(i => !estimatedInqIds.has(i.id))
 
-    // 각 견적에 해당하는 품목 attach
-    // → inquiry_id 기준으로 estimate_items 조회 (마이그레이션 데이터 호환)
+    // 각 견적에 자기 품목만 붙인다 — 규칙은 lib/estimateItems.ts.
+    // 예전엔 문의 기준으로 붙여서 A안을 열면 B안 품목까지 같이 보였고, 그대로 저장하면
+    // 두 안이 한 덩어리로 합쳐졌다.
     const inqIds = [...new Set(ests.map(e => e.inquiry_id).filter((id): id is string => !!id))]
-    let itemsByInqId: Record<string, EstimateItem[]> = {}
+    let items: EstimateItem[] = []
     if (inqIds.length > 0) {
-      const items = await db.list<EstimateItem>('estimate_items', {
+      items = await db.list<EstimateItem>('estimate_items', {
         inFilter: { inquiry_id: inqIds },
         order: 'sort_order', asc: true,
       })
-      items.forEach(item => {
-        const key = item.inquiry_id || ''
-        if (!itemsByInqId[key]) itemsByInqId[key] = []
-        itemsByInqId[key].push(item)
-      })
     }
-
-    // 견적에 estimate_items 붙이기
-    const enriched = ests.map(est => ({
-      ...est,
-      estimate_items: est.inquiry_id ? (itemsByInqId[est.inquiry_id] || []) : [],
-    }))
+    const enriched = attachItems(ests, items)
 
     setEstimates(enriched)
     setPendingInquiries(pending)

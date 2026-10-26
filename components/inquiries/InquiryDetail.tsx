@@ -21,9 +21,11 @@ import {
   Plus, Trash2, ChevronRight, AlertCircle, Zap, ArrowRight, MessageSquare
 } from 'lucide-react'
 import Link from 'next/link'
-import type { Inquiry, Estimate, EstimateItem, Assignment, Settlement, InquiryStatus } from '@/lib/supabase/types'
+import type { Inquiry, Estimate, EstimateItem, Assignment, Settlement, InquiryStatus, Payout, EventExpense } from '@/lib/supabase/types'
 import ProjectMemoPanel from '@/components/memos/ProjectMemoPanel'
 import { qtyUnit, daysUnit } from '@/lib/estimateUnits'
+import { attachItems, representativeEstimate } from '@/lib/estimateItems'
+import { isHeadOfficePayout } from '@/lib/finance'
 
 // ── 페이 텍스트 추출 (notes에서 [페이: xxx] 파싱) ───────────────
 function extractPayDetail(notes: string | null | undefined): string {
@@ -40,6 +42,8 @@ export default function InquiryDetail({ id }: { id: string }) {
   const [estimates, setEstimates] = useState<(Estimate & { estimate_items?: EstimateItem[] })[]>([])
   const [assignments, setAssignments] = useState<Assignment[]>([])
   const [settlement, setSettlement] = useState<Settlement | null>(null)
+  const [payouts, setPayouts] = useState<Payout[]>([])
+  const [expenses, setExpenses] = useState<EventExpense[]>([])
   const [loading, setLoading] = useState(true)
 
   // 모달 상태
@@ -74,16 +78,23 @@ export default function InquiryDetail({ id }: { id: string }) {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [inqList, estList, asgnList, setList] = await Promise.all([
+    const [inqList, estList, itemList, asgnList, setList, payList, expList] = await Promise.all([
       db.list<Inquiry>('inquiries', { filters: { id }, limit: 1 }),
-      db.list<Estimate & { estimate_items?: EstimateItem[] }>('estimates', { filters: { inquiry_id: id }, order: 'created_at', asc: false }),
+      db.list<Estimate>('estimates', { filters: { inquiry_id: id }, order: 'created_at', asc: false }),
+      // 품목은 따로 불러 견적별로 붙인다 — 예전엔 아예 안 불러서 카드가 늘 "품목 0개"였다
+      db.list<EstimateItem>('estimate_items', { filters: { inquiry_id: id }, order: 'sort_order', asc: true }),
       db.list<Assignment>('assignments', { filters: { inquiry_id: id }, order: 'assigned_at', asc: false }),
       db.list<Settlement>('settlements', { filters: { inquiry_id: id }, limit: 1 }),
+      db.list<Payout>('payouts', { filters: { inquiry_id: id }, order: 'created_at', asc: false }),
+      // 010 마이그레이션 전이면 테이블이 없다 — 실패해도 빈 목록으로
+      db.list<EventExpense>('event_expenses', { filters: { inquiry_id: id }, order: 'created_at', asc: false }).catch(() => [] as EventExpense[]),
     ])
     setInquiry(inqList[0] ?? null)
-    setEstimates(estList)
+    setEstimates(attachItems(estList, itemList))
     setAssignments(asgnList)
     setSettlement(setList[0] ?? null)
+    setPayouts(payList)
+    setExpenses(expList)
 
     // 폼 기본값 세팅
     const inq = inqList[0]
@@ -234,8 +245,11 @@ export default function InquiryDetail({ id }: { id: string }) {
 
     const confirmedAsgns = assignments.filter(a => a.status === '확정' || a.status === '배정중' || a.status === '후보')
     const payoutAmount = confirmedAsgns.reduce((s, a) => s + (a.total_pay || a.pay_rate * a.work_days), 0)
-    const supplyPriceFromEst = estimates[0]?.supply_price || 0
-    const vatFromEst = estimates[0]?.vat || 0
+    // 확정 견적이 있으면 그것, 없으면 가장 최근 것 — 예전엔 무조건 최신 견적이라 A/B안이 있을 때
+    // 확정 안 된 쪽 금액이 정산에 들어갈 수 있었다
+    const baseEst = representativeEstimate(id, estimates)
+    const supplyPriceFromEst = baseEst?.supply_price || 0
+    const vatFromEst = baseEst?.vat || 0
 
     const existingSettles = await db.list<Settlement>('settlements', { filters: { inquiry_id: id }, limit: 1 })
     const existingSettle = existingSettles[0] ?? null

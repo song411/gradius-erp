@@ -59,6 +59,8 @@ export interface SmsDocData {
   supplyPrice: number
   vat: number
   includeVat: boolean
+  /** 단가가 부가세를 품은 견적 (부가세 포함가로 맞춘 것) */
+  vatIncluded?: boolean
   finalTotal: number
   hasDiscount: boolean
   discountLabel: string
@@ -220,6 +222,11 @@ export default function SmsEstimateDoc({ data }: { data: SmsDocData }) {
         <SumLine label="부가세" value={data.includeVat ? won(data.vat) : '별도'} />
         <SumLine label="합계" value={won(data.finalTotal)} strong />
       </div>
+      {data.vatIncluded && (
+        <div style={{ ...S.small, color: '#1e40af', fontWeight: 700, marginTop: '6px' }}>
+          ※ 단가·금액은 부가세 포함 금액입니다
+        </div>
+      )}
 
       {/* 특이사항 — 길면 문서가 세로로 늘어나 축소율이 커지므로 잘라 쓴다 */}
       {data.notes && (

@@ -35,6 +35,14 @@ type ItemType = typeof ITEM_TYPES[number]
 const EXTRA_TYPES: ItemType[] = ['교통비', '숙박비', '식비', '연장수당', '기타']
 const SUPPORT_TYPES: ItemType[] = ['지원품목']
 
+// 부가세 처리 방식. 'included' 는 estimates.meta_json.vat_mode 에 남긴다 — 다시 열 때
+// vat > 0 만으로는 '가산'과 '포함가'를 구분할 수 없기 때문이다.
+type VatMode = 'add' | 'included' | 'none'
+function vatModeOf(est: Estimate): VatMode {
+  if ((est.meta_json as { vat_mode?: string } | undefined)?.vat_mode === 'included') return 'included'
+  return est.vat > 0 ? 'add' : 'none'
+}
+
 // 지원품목 프리셋
 const SUPPORT_PRESETS = ['무전기', '안전조끼', '경광봉', '바디캠', '응급키트', '직접입력']
 
@@ -160,7 +168,13 @@ export default function EstimateBuilder({
   const [form, setForm] = useState({
     inquiry_id: '', company_name: '', site_name: '', manager: '', contact_phone: '',
     site_address: '', attire: '', meal: '', parking: '',
-    notes: '', extra_cost: 0, include_vat: true,
+    notes: '', extra_cost: 0,
+    // 부가세를 어떻게 다룰 것인가
+    //   add      — 공급가에 10%를 얹는다 (기본)
+    //   included — "부가세 포함 25만원에 맞춰 달라"는 요청. 입력한 단가가 이미 부가세를 품고 있고,
+    //              공급가·부가세는 그 합에서 역산한다. 견적서엔 '부가세 포함'으로 나간다
+    //   none     — 부가세 없음 (견적서에 '별도'로 표시)
+    vat_mode: 'add' as VatMode,
     event_days: 1,
     days_mode: 'auto' as 'auto' | 'manual',
     version_label: 'A안',
@@ -201,7 +215,7 @@ export default function EstimateBuilder({
         contact_phone: inq?.phone || '', site_address: editTarget.site_address || '',
         attire: editTarget.attire || '', meal: editTarget.meal || '',
         parking: editTarget.parking || '', notes: editTarget.notes || '',
-        extra_cost: editTarget.extra_cost || 0, include_vat: editTarget.vat > 0,
+        extra_cost: editTarget.extra_cost || 0, vat_mode: vatModeOf(editTarget),
         event_days: days, days_mode: 'auto',
         version_label: editTarget.version_label || 'A안',
         event_start: inq?.event_start?.slice(0, 10) || '',
@@ -238,7 +252,7 @@ export default function EstimateBuilder({
         contact_phone: preInq?.phone || '', site_address: preInq?.location || '',
         attire: preInq?.attire || '', meal: preInq?.meal || '',
         parking: preInq?.parking || '', notes: '',
-        extra_cost: 0, include_vat: true, event_days: days,
+        extra_cost: 0, vat_mode: 'add', event_days: days,
         days_mode: hasDate ? 'auto' : 'manual',
         version_label: defaultVersionLabel || 'A안',
         event_start: preInq?.event_start?.slice(0, 10) || '',
@@ -373,11 +387,28 @@ export default function EstimateBuilder({
   const rawSupplyPrice = staffSubtotal + extraSubtotal + form.extra_cost
   const costPrice     = billableItems.reduce((s, r) => s + r.quantity * r.days * r.pay_unit_price, 0)
 
+  const includeVat  = form.vat_mode !== 'none'
+  const vatIncluded = form.vat_mode === 'included'
+
   // 실비청구 등 부가세 제외 품목: 과세 대상 공급가액에서 제외하고 VAT 계산
   const vatExemptSubtotal     = billableItems.filter(r => r.vat_exempt).reduce((s, r) => s + r.quantity * r.days * r.unit_price, 0)
   const vatApplicableSubtotal = rawSupplyPrice - vatExemptSubtotal
-  const { vat: rawVat } = calcVAT(form.include_vat ? vatApplicableSubtotal : 0)
-  const rawFinalTotal = rawSupplyPrice + (form.include_vat ? rawVat : 0)
+
+  // 할인 전 공급가 · 부가세 · 총액
+  //   add      : 공급가 = 품목 합, 부가세 = 과세분 × 10%
+  //   included : 품목 합이 곧 총액. 과세분을 1.1로 나눠 공급가를 역산한다 (lib/utils calcVATReverse)
+  //   none     : 부가세 0
+  let rawVat: number, rawFinalTotal: number, preDiscountSupply: number
+  if (vatIncluded) {
+    const rev = calcVATReverse(vatApplicableSubtotal)
+    rawVat = rev.vat
+    preDiscountSupply = rev.supply + vatExemptSubtotal
+    rawFinalTotal = rawSupplyPrice
+  } else {
+    rawVat = includeVat ? calcVAT(vatApplicableSubtotal).vat : 0
+    preDiscountSupply = rawSupplyPrice
+    rawFinalTotal = rawSupplyPrice + rawVat
+  }
 
   // ── 할인 적용 (총액 정액/비율) ──
   // 할인 없음 & 부가세 제외 품목 없음: 기존 계산과 완전히 동일 → 기존 견적서엔 영향 없음
@@ -389,10 +420,11 @@ export default function EstimateBuilder({
 
   // 할인 없음: 과세/비과세 각각 원래 금액 그대로 사용
   // 할인 있음: 할인액을 과세분/비과세분에 비례 배분한 뒤, 과세분 잔액만 공급가액/부가세로 역산
+  //            (총액은 add 든 included 든 부가세를 품은 값이라 같은 역산이 맞는다)
   let supplyPrice: number, vat: number
   if (!hasDiscount) {
-    supplyPrice = rawSupplyPrice
-    vat = form.include_vat ? rawVat : 0
+    supplyPrice = preDiscountSupply
+    vat = rawVat
   } else {
     const exemptGross  = vatExemptSubtotal
     const taxableGross = rawFinalTotal - exemptGross
@@ -400,7 +432,7 @@ export default function EstimateBuilder({
     const taxableDiscount = discountAmount - exemptDiscount
     const newExemptSupply = Math.max(0, exemptGross - exemptDiscount)
     const newTaxableGross = Math.max(0, taxableGross - taxableDiscount)
-    if (form.include_vat) {
+    if (includeVat) {
       const rev = calcVATReverse(newTaxableGross)
       supplyPrice = rev.supply + newExemptSupply
       vat = rev.vat
@@ -412,10 +444,23 @@ export default function EstimateBuilder({
   const profitRate = calcProfitRate(supplyPrice, costPrice)
 
   // 수익 리포트 전용 (인력 품목만)
-  const staffBilling  = staffItems.reduce((s, r) => s + r.quantity * r.days * r.unit_price, 0)
+  //
+  // 청구액은 '우리가 실제로 받는 공급가' 기준이어야 한다. 예전엔 품목 정가를 그대로 더해서,
+  // 총액 할인을 걸어도 리포트 이익률은 할인 전으로 나왔다 (사장님 신고). 부가세 포함가도
+  // 마찬가지로 단가에 든 부가세를 빼야 한다. 정가 → 공급가 비율(netRatio)을 품목마다 같이
+  // 적용한다. 매입은 애초에 부가세·할인과 무관하다.
+  const netRatio = preDiscountSupply > 0 ? supplyPrice / preDiscountSupply : 1
+  const netBilling = (r: Pick<ItemRow, 'quantity' | 'days' | 'unit_price'> & { vat_exempt?: boolean }) => {
+    const gross = r.quantity * r.days * r.unit_price
+    const exVat = vatIncluded && !r.vat_exempt ? gross / 1.1 : gross
+    return Math.round(exVat * netRatio)
+  }
+  const staffListPrice = staffItems.reduce((s, r) => s + r.quantity * r.days * r.unit_price, 0)
+  const staffBilling  = staffItems.reduce((s, r) => s + netBilling(r), 0)
   const staffCost     = staffItems.reduce((s, r) => s + r.quantity * r.days * r.pay_unit_price, 0)
   const staffProfit   = staffBilling - staffCost
   const staffRate     = staffBilling > 0 ? Math.round((staffProfit / staffBilling) * 1000) / 10 : 0
+  const billingAdjusted = staffListPrice !== staffBilling
 
   // ── 저장 ─────────────────────────────────────────────────
   async function handleSave() {
@@ -448,8 +493,11 @@ export default function EstimateBuilder({
       parking: form.parking || null,
       notes: form.notes || null,
       supply_price: supplyPrice,
-      vat: form.include_vat ? vat : 0,
+      vat: includeVat ? vat : 0,
       total_price: finalTotal,
+      // 부가세 포함가로 맞춘 견적은 다시 열 때 그 방식으로 열려야 한다. 전용 칸 대신
+      // 비어 있던 meta_json 에 적는다 (마이그레이션 없이 쓸 수 있다)
+      meta_json: { ...(editTarget?.meta_json || {}), vat_mode: form.vat_mode },
       cost_price: costPrice,
       extra_cost: form.extra_cost,
       profit_rate: profitRate,
@@ -555,7 +603,7 @@ export default function EstimateBuilder({
             const syncPayload: Record<string, unknown> = {
               invoice_amount:      newInvoice,
               supply_price:        supplyPrice,
-              vat:                 form.include_vat ? vat : 0,
+              vat:                 includeVat ? vat : 0,
               payout_amount:       costPrice,
               invoice_calc_amount: newInvoice,
             }
@@ -748,7 +796,7 @@ export default function EstimateBuilder({
       ...supportItems.map(r => toSmsItem(r, 'support')),
     ],
     staffSubtotal, extraSubtotal, supplyPrice, vat,
-    includeVat: form.include_vat, finalTotal,
+    includeVat, vatIncluded, finalTotal,
     hasDiscount, discountLabel: form.discount_label, discountAmount,
     notes: form.notes,
   }
@@ -985,10 +1033,31 @@ export default function EstimateBuilder({
                   <Input type="number" value={form.extra_cost} onChange={e => setForm(f => ({ ...f, extra_cost: Number(e.target.value) }))} />
                 </div>
               </div>
-              <label className="flex items-center gap-2 text-sm cursor-pointer mt-2.5">
-                <input type="checkbox" checked={form.include_vat} onChange={e => setForm(f => ({ ...f, include_vat: e.target.checked }))} className="w-4 h-4 rounded" />
-                부가세 (VAT 10%) 포함
-              </label>
+              <div className="mt-2.5">
+                <label className="label-xs">부가세 (VAT 10%)</label>
+                <div className="flex gap-1.5 flex-wrap">
+                  {([
+                    { v: 'add',      label: '별도 가산',  tip: '공급가에 10%를 더해 청구합니다 (기본)' },
+                    { v: 'included', label: '포함가',     tip: '"부가세 포함 25만원에 맞춰 달라"는 요청용. 입력한 단가가 부가세를 품고 있고, 공급가·부가세는 역산합니다' },
+                    { v: 'none',     label: '부가세 없음', tip: '부가세를 청구하지 않습니다. 견적서에 "별도"로 표시됩니다' },
+                  ] as { v: VatMode; label: string; tip: string }[]).map(o => (
+                    <button
+                      key={o.v} type="button" title={o.tip}
+                      onClick={() => setForm(f => ({ ...f, vat_mode: o.v }))}
+                      className={`text-xs px-3 py-1.5 rounded-full border-2 font-semibold transition-colors ${
+                        form.vat_mode === o.v ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-300 hover:border-gray-600'
+                      }`}
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+                {vatIncluded && (
+                  <p className="text-xs text-indigo-600 mt-1.5">
+                    품목 단가를 부가세 포함 금액으로 적으세요. 합계가 그대로 청구 총액이 되고, 공급가액 {formatKRW(supplyPrice)} · 부가세 {formatKRW(vat)}로 역산됩니다.
+                  </p>
+                )}
+              </div>
             </section>
 
             {/* 5. 견적 품목 */}
@@ -1120,15 +1189,15 @@ export default function EstimateBuilder({
                     value={form.discount_type === 'amount' ? `- ${formatKRW(discountAmount)}` : `- ${form.discount_value}%`}
                   />
                 )}
-                <SumLine label="공급가액" value={formatKRW(supplyPrice)} bold />
+                <SumLine label={vatIncluded ? '공급가액 (역산)' : '공급가액'} value={formatKRW(supplyPrice)} bold />
                 {vatExemptSubtotal > 0 && <SumLine label="- 비과세(실비) 포함" value={formatKRW(vatExemptSubtotal)} dimmed />}
-                {form.include_vat && <SumLine label="부가세 (10%)" value={formatKRW(vat)} />}
+                {includeVat && <SumLine label={vatIncluded ? '부가세 (포함분)' : '부가세 (10%)'} value={formatKRW(vat)} />}
                 <div className="flex justify-between font-bold text-blue-800 border-t border-blue-200 pt-2 text-base">
                   <span>청구 합계</span><span>{formatKRW(finalTotal)}</span>
                 </div>
                 <SumLine label="매입원가" value={formatKRW(costPrice)} dimmed />
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">수익률 (인력)</span>
+                  <span className="text-gray-600">수익률 (인력){billingAdjusted && <span className="text-2xs text-gray-400 ml-1">할인·부가세 반영</span>}</span>
                   <span className={`font-bold ${staffRate >= 20 ? 'text-green-700' : staffRate >= 10 ? 'text-yellow-700' : 'text-red-600'}`}>{staffRate}%</span>
                 </div>
                 <button onClick={() => setRightTab('report')} className="w-full mt-1 text-xs text-indigo-600 hover:text-indigo-800 flex items-center justify-center gap-1 py-1 rounded-lg hover:bg-indigo-50 border border-indigo-100 transition-colors">
@@ -1201,8 +1270,8 @@ export default function EstimateBuilder({
             <div className="flex-1 overflow-y-auto bg-gray-50 p-6">
               <ProfitReport
                 reportRef={reportRef}
-                staffItems={staffItems}
-                staffBilling={staffBilling} staffCost={staffCost}
+                staffItems={staffItems} netBilling={netBilling}
+                staffBilling={staffBilling} staffListPrice={staffListPrice} staffCost={staffCost}
                 staffProfit={staffProfit} staffRate={staffRate}
                 supplyPrice={supplyPrice} costPrice={costPrice} finalTotal={finalTotal}
                 extraSubtotal={extraSubtotal}
@@ -1514,19 +1583,23 @@ function ItemRowCard({ row, roles, factors, expandedFactor, defaultWorkTime, onR
 interface ItemRow2 { key: string; role_name: string; quantity: number; days: number; quantity_unit: string; days_unit: string; unit_price: number; pay_unit_price: number; is_leader: boolean; item_type: ItemType; spec: string; selectedFactors: string[]; _basePrice: number; _basePayPrice: number; work_time: string; role_id: string }
 function ProfitReport({
   reportRef,
-  staffItems, staffBilling, staffCost, staffProfit, staffRate,
+  staffItems, netBilling, staffBilling, staffListPrice, staffCost, staffProfit, staffRate,
   supplyPrice, costPrice, finalTotal, extraSubtotal,
   memo, onMemoChange, companyName, eventName, eventPeriod,
 }: {
   reportRef?: React.RefObject<HTMLDivElement | null>
   staffItems: ItemRow2[]
-  staffBilling: number; staffCost: number; staffProfit: number; staffRate: number
+  /** 품목 한 줄의 실제 청구액 — 총액 할인·부가세 포함가를 반영한 공급가 기준 */
+  netBilling: (r: ItemRow2) => number
+  staffBilling: number; staffListPrice: number; staffCost: number; staffProfit: number; staffRate: number
   supplyPrice: number; costPrice: number; finalTotal: number; extraSubtotal: number
   memo: ReportMemo; onMemoChange: (k: keyof ReportMemo, v: string) => void
   companyName: string; eventName: string; eventPeriod: string
 }) {
   const rateColor = staffRate >= 25 ? 'text-green-700' : staffRate >= 15 ? 'text-blue-700' : staffRate >= 10 ? 'text-yellow-700' : 'text-red-600'
   const rateBarW  = Math.min(100, Math.max(0, staffRate))
+  // 정가와 실제 청구액이 다르면(총액 할인·부가세 포함가) 그 사실을 리포트에 밝힌다
+  const adjusted  = staffListPrice !== staffBilling
 
   return (
     <div ref={reportRef} className="max-w-3xl mx-auto space-y-5 pb-4">
@@ -1543,7 +1616,7 @@ function ProfitReport({
 
       {/* KPI 카드 3개 */}
       <div className="grid grid-cols-3 gap-4">
-        <KpiCard label="총 청구" value={formatKRW(staffBilling)} sub={`부대비용 ${formatKRW(extraSubtotal)} 별도`} color="blue" />
+        <KpiCard label={adjusted ? '총 청구 (할인·부가세 반영)' : '총 청구'} value={formatKRW(staffBilling)} sub={adjusted ? `정가 ${formatKRW(staffListPrice)} · 부대비용 ${formatKRW(extraSubtotal)} 별도` : `부대비용 ${formatKRW(extraSubtotal)} 별도`} color="blue" />
         <KpiCard label="총 지급 (인력)" value={formatKRW(staffCost)} sub={`합계 ${formatKRW(costPrice)}`} color="red" />
         <KpiCard label="순이익 (인력)" value={formatKRW(staffProfit)} sub={`이익률 ${staffRate}%`} color="green" highlight />
       </div>
@@ -1559,6 +1632,9 @@ function ProfitReport({
         </div>
         <div className="flex justify-between text-xs text-gray-400 mt-1"><span>0%</span><span>기준 15%</span><span>30%+</span></div>
         <p className="text-xs text-gray-400 mt-2">※ 부대비용(교통/숙박/식비 등)은 실비 처리 — 이익률 계산 제외</p>
+        {adjusted && (
+          <p className="text-xs text-indigo-600 mt-1">※ 총액 할인·부가세 포함가를 반영한 실제 공급가 기준입니다. 정가 기준 이익률은 {staffListPrice > 0 ? Math.round(((staffListPrice - staffCost) / staffListPrice) * 1000) / 10 : 0}%</p>
+        )}
       </div>
 
       {/* 품목별 마진 테이블 */}
@@ -1576,11 +1652,14 @@ function ProfitReport({
               </thead>
               <tbody>
                 {staffItems.filter(r => r.role_name).map((row, idx) => {
-                  const billing = row.quantity * row.days * row.unit_price
+                  const billing = netBilling(row)
                   const cost    = row.quantity * row.days * row.pay_unit_price
                   const profit  = billing - cost
                   const rate    = billing > 0 ? Math.round((profit / billing) * 1000) / 10 : 0
-                  const margin  = row.unit_price - row.pay_unit_price
+                  // 단가 마진도 실제 청구 단가 기준 — 품목 합계가 0이면 정가로 둔다
+                  const units   = row.quantity * row.days
+                  const netUnit = units > 0 ? Math.round(billing / units) : row.unit_price
+                  const margin  = netUnit - row.pay_unit_price
                   return (
                     <tr key={row.key} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                       <td className="px-3 py-2 font-medium">{row.is_leader ? '[팀장] ' : ''}{row.role_name}{row.work_time ? <span className="ml-1 text-gray-400">({row.work_time})</span> : null}</td>
@@ -1665,7 +1744,7 @@ function A4Preview({
   hasDiscount, discountType, discountValue, discountAmount, discountLabel,
   eventPeriod, today,
 }: {
-  selectedInq?: Inquiry; form: { company_name: string; manager: string; contact_phone: string; site_address: string; attire: string; meal: string; parking: string; notes: string; include_vat: boolean }
+  selectedInq?: Inquiry; form: { company_name: string; manager: string; contact_phone: string; site_address: string; attire: string; meal: string; parking: string; notes: string; vat_mode: VatMode }
   staffItems: ItemRowSimple[]; extraItems: ItemRowSimple[]; supportItems: ItemRowSimple[]
   staffSubtotal: number; extraSubtotal: number; supplyPrice: number; vat: number; finalTotal: number; vatExemptSubtotal: number
   hasDiscount: boolean; discountType: 'none' | 'amount' | 'percentage'; discountValue: number; discountAmount: number; discountLabel: string
@@ -1726,7 +1805,7 @@ function A4Preview({
           {supplyPrice > 0 ? toKoreanAmount(finalTotal) : '( 품목 입력 후 자동 표시 )'}
         </span>
         &nbsp;<span style={{ color: '#6b7280', fontWeight: '400', fontSize: '11px' }}>
-          {form.include_vat ? '(부가세 포함)' : '(부가세 별도)'}
+          {form.vat_mode === 'none' ? '(부가세 별도)' : '(부가세 포함)'}
         </span>
       </div>
 
@@ -1824,8 +1903,9 @@ function A4Preview({
             </tr>
           )}
           <tr style={{ backgroundColor: '#1e3a5f' }}>
-            <td colSpan={5} style={{ padding: '10px 8px', textAlign: 'center', fontWeight: '800', color: '#fff', fontSize: '12px', border: '1px solid #2d4a7a' }}>총 합계</td>
-            <td style={{ padding: '10px 8px', textAlign: 'center', fontWeight: '900', color: '#fff', fontSize: '13px', border: '1px solid #2d4a7a' }}>{supplyPrice.toLocaleString()}</td>
+            <td colSpan={5} style={{ padding: '10px 8px', textAlign: 'center', fontWeight: '800', color: '#fff', fontSize: '12px', border: '1px solid #2d4a7a' }}>{form.vat_mode === 'included' ? '총 합계 (부가세 포함)' : '총 합계'}</td>
+            {/* 포함가 견적은 품목 금액이 부가세를 품고 있으므로 표의 합계도 부가세 포함 총액이어야 맞는다 */}
+            <td style={{ padding: '10px 8px', textAlign: 'center', fontWeight: '900', color: '#fff', fontSize: '13px', border: '1px solid #2d4a7a' }}>{(form.vat_mode === 'included' ? finalTotal : supplyPrice).toLocaleString()}</td>
             <td style={{ border: '1px solid #2d4a7a' }} />
           </tr>
         </tbody>
@@ -1839,12 +1919,13 @@ function A4Preview({
             <p>- 계약시급 기준 / 계약 이후 추가시간 발생 시 시간당 추가 금액 별도 청구</p>
             <p>- 경호원 &amp; 경비지도사 : 30,000원 (VAT 별도) · STAFF : 20,000원 (VAT 별도)</p>
             <p>- 복리후생비, 일반관리비, 직책수당 단가 포함</p>
+            {form.vat_mode === 'included' && <p style={{ color: '#1e40af', fontWeight: 700 }}>- 위 단가 및 금액은 부가세가 포함된 금액입니다</p>}
           </div>
         </div>
         <div style={{ width: '210px', border: '2px solid #1e3a5f', borderRadius: '4px', overflow: 'hidden' }}>
           <DocSumRow label="공급가액" value={supplyPrice.toLocaleString()} />
           {vatExemptSubtotal > 0 && <DocSumRow label="(비과세 실비 포함)" value={vatExemptSubtotal.toLocaleString()} />}
-          <DocSumRow label="부 가 세" value={form.include_vat ? vat.toLocaleString() : '별도'} />
+          <DocSumRow label="부 가 세" value={form.vat_mode === 'none' ? '별도' : vat.toLocaleString()} />
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 14px', backgroundColor: '#1e3a5f', color: '#fff', fontWeight: '900', fontSize: '14px' }}>
             <span>합 계</span><span>{finalTotal.toLocaleString()}</span>
           </div>
