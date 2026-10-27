@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { UUID_RE, SELF_NOTE, nowHHMM, resolveWorkDate } from '@/lib/checkin'
+import { sendToAll, subjectFrom } from '@/lib/push'
 
 // 크루 셀프 출석 체크인 — 로그인 없이 호출되는 공개 라우트.
 // proxy.ts의 PUBLIC_PATHS에 등록되어 있으므로 다루는 범위를 최대한 좁게 유지한다.
@@ -94,6 +95,16 @@ export async function POST(request: NextRequest) {
   if (error) return NextResponse.json({ error: '저장에 실패했습니다.' }, { status: 500 })
 
   await supabase.from('assignments').update({ is_present: true }).eq('id', assignmentId)
+
+  // 알림을 켠 휴대폰에 "누가 체크인했다"를 알린다. 실패해도 체크인은 이미 됐다
+  try {
+    const { data: ev } = await supabase.from('inquiries').select('event_name').eq('id', inquiryId).maybeSingle()
+    await sendToAll({
+      title: `체크인 · ${ev?.event_name || '행사'}`,
+      body: `${asgn.staff_name || '크루'} ${nowHHMM()} 셀프 체크인`,
+      url: '/m/today', tag: `checkin:${inquiryId}`,
+    }, subjectFrom(request), { kind: 'checkin' })
+  } catch (e) { console.error('체크인 알림 실패', e) }
 
   return NextResponse.json({ ok: true })
 }

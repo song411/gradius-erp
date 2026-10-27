@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { MobileHeader } from '@/components/mobile/ui'
+import PushSettings from '@/components/mobile/PushSettings'
 import { PenLine, CalendarRange, LayoutDashboard, Smartphone, ChevronRight } from 'lucide-react'
 
 export const metadata: Metadata = { title: '더보기 | 가디어스' }
@@ -17,6 +18,7 @@ export default function MobileMorePage() {
     <div className="max-w-lg mx-auto">
       <MobileHeader kicker="가디어스" title="더보기" />
       <div className="px-4 pt-4 space-y-4">
+        <PushSettings />
         <section className="rounded-2xl bg-white border-2 border-gray-200 overflow-hidden">
           {LINKS.map(l => {
             const Icon = l.icon

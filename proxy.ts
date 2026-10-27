@@ -20,6 +20,8 @@ const PUBLIC_PATHS = [
   '/icon-512.png',
   '/icon-512-maskable.png',
   '/apple-icon.png',
+  '/sw.js',           // 푸시 알림 서비스 워커 — 브라우저가 쿠키 없이 가져갈 수 있어야 한다
+  '/api/push/cron',   // Vercel 크론이 부른다. 자체 비밀키(CRON_SECRET)로만 받는다 — 라우트 안에서 검사
 ]
 
 export async function proxy(request: NextRequest) {

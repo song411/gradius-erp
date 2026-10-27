@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { sendToAll, subjectFrom } from '@/lib/push'
 
 // 모든 응답을 동적으로 처리 (CDN/Next.js 캐싱 방지)
 export const dynamic = 'force-dynamic'
@@ -98,6 +99,19 @@ export async function POST(
   const { data, error } = await supabase.from(table).insert(body).select()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // 현장 기록이 올라오면 알림을 켠 휴대폰에 알린다. 실패해도 저장은 이미 됐으니 조용히 넘어간다
+  if (table === 'field_logs' && Array.isArray(data) && data[0]) {
+    const log = data[0] as { kind?: string; content?: string; inquiry_id?: string; author?: string }
+    try {
+      const { data: inq } = await supabase.from('inquiries').select('event_name').eq('id', log.inquiry_id || '').maybeSingle()
+      await sendToAll({
+        title: `현장 기록 · ${inq?.event_name || '행사'}`,
+        body: `[${log.kind || '기록'}] ${(log.content || '').slice(0, 80)}${log.author ? ` — ${log.author}` : ''}`,
+        url: '/field?tab=inbox', tag: 'field_log',
+      }, subjectFrom(request), { kind: 'field_log' })
+    } catch (e) { console.error('현장 기록 알림 실패', e) }
+  }
   return NextResponse.json({ data })
 }
 
