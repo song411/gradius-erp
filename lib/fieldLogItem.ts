@@ -18,12 +18,25 @@ export interface DraftItem {
   spec?: string
 }
 
-export function itemFromFieldLog(log: FieldLog): DraftItem {
+export interface DraftHint {
+  /** 기록에 금액이 없을 때 쓸 제안 단가 (lib/overtime) */
+  unitPrice?: number
+  /** 그 제안의 근거 — 비고에 같이 적어 사람이 보게 한다 */
+  priceNote?: string
+}
+
+export function itemFromFieldLog(log: FieldLog, hint: DraftHint = {}): DraftItem {
   const note = `현장기록 ${log.log_date || log.created_at.slice(0, 10)}: ${log.content}`
   const head = log.headcount && log.headcount > 0 ? log.headcount : 1
   switch (log.kind) {
-    case '연장':
-      return { role_name: '연장 근무', item_type: '연장수당', quantity: head, days: log.hours && log.hours > 0 ? log.hours : 1, days_unit: '시간', spec: note }
+    case '연장': {
+      // 기록 금액이 있으면 그것이 총액이라 보고 시간당으로 나눈다. 없으면 제안 단가
+      const hours = log.hours && log.hours > 0 ? log.hours : 1
+      const fromLog = log.amount && log.amount > 0 ? Math.round(log.amount / (head * hours)) : undefined
+      const unit = fromLog ?? hint.unitPrice
+      const spec = fromLog === undefined && hint.unitPrice && hint.priceNote ? `${note} · 제안단가 ${hint.priceNote}` : note
+      return { role_name: '연장 근무', item_type: '연장수당', quantity: head, days: hours, days_unit: '시간', unit_price: unit, spec }
+    }
     case '인원변경':
       return { role_name: log.staff_name ? `추가 인원 (${log.staff_name})` : '추가 인원', item_type: '인력', quantity: head, days: 1, spec: note }
     case '추가지급':

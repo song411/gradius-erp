@@ -37,6 +37,10 @@ export interface Role {
   base_price: number
   pay_price: number
   leader_bonus: number
+  /** 기본 근무 시간 (대개 8). 연장 단가 제안의 분모 — lib/overtime.ts */
+  base_hours?: number | null
+  /** 시간당 연장 단가(고객가). 0 이면 미설정 */
+  overtime_hourly?: number | null
   created_at: string
 }
 

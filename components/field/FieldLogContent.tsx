@@ -374,6 +374,10 @@ function InboxTab({ inquiries, logs, estimates, onChanged }: { inquiries: Inquir
   function openPayoutWithLog(log: FieldLog) {
     window.open(`/payouts?inquiry=${log.inquiry_id}&fromLog=${log.id}`, '_blank', 'noopener')
   }
+  // 배정도 같은 모양 — 배정 화면을 그 행사로 열고 스태프 패널에 이름을 검색해 둔다. 끌어다 놓는 건 사람
+  function openAssignWithLog(log: FieldLog) {
+    window.open(`/assignments?inq=${log.inquiry_id}&fromLog=${log.id}`, '_blank', 'noopener')
+  }
   // 부대비용은 여기서 직접 만든다 — 사람이 이 버튼을 누르는 것이 곧 '직접 입력'이다
   async function registerExpense(log: FieldLog) {
     if (!log.amount) { toast.info('금액이 없어 등록할 수 없습니다. 반영 표시만 하거나, 기록에 금액을 적어 주세요.'); return }
@@ -460,6 +464,11 @@ function InboxTab({ inquiries, logs, estimates, onChanged }: { inquiries: Inquir
                             </Button>
                           </>
                         ) : null}
+                        {l.kind === '인원변경' && (
+                          <Button size="sm" variant="outline" className="h-8 text-xs gap-1 border-indigo-300 text-indigo-700 hover:bg-indigo-50" onClick={() => openAssignWithLog(l)} title="인원 배정을 이 행사로 새 탭에 열고, 기록의 이름을 스태프 패널에 검색해 둡니다. 끌어다 놓아 배정하면 여기도 반영됨으로 바뀝니다.">
+                            <Users className="h-3 w-3" />배정에 반영
+                          </Button>
+                        )}
                         {(l.kind === '연장' || l.kind === '추가지급') && (
                           <Button size="sm" variant="outline" className="h-8 text-xs gap-1 border-emerald-300 text-emerald-700 hover:bg-emerald-50" onClick={() => openPayoutWithLog(l)} title="지급관리를 이 행사로 새 탭에 열고, 기록의 사람 지급 폼에 금액을 채워 줍니다. 저장하면 여기도 반영됨으로 바뀝니다.">
                             <Banknote className="h-3 w-3" />지급에 반영

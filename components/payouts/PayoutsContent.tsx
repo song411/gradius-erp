@@ -4,9 +4,10 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import * as XLSX from 'xlsx'
 import { db } from '@/lib/supabase/api'
-import type { Inquiry, Assignment, Payout, Settlement, EventExpense, FieldLog } from '@/lib/supabase/types'
+import type { Inquiry, Assignment, Payout, Settlement, EventExpense, FieldLog, Role, Factor } from '@/lib/supabase/types'
 import { formatKRW, formatDate } from '@/lib/utils'
 import { isHeadOfficeAssignment } from '@/lib/finance'
+import { overtimeRateFor, describeOvertime } from '@/lib/overtime'
 import PayoutForm, { type PayoutPrefill } from './PayoutForm'
 import BulkPayoutModal from './BulkPayoutModal'
 import ExpensesSection from './ExpensesSection'
@@ -166,12 +167,23 @@ export default function PayoutsContent() {
   // 저장되면 기록을 '지급 반영'으로 표시한다 — 기록 자체는 돈을 쓰지 않는다
   const searchParams = useSearchParams()
   const [pendingLog, setPendingLog] = useState<FieldLog | null>(null)
+  const [rateTables, setRateTables] = useState<{ roles: Role[]; factors: Factor[] }>({ roles: [], factors: [] })
   const deepLinkDone = useRef(false)
 
-  const prefillOf = (log: FieldLog | null): PayoutPrefill | null => {
+  // 기록 금액이 있으면 그대로. 연장인데 금액이 없고 시간만 있으면 직무표에서 제안 단가(lib/overtime)
+  const prefillOf = (log: FieldLog | null, asgn?: Assignment | null): PayoutPrefill | null => {
     if (!log) return null
     const memo = `[현장기록 ${log.log_date || log.created_at.slice(0, 10)}] ${log.content}`
-    if (log.kind === '연장')     return { overtime_pay: log.amount || 0, memo }
+    if (log.kind === '연장') {
+      if (log.amount) return { overtime_pay: log.amount, memo }
+      const hours = log.hours && log.hours > 0 ? log.hours : 0
+      const rate = hours ? overtimeRateFor(asgn?.job_type, rateTables.roles, rateTables.factors) : null
+      if (rate) {
+        const amt = rate.payHourly * hours
+        return { overtime_pay: amt, memo: `${memo}\n제안 ${amt.toLocaleString()}원 = ${describeOvertime(rate, hours, 'pay')}${rate.assumed ? ' ※확인 필요' : ''}` }
+      }
+      return { memo: `${memo} (금액 없음 — 직접 입력)` }
+    }
     if (log.kind === '추가지급') return { bonus: log.amount || 0, memo }
     return { memo }
   }
@@ -216,7 +228,12 @@ export default function PayoutsContent() {
     setSelectedId(inqId)
     if (!logId) return
     ;(async () => {
-      const rows = await db.list<FieldLog>('field_logs', { filters: { id: logId }, limit: 1 }).catch(() => [] as FieldLog[])
+      const [rows, roles, factors] = await Promise.all([
+        db.list<FieldLog>('field_logs', { filters: { id: logId }, limit: 1 }).catch(() => [] as FieldLog[]),
+        db.list<Role>('roles').catch(() => [] as Role[]),
+        db.list<Factor>('factors').catch(() => [] as Factor[]),
+      ])
+      setRateTables({ roles, factors })
       const log = rows[0]
       if (!log) { toast.error('그 현장 기록을 찾을 수 없습니다.'); return }
       setPendingLog(log)
@@ -241,7 +258,7 @@ export default function PayoutsContent() {
   // 지급 폼 저장 뒤: 현장 기록에서 온 것이면 기록을 '지급 반영'으로 표시
   async function handleFormSaved() {
     if (pendingLog && formAssignment) {
-      const p = prefillOf(pendingLog)
+      const p = prefillOf(pendingLog, formAssignment)
       const what = p?.overtime_pay ? `연장수당 ${formatKRW(p.overtime_pay)}` : p?.bonus ? `기타수당 ${formatKRW(p.bonus)}` : '지급 메모'
       try {
         await db.update('field_logs', pendingLog.id, {
@@ -850,7 +867,7 @@ export default function PayoutsContent() {
       {formOpen && formAssignment && (
         <PayoutForm open={formOpen} onClose={() => setFormOpen(false)}
           assignment={formAssignment} payout={formPayout} onSaved={handleFormSaved}
-          prefill={pendingLog && pendingLog.inquiry_id === formAssignment.inquiry_id ? prefillOf(pendingLog) : null} />
+          prefill={pendingLog && pendingLog.inquiry_id === formAssignment.inquiry_id ? prefillOf(pendingLog, formAssignment) : null} />
       )}
 
       {bulkOpen && selectedInquiry && (

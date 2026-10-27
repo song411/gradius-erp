@@ -13,7 +13,9 @@ import { Select } from '@/components/ui/select'
 import { Plus, Search, Edit2, Trash2, Eye, Package, FileText, TrendingUp, Send, Clock, CheckCircle, Star, Copy, RotateCcw, XCircle, LayoutList } from 'lucide-react'
 import type { Estimate, EstimateItem, Inquiry, EstimateVersion, FieldLog } from '@/lib/supabase/types'
 import { attachItems } from '@/lib/estimateItems'
-import { itemFromFieldLog, type DraftItem } from '@/lib/fieldLogItem'
+import { itemFromFieldLog, type DraftItem, type DraftHint } from '@/lib/fieldLogItem'
+import { overtimeRateFor, describeOvertime } from '@/lib/overtime'
+import type { Role, Factor } from '@/lib/supabase/types'
 import { historyOf } from '@/lib/estimateHistory'
 import EstimateHistoryList from './EstimateHistoryList'
 import RelatedLinks from '@/components/ui/RelatedLinks'
@@ -395,7 +397,20 @@ export default function EstimatesContent() {
         log = rows[0] || null
       }
       setFromLog(log)
-      setAppendItems(log ? [itemFromFieldLog(log)] : null)
+      // 연장인데 금액이 없으면 직무표에서 제안 단가 — 이 견적의 첫 인력 품목 직무 기준 (lib/overtime)
+      let hint: DraftHint = {}
+      if (log && log.kind === '연장' && !log.amount) {
+        const [roles, factors] = await Promise.all([
+          db.list<Role>('roles').catch(() => [] as Role[]),
+          db.list<Factor>('factors').catch(() => [] as Factor[]),
+        ])
+        // 이 견적의 인력 품목을 앞에서부터 보며 직무표에 맞는 첫 직무로 (팀장 줄이 먼저면 그 직무)
+        const roleNames = (est.estimate_items || []).filter(it => (it.item_type || '인력') === '인력').map(it => it.role_name)
+        const rate = roleNames.map(n => overtimeRateFor(n, roles, factors)).find(Boolean) || null
+        const hours = log.hours && log.hours > 0 ? log.hours : 1
+        if (rate) hint = { unitPrice: rate.customerHourly, priceNote: `${describeOvertime(rate, hours, 'customer')}${rate.assumed ? ' ※확인 필요' : ''}` }
+      }
+      setAppendItems(log ? [itemFromFieldLog(log, hint)] : null)
       setEditTarget(est)
       setPreselectedInquiry(null)
       setShowBuilder(true)

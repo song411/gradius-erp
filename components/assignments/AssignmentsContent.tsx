@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { db } from '@/lib/supabase/api'
-import type { Inquiry, Assignment, EstimateItem, Estimate, Staff } from '@/lib/supabase/types'
+import type { Inquiry, Assignment, EstimateItem, Estimate, Staff, FieldLog } from '@/lib/supabase/types'
 import { formatKRW, formatDate } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -281,6 +281,12 @@ export default function AssignmentsContent() {
   const deepInqDone = useRef<string | null>(null)
   const deepJobDone = useRef<string | null>(null)
   const [flashJob, setFlashJob] = useState<string | null>(null)
+  // 현장 기록 대기함에서 "배정에 반영"으로 넘어온 경우: ?inq=<문의id>&fromLog=<기록id>
+  // 행사를 고르고 스태프 패널을 기록의 이름으로 검색해 둔다. 배정은 사람이 끌어다 놓는다.
+  // 그 뒤 처음 저장되는 배정에서 기록을 '배정 반영'으로 표시한다
+  const deepLog = searchParams.get('fromLog')
+  const deepLogDone = useRef<string | null>(null)
+  const [pendingLog, setPendingLog] = useState<FieldLog | null>(null)
 
   const [inquiries, setInquiries]     = useState<Inquiry[]>([])
   const [selectedInq, setSelectedInq] = useState<Inquiry | null>(null)
@@ -395,6 +401,38 @@ export default function AssignmentsContent() {
       })
       .catch(e => toast.error('행사 조회 실패: ' + (e as Error).message))
   }, [deepInq, loading, inquiries])
+
+  // ?fromLog=<기록id> — 행사가 열린 뒤 한 번만. 패널을 열고 이름을 검색칸에 넣는다
+  useEffect(() => {
+    if (!deepLog || !selectedInq || selectedInq.id !== deepInq) return
+    if (deepLogDone.current === deepLog) return
+    deepLogDone.current = deepLog
+    db.list<FieldLog>('field_logs', { filters: { id: deepLog }, limit: 1 })
+      .then(rows => {
+        const log = rows[0]
+        if (!log) { toast.error('그 현장 기록을 찾을 수 없습니다.'); return }
+        setPendingLog(log)
+        setShowStaffPanel(true)
+        setStaffPanelSearch((log.staff_name || '').trim())
+        toast.info(log.staff_name
+          ? `왼쪽 패널에 "${log.staff_name}"을 검색해 두었습니다. 직무 칸으로 끌어다 놓으면 배정됩니다.`
+          : '기록에 이름이 없습니다. 왼쪽 패널에서 사람을 찾아 끌어다 놓으세요.', { duration: 8000 })
+      })
+      .catch(e => toast.error('기록 조회 실패: ' + (e as Error).message))
+  }, [deepLog, deepInq, selectedInq])
+
+  // 현장 기록에서 온 뒤 처음 저장된 배정 → 기록을 '배정 반영'으로 표시
+  async function markLogAssigned(staffName: string, jobType: string) {
+    if (!pendingLog) return
+    try {
+      await db.update('field_logs', pendingLog.id, {
+        applied_at: new Date().toISOString(), applied_to: '배정',
+        applied_note: `${staffName} 추가${jobType ? ` (${jobType})` : ''}`,
+      })
+      toast.success('현장 기록을 "배정 반영"으로 표시했습니다.')
+    } catch (e) { toast.error('기록 반영 표시 실패: ' + (e as Error).message) }
+    setPendingLog(null)
+  }
 
   // ?job=<직무명> 이면 그 슬롯으로 스크롤하고 잠깐 테두리를 준다.
   // 캘린더가 묶어 보여준 이름(행사스탭)은 여기 슬롯 키(행사스탭(주중))와
@@ -545,6 +583,7 @@ export default function AssignmentsContent() {
     try {
       await db.insert('assignments', payload)
       toast.success(`${staffName} 배정 완료`)
+      if (pendingLog) await markLogAssigned(staffName, jobType)
       loadDetail(selectedInq)
       loadInquiries()
     } catch (e) {
@@ -1102,6 +1141,15 @@ export default function AssignmentsContent() {
           </div>
         ) : (
           <>
+            {/* 현장 기록 반영 중 — 이 행사에 처음 저장되는 배정이 기록을 반영됨으로 바꾼다 */}
+            {pendingLog && pendingLog.inquiry_id === selectedInq.id && (
+              <div className="bg-emerald-50 border-b border-emerald-200 px-5 py-2 flex items-center gap-3 text-xs">
+                <span className="font-bold text-emerald-800">현장 기록 반영 중</span>
+                <span className="text-emerald-900 flex-1 truncate">[{pendingLog.kind}] {pendingLog.content}</span>
+                <span className="text-emerald-700">사람을 끌어다 놓아 배정하면 기록이 반영됨으로 바뀝니다 · 불참 처리는 그 줄의 상태를 취소로</span>
+                <button onClick={() => setPendingLog(null)} className="text-emerald-600 hover:text-emerald-900 font-semibold">취소</button>
+              </div>
+            )}
             {/* 헤더 */}
             <div className="bg-white border-b border-gray-200 px-5 py-3">
               <div className="flex items-center gap-2 text-xs text-gray-400 mb-1">
