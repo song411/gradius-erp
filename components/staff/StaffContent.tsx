@@ -126,13 +126,29 @@ export default function StaffContent() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [staff, asgns] = await Promise.all([
-      db.list<Staff>('staff', { order: 'total_score', asc: false }),
-      db.list<Assignment>('assignments', { select: 'id,staff_id,inquiry_id,status,start_date,end_date' }),
-    ])
-    setStaffList(staff)
-    setActivity(buildActivity(asgns))
-    setLoading(false)
+    try {
+      // assignments 에는 created_at 이 없다 — order 를 안 주면 라우트 기본값(created_at)
+      // 으로 정렬하다 400 이 난다. 2026-10-27 크루관리 무한 로딩의 원인.
+      const [staff, asgns] = await Promise.all([
+        db.list<Staff>('staff', { order: 'total_score', asc: false }),
+        db.list<Assignment>('assignments', {
+          select: 'id,staff_id,inquiry_id,status,start_date,end_date',
+          order: 'assigned_at', asc: false,
+        }).catch(e => {
+          // 활동 열은 덤이다. 이게 실패해도 크루 목록은 보여야 한다.
+          console.error('assignments 조회 실패', e)
+          toast.error('참여·최근 근무 정보를 불러오지 못했습니다')
+          return [] as Assignment[]
+        }),
+      ])
+      setStaffList(staff)
+      setActivity(buildActivity(asgns))
+    } catch (e) {
+      console.error('크루 목록 조회 실패', e)
+      toast.error('크루 목록을 불러오지 못했습니다')
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => { load() }, [load])

@@ -19,6 +19,15 @@ const ALLOWED_TABLES = [
 /** Supabase REST가 한 번에 돌려주는 최대 행 수. 클라이언트는 이 단위로 나눠 읽는다. */
 const MAX_PAGE = 1000
 
+// order 를 안 넘긴 조회의 기본 정렬 열. 대부분 created_at 이지만 몇 표는 그 열이 없어서
+// 기본값 그대로 보내면 Supabase 가 400 을 돌려준다. (실측 2026-10-27: 크루관리가
+// assignments 를 order 없이 불러 무한 로딩) 열이 없는 표는 여기 적어 둔다.
+const DEFAULT_ORDER: Record<string, string> = {
+  assignments:     'assigned_at',
+  evaluations:     'evaluated_at',
+  pricing_history: 'changed_at',
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ table: string }> }
@@ -29,7 +38,7 @@ export async function GET(
   }
 
   const { searchParams } = new URL(request.url)
-  const orderBy = searchParams.get('order') || 'created_at'
+  const orderBy = searchParams.get('order') || DEFAULT_ORDER[table] || 'created_at'
   const ascending = searchParams.get('asc') === 'true'
   const limitStr = searchParams.get('limit')
   const select = searchParams.get('select') || '*'

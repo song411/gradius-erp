@@ -69,6 +69,7 @@ export default function SearchContent() {
       }),
       db.list<Assignment>('assignments', {
         or: `staff_name.ilike.%${q}%,event_name.ilike.%${q}%,job_type.ilike.%${q}%`,
+        order: 'assigned_at', asc: false,   // assignments 에는 created_at 이 없다
         limit: 10,
       }),
       db.list<Settlement>('settlements', {
