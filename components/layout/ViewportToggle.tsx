@@ -10,8 +10,8 @@ const MOBILE_VIEWPORT  = 'width=device-width, initial-scale=1'
 
 export default function ViewportToggle() {
   const pathname = usePathname()
-  // 휴대폰 전용 화면(/today)에서는 손대지 않는다 — 저장된 '데스크탑 모드'도 적용하지 않는다
-  const skip = pathname.startsWith('/today')
+  // 휴대폰 틀(/m)에서는 손대지 않는다 — 저장된 '데스크탑 모드'도 적용하지 않는다
+  const skip = pathname === '/m' || pathname.startsWith('/m/') || pathname.startsWith('/today')
   const [isDesktop, setIsDesktop] = useState(false)
   const [visible, setVisible] = useState(false)
 

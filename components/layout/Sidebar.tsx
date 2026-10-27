@@ -42,7 +42,7 @@ const navItems: NavItem[] = [
   { href: '/customers', label: '고객 관리', icon: Building2 },
   { href: '/attendance', label: '출석부', icon: ClipboardList },
   { href: '/field', label: '현장 기록', icon: PenLine },
-  { href: '/today', label: '오늘 현장 (휴대폰)', icon: Smartphone },
+  { href: '/m/today', label: '휴대폰 화면', icon: Smartphone },
   { href: '/search', label: '통합검색', icon: Search },
   // 가디는 어느 화면에서든 그 자리에서 열린다 — 보던 것을 두고 옮겨 가지 않는다
   { action: 'ai', label: 'AI비서 가디', icon: Sparkles },

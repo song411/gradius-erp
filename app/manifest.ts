@@ -8,7 +8,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: '가디어스 ERP — 오늘 현장',
     short_name: '가디어스',
     description: '현장에서 보는 이번 주 행사·크루·한 줄 기록',
-    start_url: '/today',
+    start_url: '/m/today',
     scope: '/',
     display: 'standalone',
     orientation: 'portrait',
