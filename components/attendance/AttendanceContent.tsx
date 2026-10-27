@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { db } from '@/lib/supabase/api'
+import { saveEvaluation } from '@/lib/evaluation'
 import type { Inquiry, Assignment, Attendance, Evaluation, Staff } from '@/lib/supabase/types'
 import type { AttendanceStatus } from '@/lib/supabase/types'
 import { formatDate, formatKRW } from '@/lib/utils'
@@ -492,66 +493,34 @@ export default function AttendanceContent() {
     const data = evalMap[asgn.id]
     if (!data) return
 
-    const scores = [
-      data.attendance_score, data.performance_score,
-      data.appearance_score, data.teamwork_score, data.adaptability_score,
-    ]
-    const avgScore = scores.reduce((s, v) => s + v, 0) / scores.length
-    const total = Math.round(avgScore * 10) / 10
-    const grade = total >= 4 ? '우수' : total >= 2.5 ? '보통' : '미흡'
-
-    const payload = {
-      assignment_id: asgn.id,
-      staff_id: asgn.staff_id || null,
-      staff_name: asgn.staff_name || '',
-      site_name: selectedInq.event_name || '',
-      attendance_score: data.attendance_score,
-      performance_score: data.performance_score,
-      appearance_score: data.appearance_score,
-      teamwork_score: data.teamwork_score,
-      adaptability_score: data.adaptability_score,
-      total_score: total,
-      grade,
-      re_recommend: data.re_recommend,
-      strengths: data.strengths || null,
-      improvements: data.improvements || null,
-      evaluated_at: new Date().toISOString(),
-    }
-
     try {
+      // 저장과 누적 평점 재계산은 lib/evaluation.ts 한 곳 — 오늘 현장(휴대폰)도 같은 함수를 쓴다
       const existing = evaluations.find(e => e.assignment_id === asgn.id)
-      if (existing) {
-        await db.update('evaluations', existing.id, payload)
-      } else {
-        await db.insert('evaluations', payload)
-      }
+      const { total, grade } = await saveEvaluation({
+        assignmentId: asgn.id,
+        staffId: asgn.staff_id,
+        staffName: asgn.staff_name,
+        siteName: selectedInq.event_name || '',
+        scores: {
+          attendance_score: data.attendance_score,
+          performance_score: data.performance_score,
+          appearance_score: data.appearance_score,
+          teamwork_score: data.teamwork_score,
+          adaptability_score: data.adaptability_score,
+        },
+        reRecommend: data.re_recommend,
+        strengths: data.strengths,
+        improvements: data.improvements,
+        existingId: existing?.id,
+      })
 
-      // staff 테이블 점수 + 프로필 정보 갱신 (있는 경우)
+      // 키/몸무게/MBTI 는 평가가 아니라 크루 프로필 — 입력된 경우만 따로 저장
       if (asgn.staff_id) {
-        // 점수 집계
-        const staffEvals = await db.list<Evaluation>('evaluations', {
-          filters: { staff_id: asgn.staff_id },
-          order: 'evaluated_at', asc: true,
-        })
-        const staffUpdate: Record<string, unknown> = {}
-        if (staffEvals.length > 0) {
-          const avg = (key: keyof Evaluation) =>
-            Math.round(staffEvals.reduce((s, e) => s + (e[key] as number), 0) / staffEvals.length * 10) / 10
-          staffUpdate.attendance_score   = avg('attendance_score')
-          staffUpdate.performance_score  = avg('performance_score')
-          staffUpdate.appearance_score   = avg('appearance_score')
-          staffUpdate.teamwork_score     = avg('teamwork_score')
-          staffUpdate.adaptability_score = avg('adaptability_score')
-          staffUpdate.total_score        = avg('total_score')
-        }
-        // 키/몸무게/MBTI 저장 (입력된 경우만)
-        if (data.height) staffUpdate.height = parseFloat(data.height)
-        if (data.weight) staffUpdate.weight = parseFloat(data.weight)
-        if (data.mbti)   staffUpdate.mbti   = data.mbti.toUpperCase()
-
-        if (Object.keys(staffUpdate).length > 0) {
-          await db.update('staff', asgn.staff_id, staffUpdate)
-        }
+        const profile: Record<string, unknown> = {}
+        if (data.height) profile.height = parseFloat(data.height)
+        if (data.weight) profile.weight = parseFloat(data.weight)
+        if (data.mbti)   profile.mbti   = data.mbti.toUpperCase()
+        if (Object.keys(profile).length > 0) await db.update('staff', asgn.staff_id, profile)
       }
 
       setEvalMap(prev => ({ ...prev, [asgn.id]: { ...prev[asgn.id], dirty: false, scoreSource: 'saved' } }))
