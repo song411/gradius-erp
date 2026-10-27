@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { useSearchParams } from 'next/navigation'
 import * as XLSX from 'xlsx'
 import { db } from '@/lib/supabase/api'
-import type { Inquiry, Assignment, Payout, Settlement, EventExpense } from '@/lib/supabase/types'
+import type { Inquiry, Assignment, Payout, Settlement, EventExpense, FieldLog } from '@/lib/supabase/types'
 import { formatKRW, formatDate } from '@/lib/utils'
 import { isHeadOfficeAssignment } from '@/lib/finance'
-import PayoutForm from './PayoutForm'
+import PayoutForm, { type PayoutPrefill } from './PayoutForm'
 import BulkPayoutModal from './BulkPayoutModal'
 import ExpensesSection from './ExpensesSection'
 import { Button } from '@/components/ui/button'
@@ -159,6 +160,21 @@ export default function PayoutsContent() {
   const [formAssignment, setFormAssignment] = useState<Assignment | null>(null)
   const [formPayout, setFormPayout]   = useState<Payout | null>(null)
   const [bulkOpen, setBulkOpen]       = useState(false)
+  // 현장 기록 대기함에서 "지급에 반영"으로 넘어온 경우: ?inquiry=<문의id>&fromLog=<기록id>
+  // 그 행사를 고르고, 기록의 사람이 명단에 있으면 지급 폼을 금액이 채워진 채 연다.
+  // 이름이 없거나('전원') 안 맞으면 행사만 열어 두고, 사람을 고를 때마다 금액을 채운다.
+  // 저장되면 기록을 '지급 반영'으로 표시한다 — 기록 자체는 돈을 쓰지 않는다
+  const searchParams = useSearchParams()
+  const [pendingLog, setPendingLog] = useState<FieldLog | null>(null)
+  const deepLinkDone = useRef(false)
+
+  const prefillOf = (log: FieldLog | null): PayoutPrefill | null => {
+    if (!log) return null
+    const memo = `[현장기록 ${log.log_date || log.created_at.slice(0, 10)}] ${log.content}`
+    if (log.kind === '연장')     return { overtime_pay: log.amount || 0, memo }
+    if (log.kind === '추가지급') return { bonus: log.amount || 0, memo }
+    return { memo }
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -190,6 +206,54 @@ export default function PayoutsContent() {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  // 현장 기록 → 지급: 목록이 뜬 뒤 한 번만
+  useEffect(() => {
+    const inqId = searchParams.get('inquiry'), logId = searchParams.get('fromLog')
+    if (deepLinkDone.current || !inqId || inquiries.length === 0) return
+    deepLinkDone.current = true
+    if (!inquiries.some(i => i.id === inqId)) { toast.error('그 행사를 지급 관리에서 찾을 수 없습니다 (체결 전이거나 취소된 건).'); return }
+    setSelectedId(inqId)
+    if (!logId) return
+    ;(async () => {
+      const rows = await db.list<FieldLog>('field_logs', { filters: { id: logId }, limit: 1 }).catch(() => [] as FieldLog[])
+      const log = rows[0]
+      if (!log) { toast.error('그 현장 기록을 찾을 수 없습니다.'); return }
+      setPendingLog(log)
+      const name = (log.staff_name || '').replace(/\s/g, '')
+      const inqAssigns = assignments.filter(a => a.inquiry_id === inqId && a.status !== '취소' && a.status !== '후보')
+      const hit = name ? inqAssigns.filter(a => (a.staff_name || '').replace(/\s/g, '').includes(name)) : []
+      if (hit.length === 1) {
+        const a = hit[0]
+        const inq = inquiries.find(i => i.id === inqId)
+        setFormAssignment({ ...a, inquiry_id: inqId, event_name: inq?.event_name || '' } as Assignment)
+        setFormPayout(payouts.find(p => p.assignment_id === a.id) || null)
+        setFormOpen(true)
+        toast.info(`${a.staff_name} 지급 폼에 현장 기록 "${log.content.slice(0, 30)}"을 채웠습니다. 확인 후 저장하세요.`, { duration: 7000 })
+      } else {
+        toast.info(name
+          ? `"${log.staff_name}"과 맞는 배정이 ${hit.length}명입니다. 아래 명단에서 사람을 골라 지급을 열면 금액이 채워집니다.`
+          : '기록에 이름이 없습니다. 아래 명단에서 사람을 골라 지급을 열면 금액이 채워집니다.', { duration: 8000 })
+      }
+    })()
+  }, [inquiries, assignments, payouts, searchParams])
+
+  // 지급 폼 저장 뒤: 현장 기록에서 온 것이면 기록을 '지급 반영'으로 표시
+  async function handleFormSaved() {
+    if (pendingLog && formAssignment) {
+      const p = prefillOf(pendingLog)
+      const what = p?.overtime_pay ? `연장수당 ${formatKRW(p.overtime_pay)}` : p?.bonus ? `기타수당 ${formatKRW(p.bonus)}` : '지급 메모'
+      try {
+        await db.update('field_logs', pendingLog.id, {
+          applied_at: new Date().toISOString(), applied_to: '지급',
+          applied_note: `${formAssignment.staff_name || ''} ${what}`.trim(),
+        })
+        toast.success('현장 기록을 "지급 반영"으로 표시했습니다.')
+      } catch (e) { toast.error('기록 반영 표시 실패: ' + (e as Error).message) }
+      setPendingLog(null)
+    }
+    load()
+  }
 
   const grouped = groupByInquiry(inquiries, assignments, payouts)
   const searchLower = search.toLowerCase()
@@ -460,6 +524,16 @@ export default function PayoutsContent() {
       {/* ─── 우측: 지급 현황 ─── */}
       {selectedInquiry ? (
         <div className="flex-1 flex flex-col overflow-hidden">
+
+          {/* 현장 기록 반영 중 — 사람을 고르면 폼에 금액이 채워진다 */}
+          {pendingLog && pendingLog.inquiry_id === selectedInquiry.id && (
+            <div className="bg-emerald-50 border-b border-emerald-200 px-5 py-2 flex items-center gap-3 text-xs shrink-0">
+              <span className="font-bold text-emerald-800">현장 기록 반영 중</span>
+              <span className="text-emerald-900 flex-1 truncate">[{pendingLog.kind}] {pendingLog.content}{pendingLog.amount ? ` · ${formatKRW(pendingLog.amount)}` : ' · 금액 없음 (폼에서 직접 입력)'}</span>
+              <span className="text-emerald-700">사람을 골라 지급을 열면 금액이 채워집니다</span>
+              <button onClick={() => setPendingLog(null)} className="text-emerald-600 hover:text-emerald-900 font-semibold">취소</button>
+            </div>
+          )}
 
           {/* 행사 헤더 */}
           <div className="bg-white border-b-2 border-gray-200 px-5 py-3 flex items-start justify-between shadow-sm shrink-0">
@@ -775,7 +849,8 @@ export default function PayoutsContent() {
 
       {formOpen && formAssignment && (
         <PayoutForm open={formOpen} onClose={() => setFormOpen(false)}
-          assignment={formAssignment} payout={formPayout} onSaved={load} />
+          assignment={formAssignment} payout={formPayout} onSaved={handleFormSaved}
+          prefill={pendingLog && pendingLog.inquiry_id === formAssignment.inquiry_id ? prefillOf(pendingLog) : null} />
       )}
 
       {bulkOpen && selectedInquiry && (

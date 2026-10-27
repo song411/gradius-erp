@@ -44,15 +44,23 @@ const TAX_RATE_OPTIONS = [
   { label: '3.3% (프리랜서 원천징수)', value: 0.033 },
 ]
 
+/** 현장 기록에서 넘어온 값. 폼이 열릴 때 해당 칸에 더해 둔다 — 저장은 평소처럼 사람이 한다 */
+export interface PayoutPrefill {
+  overtime_pay?: number
+  bonus?: number
+  memo?: string
+}
+
 interface Props {
   open: boolean
   onClose: () => void
   assignment: Assignment
   payout: Payout | null       // null = 신규 등록
   onSaved: () => void
+  prefill?: PayoutPrefill | null
 }
 
-export default function PayoutForm({ open, onClose, assignment, payout, onSaved }: Props) {
+export default function PayoutForm({ open, onClose, assignment, payout, onSaved, prefill }: Props) {
   const [saving, setSaving] = useState(false)
 
   // 지급 항목
@@ -157,7 +165,17 @@ export default function PayoutForm({ open, onClose, assignment, payout, onSaved 
         })
       }
     }
-  }, [open, assignment, payout])
+
+    // 현장 기록에서 넘어온 값 — 기존 금액에 더한다 (수정 모드면 이미 적힌 연장수당 위에 얹는다)
+    if (prefill) {
+      if (prefill.overtime_pay) setOvertimePay(String((payout?.overtime_pay || 0) + prefill.overtime_pay))
+      if (prefill.bonus)        setBonus(String((payout?.bonus || 0) + prefill.bonus))
+      if (prefill.memo) {
+        const prevMemo = payout ? parseNotesContent(payout.notes).memo : ''
+        setNotes(prevMemo ? `${prevMemo}\n${prefill.memo}` : prefill.memo)
+      }
+    }
+  }, [open, assignment, payout, prefill])
 
   // 구간 편집 헬퍼
   function addSeg() { setSegments(prev => [...prev, { rate: 0, days: 1 }]) }

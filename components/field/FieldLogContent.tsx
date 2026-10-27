@@ -369,6 +369,11 @@ function InboxTab({ inquiries, logs, estimates, onChanged }: { inquiries: Inquir
     if (!est) { toast.info('이 행사에 견적이 없습니다. 견적 관리에서 먼저 만들어 주세요.'); return }
     window.open(`/estimates?edit=${est.id}&fromLog=${log.id}`, '_blank', 'noopener')
   }
+  // 지급도 같은 모양 — 지급관리를 그 행사로 열고, 기록의 사람 지급 폼에 연장수당/기타수당을 채워 준다.
+  // 이름이 없거나 '전원'이면 행사만 열리고, 사람을 고를 때마다 금액이 채워진다
+  function openPayoutWithLog(log: FieldLog) {
+    window.open(`/payouts?inquiry=${log.inquiry_id}&fromLog=${log.id}`, '_blank', 'noopener')
+  }
   // 부대비용은 여기서 직접 만든다 — 사람이 이 버튼을 누르는 것이 곧 '직접 입력'이다
   async function registerExpense(log: FieldLog) {
     if (!log.amount) { toast.info('금액이 없어 등록할 수 없습니다. 반영 표시만 하거나, 기록에 금액을 적어 주세요.'); return }
@@ -455,6 +460,11 @@ function InboxTab({ inquiries, logs, estimates, onChanged }: { inquiries: Inquir
                             </Button>
                           </>
                         ) : null}
+                        {(l.kind === '연장' || l.kind === '추가지급') && (
+                          <Button size="sm" variant="outline" className="h-8 text-xs gap-1 border-emerald-300 text-emerald-700 hover:bg-emerald-50" onClick={() => openPayoutWithLog(l)} title="지급관리를 이 행사로 새 탭에 열고, 기록의 사람 지급 폼에 금액을 채워 줍니다. 저장하면 여기도 반영됨으로 바뀝니다.">
+                            <Banknote className="h-3 w-3" />지급에 반영
+                          </Button>
+                        )}
                         <Button size="sm" variant="outline" className="h-8 text-xs gap-1 border-blue-300 text-blue-700 hover:bg-blue-50" onClick={() => openEstimateWithLog(l)} title="이 행사의 확정 견적을 새 탭으로 열고, 이 기록을 품목 초안으로 끝에 붙입니다. 단가 확인 후 저장하면 여기도 반영됨으로 바뀝니다.">
                           <FileText className="h-3 w-3" />견적 품목으로 추가
                         </Button>
