@@ -18,7 +18,7 @@ import { EVAL_FIELDS, evalTotal, saveEvaluation, type EvalScores } from '@/lib/e
 import { toast } from 'sonner'
 import {
   MapPin, Phone, Clock, Users, ChevronDown, ChevronUp, RefreshCw, Monitor,
-  PenLine, Share, MoreVertical, X, CheckCircle2, Crown, Star,
+  PenLine, Share, MoreVertical, X, CheckCircle2, Crown, Star, Trash2,
 } from 'lucide-react'
 import type { Inquiry, Assignment, Attendance, FieldLog, FieldLogKind, Evaluation } from '@/lib/supabase/types'
 
@@ -513,6 +513,16 @@ function QuickLog({ inquiryId, logDate, logs, author, onAuthor, onSaved }: {
   const [content, setContent] = useState('')
   const [saving, setSaving]   = useState(false)
 
+  // 잘못 적은 기록 지우기 — 반영 전 것만 여기서. 반영된 것은 사무실 대기함에서
+  async function remove(l: FieldLog) {
+    if (!confirm(`이 기록을 지웁니다.\n[${l.kind}] ${l.content}`)) return
+    try {
+      await db.delete('field_logs', l.id)
+      toast.success('기록을 지웠습니다')
+      onSaved()
+    } catch (e) { toast.error('삭제 실패: ' + (e as Error).message) }
+  }
+
   async function save() {
     if (!content.trim()) { toast.info('한 줄만 적어 주세요.'); return }
     setSaving(true)
@@ -555,10 +565,15 @@ function QuickLog({ inquiryId, logDate, logs, author, onAuthor, onSaved }: {
       {logs.length > 0 && (
         <ul className="mt-3 space-y-1.5">
           {logs.slice(0, 3).map(l => (
-            <li key={l.id} className="text-sm text-gray-700 flex gap-2">
-              <span className="text-2xs font-bold text-gray-500 shrink-0 mt-0.5 w-12">{l.kind}</span>
+            <li key={l.id} className="text-sm text-gray-700 flex items-center gap-2">
+              <span className="text-2xs font-bold text-gray-500 shrink-0 w-12">{l.kind}</span>
               <span className="flex-1 break-keep">{l.content}</span>
               <span className={`text-2xs shrink-0 ${l.applied_at ? 'text-green-600' : 'text-amber-600'}`}>{l.applied_at ? '반영됨' : fmtWhen(l.created_at)}</span>
+              {!l.applied_at && (
+                <button onClick={() => remove(l)} title="이 기록 지우기" className="h-9 w-9 -mr-2 flex items-center justify-center text-gray-300 active:text-red-600">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              )}
             </li>
           ))}
           {logs.length > 3 && <li className="text-2xs text-gray-400">외 {logs.length - 3}건</li>}

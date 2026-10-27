@@ -20,7 +20,7 @@ import { Select } from '@/components/ui/select'
 import RelatedLinks from '@/components/ui/RelatedLinks'
 import { EXPENSE_CATEGORIES } from '@/components/payouts/ExpensesSection'
 import { toast } from 'sonner'
-import { Clock, Users, Banknote, Receipt, AlertCircle, Database, Copy, Search, Check, Undo2, Inbox, PenLine, ChevronDown, ChevronRight, FileText } from 'lucide-react'
+import { Clock, Users, Banknote, Receipt, AlertCircle, Database, Copy, Search, Check, Undo2, Inbox, PenLine, ChevronDown, ChevronRight, FileText, Trash2 } from 'lucide-react'
 import type { Inquiry, FieldLog, FieldLogKind, Estimate } from '@/lib/supabase/types'
 import { representativeEstimate } from '@/lib/estimateItems'
 
@@ -353,6 +353,21 @@ function InboxTab({ inquiries, logs, estimates, onChanged }: { inquiries: Inquir
     } catch (e) { toast.error('실패: ' + (e as Error).message) }
     finally { setBusy(null) }
   }
+  // 기록 삭제. 반영된 기록은 '무엇을 근거로 지급·견적이 바뀌었나'의 흔적이라 한 번 더 묻는다.
+  // 지급·부대비용·견적에 이미 넣은 것은 그대로 남는다 — 기록은 메모지 원본이 아니다
+  async function deleteLog(log: FieldLog) {
+    const msg = log.applied_at
+      ? `이 기록은 이미 "${log.applied_to}"에 반영된 것입니다.\n기록만 지워지고 지급·견적·배정에 넣은 것은 그대로 남습니다.\n\n[${log.kind}] ${log.content}\n\n지울까요?`
+      : `이 기록을 지웁니다.\n\n[${log.kind}] ${log.content}`
+    if (!confirm(msg)) return
+    setBusy(log.id)
+    try {
+      await db.delete('field_logs', log.id)
+      toast.success('기록을 지웠습니다')
+      onChanged()
+    } catch (e) { toast.error('삭제 실패: ' + (e as Error).message) }
+    finally { setBusy(null) }
+  }
   async function revert(log: FieldLog) {
     if (!confirm('반영 표시를 지우고 대기함으로 되돌립니다. (지급·부대비용에 이미 넣은 것은 그대로입니다)')) return
     setBusy(log.id)
@@ -442,6 +457,7 @@ function InboxTab({ inquiries, logs, estimates, onChanged }: { inquiries: Inquir
                       <div className="flex items-center gap-2 text-2xs text-green-700">
                         ✓ 반영됨 · {l.applied_to}{l.applied_note ? ` · ${l.applied_note}` : ''} · {fmtWhen(l.applied_at)}
                         <button onClick={() => revert(l)} disabled={busy === l.id} className="ml-auto text-gray-400 hover:text-red-600 flex items-center gap-0.5"><Undo2 className="h-3 w-3" />되돌리기</button>
+                        <button onClick={() => deleteLog(l)} disabled={busy === l.id} className="text-gray-400 hover:text-red-600 flex items-center gap-0.5" title="기록 삭제"><Trash2 className="h-3 w-3" />삭제</button>
                       </div>
                     ) : applyId === l.id ? (
                       <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -482,6 +498,9 @@ function InboxTab({ inquiries, logs, estimates, onChanged }: { inquiries: Inquir
                           setApplyTo(l.kind === '추가지급' || l.kind === '연장' ? '지급' : l.kind === '인원변경' ? '배정' : l.kind === '부대비용' ? '부대비용' : '해당없음')
                         }}>
                           <Check className="h-3 w-3" />반영 완료 표시
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-8 text-xs gap-1 text-gray-400 hover:text-red-600 ml-auto" disabled={busy === l.id} onClick={() => deleteLog(l)} title="잘못 적은 기록 지우기">
+                          <Trash2 className="h-3 w-3" />삭제
                         </Button>
                       </div>
                     )}
