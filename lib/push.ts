@@ -27,7 +27,16 @@ interface Vapid { publicKey: string; privateKey: string; subject: string }
 export async function getVapid(subject: string): Promise<Vapid> {
   const supabase = createAdminClient()
   const { data } = await supabase.from('push_config').select('vapid_public, vapid_private, subject').eq('id', 'default').maybeSingle()
-  if (data) return { publicKey: data.vapid_public, privateKey: data.vapid_private, subject: data.subject }
+  if (data) {
+    // 로컬(localhost)에서 처음 만들어졌어도 실제 사이트 주소가 들어오면 그걸로 바꿔 둔다.
+    // 푸시 서비스는 subject 로 발신자를 식별한다 — localhost 는 거절당할 수 있다
+    const isLocal = (s: string) => /localhost|127\.0\.0\.1/.test(s)
+    if (isLocal(data.subject) && !isLocal(subject)) {
+      await supabase.from('push_config').update({ subject }).eq('id', 'default')
+      return { publicKey: data.vapid_public, privateKey: data.vapid_private, subject }
+    }
+    return { publicKey: data.vapid_public, privateKey: data.vapid_private, subject: data.subject }
+  }
   const keys = webpush.generateVAPIDKeys()
   const { error } = await supabase.from('push_config').insert({ id: 'default', vapid_public: keys.publicKey, vapid_private: keys.privateKey, subject })
   if (error) {
@@ -42,8 +51,8 @@ export async function getVapid(subject: string): Promise<Vapid> {
 /** 요청에서 사이트 주소를 만든다 (VAPID subject 용) */
 export function subjectFrom(req: Request): string {
   const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || 'localhost'
-  const proto = req.headers.get('x-forwarded-proto') || (host.startsWith('localhost') ? 'http' : 'https')
-  return `${proto}://${host}`
+  // 푸시 서비스는 https: 또는 mailto: 만 받는다. 로컬(http)에서도 형식만 맞추면 발송이 된다
+  return `https://${host}`
 }
 
 /** 알림을 켠 모든 기기로 보낸다. 끊긴 기기(404/410)는 지운다. dedupeKey 가 있으면 같은 키로는 한 번만 */
@@ -57,7 +66,8 @@ export async function sendToAll(payload: PushPayload, subject: string, opts: { k
   if (!subs || subs.length === 0) return { sent: 0, failed: 0, skipped: '알림 켠 기기 없음' }
 
   const vapid = await getVapid(subject)
-  webpush.setVapidDetails(vapid.subject, vapid.publicKey, vapid.privateKey)
+  // 이번 요청이 https 면 그 주소를 쓴다. 로컬 시험 중엔 저장된 값으로
+  webpush.setVapidDetails(subject.startsWith('https://') ? subject : vapid.subject, vapid.publicKey, vapid.privateKey)
   const body = JSON.stringify({ title: payload.title, body: payload.body, url: payload.url || '/m/today', tag: payload.tag })
 
   let sent = 0, failed = 0

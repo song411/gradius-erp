@@ -30,8 +30,13 @@ export default function PushSettings() {
     if (!supported) { setStatus(ios && !standalone ? 'need-install' : 'unsupported'); return }
     if (Notification.permission === 'denied') { setStatus('blocked'); return }
     try {
-      const reg = await navigator.serviceWorker.getRegistration('/sw.js')
-      const sub = reg ? await reg.pushManager.getSubscription() : null
+      // 브라우저가 답을 안 주는 경우가 있다 — 3초 넘으면 '꺼짐'으로 보고 버튼을 보여준다
+      const timeout = new Promise<null>(res => setTimeout(() => res(null), 3000))
+      const probe = (async () => {
+        const reg = await navigator.serviceWorker.getRegistration('/sw.js')
+        return reg ? await reg.pushManager.getSubscription() : null
+      })()
+      const sub = await Promise.race([probe, timeout])
       setStatus(sub ? 'on' : 'off')
     } catch { setStatus('off') }
     try {
