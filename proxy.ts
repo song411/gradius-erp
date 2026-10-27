@@ -14,6 +14,12 @@ const PUBLIC_PATHS = [
   '/_next',
   '/favicon.ico',
   '/logo.png',
+  // 홈 화면 추가(PWA) — 브라우저가 쿠키 없이 가져간다. 아이콘과 설정 파일뿐, 데이터 없음
+  '/manifest.webmanifest',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/icon-512-maskable.png',
+  '/apple-icon.png',
 ]
 
 export async function proxy(request: NextRequest) {

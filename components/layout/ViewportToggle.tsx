@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { usePathname } from 'next/navigation'
 import { Monitor, Smartphone } from 'lucide-react'
 
 const STORAGE_KEY = 'erp_viewport_mode'
@@ -8,10 +9,14 @@ const DESKTOP_VIEWPORT = 'width=1280, initial-scale=0.35'
 const MOBILE_VIEWPORT  = 'width=device-width, initial-scale=1'
 
 export default function ViewportToggle() {
+  const pathname = usePathname()
+  // 휴대폰 전용 화면(/today)에서는 손대지 않는다 — 저장된 '데스크탑 모드'도 적용하지 않는다
+  const skip = pathname.startsWith('/today')
   const [isDesktop, setIsDesktop] = useState(false)
   const [visible, setVisible] = useState(false)
 
   useEffect(() => {
+    if (skip) return
     // 모바일 기기에서만 버튼 표시 (터치 스크린 감지)
     const isMobileDevice = window.matchMedia('(max-width: 1024px)').matches
     if (!isMobileDevice) return
@@ -23,7 +28,7 @@ export default function ViewportToggle() {
       applyMode(true)
       setIsDesktop(true)
     }
-  }, [])
+  }, [skip])
 
   function applyMode(desktop: boolean) {
     let meta = document.querySelector('meta[name="viewport"]') as HTMLMetaElement | null
@@ -42,7 +47,7 @@ export default function ViewportToggle() {
     localStorage.setItem(STORAGE_KEY, next ? 'desktop' : 'mobile')
   }
 
-  if (!visible) return null
+  if (!visible || skip) return null
 
   return (
     <button
