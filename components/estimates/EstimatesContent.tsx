@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, Fragment } from 'react'
+import { useEffect, useState, useCallback, useRef, Fragment } from 'react'
 import { loadPrevBizInfo } from '@/lib/bizInfo'
 import { useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
@@ -11,8 +11,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Plus, Search, Edit2, Trash2, Eye, Package, FileText, TrendingUp, Send, Clock, CheckCircle, Star, Copy, RotateCcw, XCircle, LayoutList } from 'lucide-react'
-import type { Estimate, EstimateItem, Inquiry, EstimateVersion } from '@/lib/supabase/types'
+import type { Estimate, EstimateItem, Inquiry, EstimateVersion, FieldLog } from '@/lib/supabase/types'
 import { attachItems } from '@/lib/estimateItems'
+import { itemFromFieldLog, type DraftItem } from '@/lib/fieldLogItem'
 import { historyOf } from '@/lib/estimateHistory'
 import EstimateHistoryList from './EstimateHistoryList'
 import RelatedLinks from '@/components/ui/RelatedLinks'
@@ -88,6 +89,11 @@ export default function EstimatesContent() {
   // 빌더 모달
   const [showBuilder, setShowBuilder] = useState(false)
   const [editTarget, setEditTarget] = useState<EstimateRow | null>(null)
+  // 현장 기록 대기함에서 "견적 품목으로 추가"로 넘어온 경우: ?edit=<견적id>&fromLog=<기록id>
+  // 빌더를 그 견적으로 열고 끝에 초안 한 줄을 붙인다. 저장되면 기록을 '견적·정산 반영'으로 표시
+  const [appendItems, setAppendItems] = useState<DraftItem[] | null>(null)
+  const [fromLog, setFromLog] = useState<FieldLog | null>(null)
+  const deepLinkDone = useRef(false)
   const [preselectedInquiry, setPreselectedInquiry] = useState<Inquiry | null>(null)
   const [preselectedVersionLabel, setPreselectedVersionLabel] = useState<string>('A안')
 
@@ -375,8 +381,40 @@ export default function EstimatesContent() {
     }
   }
 
+  // 현장 기록 → 견적 품목: 목록이 뜬 뒤 한 번만 빌더를 연다
+  useEffect(() => {
+    const editId = searchParams.get('edit'), logId = searchParams.get('fromLog')
+    if (deepLinkDone.current || !editId || estimates.length === 0) return
+    deepLinkDone.current = true
+    const est = estimates.find(e => e.id === editId)
+    if (!est) { toast.error('그 견적을 찾을 수 없습니다.'); return }
+    ;(async () => {
+      let log: FieldLog | null = null
+      if (logId) {
+        const rows = await db.list<FieldLog>('field_logs', { filters: { id: logId }, limit: 1 }).catch(() => [] as FieldLog[])
+        log = rows[0] || null
+      }
+      setFromLog(log)
+      setAppendItems(log ? [itemFromFieldLog(log)] : null)
+      setEditTarget(est)
+      setPreselectedInquiry(null)
+      setShowBuilder(true)
+      if (log) toast.info(`현장 기록 "${log.content.slice(0, 30)}"을 품목 초안으로 붙였습니다. 단가를 확인하고 저장하세요.`, { duration: 7000 })
+    })()
+  }, [estimates, searchParams])
+
   // 저장 완료 후 → 진행 중 탭으로 이동
-  function handleSaved() {
+  async function handleSaved() {
+    if (fromLog && editTarget) {
+      try {
+        await db.update('field_logs', fromLog.id, {
+          applied_at: new Date().toISOString(), applied_to: '견적·정산',
+          applied_note: `${editTarget.version_label || '견적'}에 품목 추가`,
+        })
+        toast.success('현장 기록을 "견적·정산 반영"으로 표시했습니다.')
+      } catch (e) { toast.error('기록 반영 표시 실패: ' + (e as Error).message) }
+      setFromLog(null); setAppendItems(null)
+    }
     load()
     setActiveTab('in_progress')
   }
@@ -636,12 +674,13 @@ export default function EstimatesContent() {
       {/* 스마트 견적 빌더 (풀스크린) */}
       <EstimateBuilder
         open={showBuilder}
-        onClose={() => { setShowBuilder(false); setPreselectedInquiry(null) }}
+        onClose={() => { setShowBuilder(false); setPreselectedInquiry(null); setAppendItems(null); setFromLog(null) }}
         onSaved={handleSaved}
         inquiries={allInquiries}
         editTarget={editTarget}
         preselectedInquiryId={preselectedInquiry?.id}
         defaultVersionLabel={preselectedVersionLabel}
+        appendItems={appendItems}
       />
 
       {/* 견적서 미리보기 */}

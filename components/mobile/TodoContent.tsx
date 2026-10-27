@@ -10,6 +10,7 @@ import { db } from '@/lib/supabase/api'
 import { formatKRW, todayKST } from '@/lib/utils'
 import { buildBoard, dueToday, kstDay, dayDiff } from '@/lib/pipeline'
 import { needsTaxInvoice, isCountable, dedupeSettlements, isHeadOfficePayout } from '@/lib/finance'
+import { unpaidNotice, invoiceNotice } from '@/lib/sms'
 import { MobileHeader, ErrorBox, CountCard, Row, More } from '@/components/mobile/ui'
 import type { Inquiry, Estimate, Settlement, Payout, FieldLog } from '@/lib/supabase/types'
 
@@ -114,14 +115,16 @@ export default function TodoContent() {
             <CountCard title="행사 끝났는데 입금 안 됨" count={unpaid.length} amount={`미수 ${formatKRW(unpaidSum)}`} hint="잔액이 남은 정산, 행사 종료일 지난 것" tone="bad" pcHref="/settlements" pcLabel="정산/청구에서 확인">
               {unpaid.slice(0, SHOW).map(({ s, inq }) => (
                 <Row key={s.id} title={s.company_name || inq?.company_name || '(업체 미상)'} desc={`${inq?.event_name || s.site_name || ''} · ${(inq?.event_end || inq?.event_start || '').slice(5, 10)}`}
-                  right={formatKRW(s.balance || 0)} tone="bad" tel={s.contact_phone || inq?.phone} />
+                  right={formatKRW(s.balance || 0)} tone="bad" tel={s.contact_phone || inq?.phone}
+                  sms={unpaidNotice({ company: s.company_name || inq?.company_name, eventName: inq?.event_name || s.site_name, amount: s.balance || 0 })} />
               ))}
               <More n={unpaid.length - SHOW} />
             </CountCard>
 
             <CountCard title="세금계산서 미발행" count={unissued.length} amount={formatKRW(unissuedSum)} hint="체결 이후 건 중 발행 처리 안 된 것" tone="warn" pcHref="/ceo" pcLabel="CEO 세금계산서 탭에서 발행">
               {unissued.slice(0, SHOW).map(({ s, inq }) => (
-                <Row key={s.id} title={s.company_name || '(업체 미상)'} desc={`${inq?.event_name || ''} · ${(inq?.event_start || '').slice(5, 10)}`} right={formatKRW(s.invoice_amount || 0)} />
+                <Row key={s.id} title={s.company_name || '(업체 미상)'} desc={`${inq?.event_name || ''} · ${(inq?.event_start || '').slice(5, 10)}`} right={formatKRW(s.invoice_amount || 0)}
+                  tel={s.contact_phone || inq?.phone} sms={invoiceNotice({ company: s.company_name, eventName: inq?.event_name, amount: s.invoice_amount || 0 })} />
               ))}
               <More n={unissued.length - SHOW} />
             </CountCard>

@@ -11,6 +11,7 @@ import {
   buildFinanceIndex, dedupeSettlements, toRows, countableRows, sumRows, inPeriod, unpaidTotal,
 } from '@/lib/finance'
 import { MobileHeader, ErrorBox, Tile, Row } from '@/components/mobile/ui'
+import { unpaidNotice, thanksNotice } from '@/lib/sms'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import type { Inquiry, Settlement, Payout, EventExpense, Assignment } from '@/lib/supabase/types'
 
@@ -106,7 +107,8 @@ export default function MoneyContent() {
             <section className="rounded-2xl bg-white border-2 border-gray-200 overflow-hidden">
               <p className="px-4 pt-3 pb-2 text-2xs font-bold text-gray-500 tracking-wider">미수 큰 고객</p>
               {calc.topUnpaid.length === 0 ? <p className="px-4 pb-3 text-sm text-gray-400">미수 없음</p>
-                : calc.topUnpaid.map(c => <Row key={c.name} title={c.name} desc={`${c.n}건`} right={formatKRW(c.sum)} tone="bad" tel={c.phone} />)}
+                : calc.topUnpaid.map(c => <Row key={c.name} title={c.name} desc={`${c.n}건`} right={formatKRW(c.sum)} tone="bad" tel={c.phone}
+                    sms={unpaidNotice({ company: c.name, amount: c.sum, count: c.n })} />)}
             </section>
 
             <section className="rounded-2xl bg-white border-2 border-gray-200 overflow-hidden">
@@ -115,7 +117,11 @@ export default function MoneyContent() {
                 : calc.monthList.map(r => (
                   <Row key={r.settlement.id} title={r.inquiry?.event_name || r.settlement.site_name || '(행사 미상)'}
                     desc={`${r.settlement.company_name || ''} · ${r.settlement.deposit_status}${r.payoutStage === 'estimated' ? ' · 지급 추정' : ''}`}
-                    right={formatKRW(r.revenue)} tone={(r.settlement.balance || 0) > 0 ? 'warn' : undefined} />
+                    right={formatKRW(r.revenue)} tone={(r.settlement.balance || 0) > 0 ? 'warn' : undefined}
+                    tel={r.settlement.contact_phone || r.inquiry?.phone}
+                    sms={(r.settlement.balance || 0) > 0
+                      ? unpaidNotice({ company: r.settlement.company_name, eventName: r.inquiry?.event_name || r.settlement.site_name, amount: r.settlement.balance || 0 })
+                      : r.settlement.deposit_status === '입금완료' ? thanksNotice({ company: r.settlement.company_name, eventName: r.inquiry?.event_name || r.settlement.site_name }) : undefined} />
                 ))}
               {calc.month.count > calc.monthList.length && <p className="text-2xs text-gray-400 px-4 py-2">외 {calc.month.count - calc.monthList.length}건 — 전체는 PC 대시보드에서</p>}
             </section>

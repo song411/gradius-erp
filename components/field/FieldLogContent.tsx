@@ -20,8 +20,11 @@ import { Select } from '@/components/ui/select'
 import RelatedLinks from '@/components/ui/RelatedLinks'
 import { EXPENSE_CATEGORIES } from '@/components/payouts/ExpensesSection'
 import { toast } from 'sonner'
-import { Clock, Users, Banknote, Receipt, AlertCircle, Database, Copy, Search, Check, Undo2, Inbox, PenLine, ChevronDown, ChevronRight } from 'lucide-react'
-import type { Inquiry, FieldLog, FieldLogKind } from '@/lib/supabase/types'
+import { Clock, Users, Banknote, Receipt, AlertCircle, Database, Copy, Search, Check, Undo2, Inbox, PenLine, ChevronDown, ChevronRight, FileText } from 'lucide-react'
+import type { Inquiry, FieldLog, FieldLogKind, Estimate } from '@/lib/supabase/types'
+import { representativeEstimate } from '@/lib/estimateItems'
+
+type EstLite = Pick<Estimate, 'id' | 'inquiry_id' | 'is_final' | 'created_at' | 'version_label'>
 
 const KINDS: { key: FieldLogKind; icon: React.ReactNode; hint: string; color: string }[] = [
   { key: '연장',     icon: <Clock className="h-4 w-4" />,       hint: '예) 2시간 연장, 전원 / 팀장만 1시간', color: 'bg-orange-100 text-orange-800 border-orange-300' },
@@ -78,17 +81,21 @@ export default function FieldLogContent() {
   const [tab, setTab]             = useState<'write' | 'inbox'>(searchParams.get('tab') === 'inbox' ? 'inbox' : 'write')
   const [inquiries, setInquiries] = useState<Inquiry[]>([])
   const [logs, setLogs]           = useState<FieldLog[]>([])
+  const [estimates, setEstimates] = useState<EstLite[]>([])
   const [ready, setReady]         = useState(true)
   const [loading, setLoading]     = useState(true)
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [inqs, lg] = await Promise.all([
+    const [inqs, lg, ests] = await Promise.all([
       db.list<Inquiry>('inquiries', { inFilter: { status: OPS_STATUSES }, order: 'event_start', asc: false }),
       db.list<FieldLog>('field_logs', { order: 'created_at', asc: false }).then(r => { setReady(true); return r }).catch(() => { setReady(false); return [] as FieldLog[] }),
+      // "견적 품목으로 추가"가 어느 견적을 열지 정하는 데만 쓴다 — 확정본 우선 (lib/estimateItems)
+      db.list<EstLite>('estimates', { select: 'id,inquiry_id,is_final,created_at,version_label', order: 'created_at', asc: false }).catch(() => [] as EstLite[]),
     ])
     setInquiries(inqs)
     setLogs(lg)
+    setEstimates(ests)
     setLoading(false)
   }, [])
   useEffect(() => { load() }, [load])
@@ -133,7 +140,7 @@ export default function FieldLogContent() {
 
       {tab === 'write'
         ? <WriteTab inquiries={inquiries} logs={logs} initialInquiryId={searchParams.get('inq')} onSaved={load} />
-        : <InboxTab inquiries={inquiries} logs={logs} onChanged={load} />}
+        : <InboxTab inquiries={inquiries} logs={logs} estimates={estimates} onChanged={load} />}
     </div>
   )
 }
@@ -316,7 +323,7 @@ function Numbers({ log }: { log: FieldLog }) {
 }
 
 // ── 반영 대기함 (사무실) ────────────────────────────────────
-function InboxTab({ inquiries, logs, onChanged }: { inquiries: Inquiry[]; logs: FieldLog[]; onChanged: () => void }) {
+function InboxTab({ inquiries, logs, estimates, onChanged }: { inquiries: Inquiry[]; logs: FieldLog[]; estimates: EstLite[]; onChanged: () => void }) {
   const [showDone, setShowDone] = useState(false)
   const [busy, setBusy]         = useState<string | null>(null)
   const [applyId, setApplyId]   = useState<string | null>(null)
@@ -354,6 +361,13 @@ function InboxTab({ inquiries, logs, onChanged }: { inquiries: Inquiry[]; logs: 
       onChanged()
     } catch (e) { toast.error('실패: ' + (e as Error).message) }
     finally { setBusy(null) }
+  }
+  // 견적 품목은 여기서 만들지 않는다. 그 행사의 확정 견적을 빌더로 열고 초안 한 줄을 붙여 줄 뿐,
+  // 단가 확인과 저장(합계·부가세·변경 이력)은 빌더에서 사람이 한다. 저장되면 이 기록이 반영됨으로 바뀐다.
+  function openEstimateWithLog(log: FieldLog) {
+    const est = representativeEstimate(log.inquiry_id, estimates)
+    if (!est) { toast.info('이 행사에 견적이 없습니다. 견적 관리에서 먼저 만들어 주세요.'); return }
+    window.open(`/estimates?edit=${est.id}&fromLog=${log.id}`, '_blank', 'noopener')
   }
   // 부대비용은 여기서 직접 만든다 — 사람이 이 버튼을 누르는 것이 곧 '직접 입력'이다
   async function registerExpense(log: FieldLog) {
@@ -441,6 +455,9 @@ function InboxTab({ inquiries, logs, onChanged }: { inquiries: Inquiry[]; logs: 
                             </Button>
                           </>
                         ) : null}
+                        <Button size="sm" variant="outline" className="h-8 text-xs gap-1 border-blue-300 text-blue-700 hover:bg-blue-50" onClick={() => openEstimateWithLog(l)} title="이 행사의 확정 견적을 새 탭으로 열고, 이 기록을 품목 초안으로 끝에 붙입니다. 단가 확인 후 저장하면 여기도 반영됨으로 바뀝니다.">
+                          <FileText className="h-3 w-3" />견적 품목으로 추가
+                        </Button>
                         <Button size="sm" variant="outline" className="h-8 text-xs gap-1" onClick={() => {
                           setApplyId(l.id); setApplyNote('')
                           setApplyTo(l.kind === '추가지급' || l.kind === '연장' ? '지급' : l.kind === '인원변경' ? '배정' : l.kind === '부대비용' ? '부대비용' : '해당없음')

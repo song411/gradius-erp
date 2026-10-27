@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { db } from '@/lib/supabase/api'
 import { calcVAT, calcVATReverse, calcProfitRate, formatKRW, toKoreanAmount } from '@/lib/utils'
 import { snapshotPayload } from '@/lib/estimateHistory'
+import type { DraftItem } from '@/lib/fieldLogItem'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -77,6 +78,8 @@ interface Props {
   preselectedInquiryId?: string | null
   // 복수 견적 지원: 기본 버전 라벨 (A안 / B안 ...)
   defaultVersionLabel?: string
+  /** 기존 견적을 열 때 끝에 미리 붙여 둘 품목 초안 (현장 기록 → 견적 품목). 저장은 평소대로 사람이 한다 */
+  appendItems?: DraftItem[] | null
 }
 
 const SMS_BTN_TIP = [
@@ -151,7 +154,7 @@ function calcDays(start?: string, end?: string): number {
 
 // ── 메인 컴포넌트 ─────────────────────────────────────────
 export default function EstimateBuilder({
-  open, onClose, onSaved, inquiries, editTarget, preselectedInquiryId, defaultVersionLabel,
+  open, onClose, onSaved, inquiries, editTarget, preselectedInquiryId, defaultVersionLabel, appendItems,
 }: Props) {
   const [roles, setRoles]     = useState<Role[]>([])
   const [factors, setFactors] = useState<Factor[]>([])
@@ -241,6 +244,16 @@ export default function EstimateBuilder({
         original_unit_price: item.original_unit_price ?? null,
         vat_exempt: item.vat_exempt ?? false,
       }))
+      // 현장 기록에서 넘어온 초안을 끝에 붙인다. 단가는 사람이 확인해서 채운다
+      ;(appendItems || []).forEach(d => {
+        rows.push({
+          ...emptyRow(d.item_type), role_name: d.role_name,
+          quantity: d.quantity, days: d.days,
+          quantity_unit: d.quantity_unit ?? '', days_unit: d.days_unit ?? '',
+          unit_price: d.unit_price ?? 0, _basePrice: d.unit_price ?? 0,
+          spec: d.spec ?? '',
+        })
+      })
       setItems(rows.length > 0 ? rows : [emptyRow()])
     } else {
       const preInq = preselectedInquiryId ? inquiries.find(i => i.id === preselectedInquiryId) : null
@@ -268,7 +281,7 @@ export default function EstimateBuilder({
       setItems([{ ...emptyRow('인력', wt), days }])
     }
     setError(''); setExpandedFactor(null)
-  }, [open, editTarget, preselectedInquiryId, inquiries])
+  }, [open, editTarget, preselectedInquiryId, inquiries, appendItems])
 
   // ── 문의 선택 ────────────────────────────────────────────
   function handleInquiryChange(inqId: string) {

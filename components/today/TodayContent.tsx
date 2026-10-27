@@ -120,14 +120,9 @@ export default function TodayContent() {
       setAssignments(asgns)
       setAttendances(atts)
       setLogs(lg)
-      // 평가는 배정 id 로 찾는다. 배정이 많으면 주소가 길어지므로 50개씩 끊어 묻는다
-      const asgnIds = asgns.map(a => a.id)
-      const chunks: string[][] = []
-      for (let i = 0; i < asgnIds.length; i += 50) chunks.push(asgnIds.slice(i, i + 50))
-      const evalPages = await Promise.all(chunks.map(c =>
-        db.list<Evaluation>('evaluations', { inFilter: { assignment_id: c }, order: 'evaluated_at', asc: false }).catch(() => [] as Evaluation[])
-      ))
-      setEvaluations(evalPages.flat())
+      // 평가는 배정 id 로 찾는다 (id 가 많아도 db.list 가 알아서 끊어 묻는다)
+      const evals = await db.list<Evaluation>('evaluations', { inFilter: { assignment_id: asgns.map(a => a.id) }, order: 'evaluated_at', asc: false }).catch(() => [] as Evaluation[])
+      setEvaluations(evals)
     } catch (e) {
       setError((e as Error).message || '불러오지 못했습니다')
     } finally {

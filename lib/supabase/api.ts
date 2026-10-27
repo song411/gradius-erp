@@ -20,6 +20,9 @@ const PAGE = 1000
 /** 안전장치 — 이보다 많으면 무언가 잘못된 것이다 */
 const MAX_ROWS = 100_000
 
+/** in 필터 한 번에 넣는 최대 값 개수. UUID 100개 ≈ 3.9KB — 한계(약 16KB)의 1/4 */
+const IN_CHUNK = 100
+
 function buildParams(opts: QueryOptions): URLSearchParams {
   const params = new URLSearchParams()
   if (opts.select)  params.set('select', opts.select)
@@ -56,6 +59,20 @@ export const db = {
   // 통째로 사라졌다. 저장은 멀쩡했는데 불러오기가 잘리고 있었다.
   // assignments도 966행이라 곧 같은 일이 일어난다.
   async list<T>(table: string, opts: QueryOptions = {}): Promise<T[]> {
+    // in 필터 값이 많으면 주소가 길어져 Supabase 쪽에서 끊긴다.
+    // 실측(2026-10-27): 견적 관리가 estimate_items 를 문의 399건으로 물었더니 주소 15.6KB,
+    // "TypeError: fetch failed" — 300건(11.7KB)까지는 됐다. 데이터가 늘며 조용히 넘은 것.
+    // 그래서 큰 in 필터는 여기서 잘라 여러 번 묻고 합친다. 화면은 모른다.
+    const big = Object.entries(opts.inFilter || {}).find(([, v]) => v.length > IN_CHUNK)
+    if (big) {
+      const [key, values] = big
+      const out: T[] = []
+      for (let i = 0; i < values.length; i += IN_CHUNK) {
+        const part = await db.list<T>(table, { ...opts, inFilter: { ...opts.inFilter, [key]: values.slice(i, i + IN_CHUNK) } })
+        out.push(...part)
+      }
+      return out
+    }
     if (opts.limit) return fetchPage<T>(table, opts, opts.limit, 0)
 
     const out: T[] = []
