@@ -106,7 +106,7 @@ export default function PushSettings() {
         {devices !== null && <span className="text-2xs font-semibold text-gray-400 ml-auto">켜진 기기 {devices}대</span>}
       </p>
       <p className="text-sm text-gray-600 leading-relaxed">
-        크루가 셀프 체크인하면, 현장 기록이 올라오면, 그리고 매일 아침 8시 요약(오늘 행사·연락할 문의·미수·반영 전 기록)을 휴대폰으로 받습니다.
+        크루가 셀프 체크인하면, 현장 기록이 올라오면 휴대폰으로 알립니다. "지금 요약 받기"를 누르면 오늘 행사·연락할 문의·미수·반영 전 기록을 알림 한 줄로 받습니다.
       </p>
 
       {status === 'checking' && <p className="text-sm text-gray-400">확인 중…</p>}
@@ -128,11 +128,11 @@ export default function PushSettings() {
       {status === 'on' && (
         <div className="grid grid-cols-2 gap-2">
           <button onClick={() => test(false)} disabled={busy} className="h-12 rounded-xl bg-blue-600 text-white font-bold text-sm active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-1.5"><Send className="h-4 w-4" />테스트 보내기</button>
-          <button onClick={() => test(true)} disabled={busy} className="h-12 rounded-xl bg-white border-2 border-blue-300 text-blue-700 font-bold text-sm active:scale-[0.98] disabled:opacity-50">아침 요약 미리 보기</button>
+          <button onClick={() => test(true)} disabled={busy} className="h-12 rounded-xl bg-white border-2 border-blue-300 text-blue-700 font-bold text-sm active:scale-[0.98] disabled:opacity-50">지금 요약 받기</button>
           <button onClick={disable} disabled={busy} className="h-11 col-span-2 rounded-xl bg-white border-2 border-gray-300 text-gray-600 font-bold text-sm active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-1.5"><BellOff className="h-4 w-4" />이 기기 알림 끄기</button>
         </div>
       )}
-      <p className="text-2xs text-gray-400">테스트와 아침 요약 미리 보기는 켜진 모든 기기로 갑니다. 아침 요약 자동 발송은 서버 설정(CRON_SECRET)이 있어야 합니다.</p>
+      <p className="text-2xs text-gray-400">테스트와 요약은 켜진 모든 기기로 갑니다.</p>
     </section>
   )
 }
