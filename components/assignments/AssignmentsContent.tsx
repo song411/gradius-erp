@@ -295,6 +295,8 @@ export default function AssignmentsContent() {
   const [showOutreach, setShowOutreach] = useState(false)
   const [slots, setSlots]             = useState<SlotGroup[]>([])
   const [allAssignments, setAllAssignments] = useState<Assignment[]>([])
+  // 근로계약서 서명 상태 (배정 id → 대기/서명완료). 최신 링크 기준
+  const [contractMap, setContractMap] = useState<Record<string, string>>({})
   const [loading, setLoading]         = useState(true)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [searchText, setSearchText]   = useState('')
@@ -483,6 +485,15 @@ export default function AssignmentsContent() {
       order: 'assigned_at', asc: true,
     })
     setAllAssignments(assignments)
+    // 서명 링크 상태 — 020 표가 없어도 배정 화면은 떠야 한다
+    try {
+      const rows = assignments.length
+        ? await db.list<{ assignment_id: string; status: string }>('labor_contracts', { inFilter: { assignment_id: assignments.map(a => a.id) }, order: 'created_at', asc: false })
+        : []
+      const m: Record<string, string> = {}
+      rows.forEach(r => { if (!m[r.assignment_id] && r.status !== '취소') m[r.assignment_id] = r.status })
+      setContractMap(m)
+    } catch { setContractMap({}) }
 
     // 3. 슬롯 그룹 생성
     // 견적 품목 기반 그룹 (인력 품목만 - item_type 인력 또는 단가>0)
@@ -1534,9 +1545,14 @@ export default function AssignmentsContent() {
                                 {asgn.status}
                               </span>
 
-                              {/* 근로계약서 (새 탭) */}
+                              {/* 근로계약서 (새 탭) + 서명 상태 */}
+                              {contractMap[asgn.id] && (
+                                <span className={`text-2xs font-bold px-1.5 py-0.5 rounded-full ${contractMap[asgn.id] === '서명완료' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                                  {contractMap[asgn.id] === '서명완료' ? '서명완료' : '서명대기'}
+                                </span>
+                              )}
                               <a href={`/assignments/contract?a=${asgn.id}`} target="_blank" rel="noreferrer"
-                                className="text-gray-300 hover:text-emerald-600 transition-colors" title="근로계약서 만들기">
+                                className={`transition-colors ${contractMap[asgn.id] === '서명완료' ? 'text-emerald-600' : 'text-gray-300 hover:text-emerald-600'}`} title="근로계약서 만들기 / 서명 링크">
                                 <FileText className="h-3.5 w-3.5" />
                               </a>
                               {/* 삭제 */}

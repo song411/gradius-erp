@@ -6,8 +6,10 @@
 // 인쇄는 outerHTML 을 새 창에 넣어 찍으므로(견적서와 같은 방식) Tailwind 를 쓰지 않고 전부 inline style 이다.
 
 import {
-  COMPANY, CLAUSES, employerLabel, titleOf, fmtKorean, type ContractFields,
+  COMPANY, CLAUSES, employerLabel, titleOf, fmtKorean, fmtSignedAt, type ContractFields,
 } from '@/lib/laborContract'
+
+export interface DocSignature { dataUrl: string; signedAt: string }
 
 const A4_WIDTH = 794 // px, 210mm @96dpi
 
@@ -109,11 +111,23 @@ function PayTable({ f }: { f: ContractFields }) {
   )
 }
 
-export default function LaborContractDoc({ fields: f }: { fields: ContractFields }) {
+export default function LaborContractDoc({ fields: f, fluid = false, signature }: {
+  fields: ContractFields
+  /** 휴대폰 서명 화면용 — A4 폭 고정 대신 화면 폭에 맞춘다 */
+  fluid?: boolean
+  /** 서명이 끝난 계약서면 근로자 칸에 서명 이미지와 시각을 찍는다 */
+  signature?: DocSignature
+}) {
   const emp = employerLabel(f.variant)
+  // 서명은 data URL 이라 next/image 를 못 쓴다. 인쇄 창(outerHTML)에도 그대로 실려야 하므로 일부러 <img>
+  const sig = signature?.dataUrl
+    // eslint-disable-next-line @next/next/no-img-element
+    ? <img src={signature.dataUrl} alt="서명" style={{ height: '34px', verticalAlign: 'middle', marginLeft: '8px' }} />
+    : null
+  const sigNote = signature?.signedAt ? <span style={{ fontSize: '10px', color: '#555', marginLeft: '6px' }}>전자서명 {fmtSignedAt(signature.signedAt)}</span> : null
   return (
-    <div className="labor-contract-page" style={S.page}>
-      <h1 style={S.title}>{titleOf(f.variant)}</h1>
+    <div className="labor-contract-page" style={fluid ? { ...S.page, width: '100%', minHeight: 0, padding: '18px 12px' } : S.page}>
+      <h1 style={fluid ? { ...S.title, fontSize: '17px', letterSpacing: '1px', wordBreak: 'keep-all' } : S.title}>{titleOf(f.variant)}</h1>
       <PartyTable f={f} />
       <TermsTable f={f} />
 
@@ -140,13 +154,13 @@ export default function LaborContractDoc({ fields: f }: { fields: ContractFields
           </tr>
           <tr>
             <th style={S.th}>[근로자]</th>
-            <td style={S.td}>{f.workerName}</td>
-            <td style={{ ...S.td, textAlign: 'center', color: '#555' }}>(서명 또는 날인)</td>
+            <td style={S.td}>{f.workerName}{sigNote}</td>
+            <td style={{ ...S.td, textAlign: 'center', color: '#555' }}>{sig || '(서명 또는 날인)'}</td>
           </tr>
           <tr>
             <th style={S.th}>교부 확인</th>
             <td style={S.td}>근로계약서를 교부받았음을 확인합니다.　{f.workerName}</td>
-            <td style={{ ...S.td, textAlign: 'center', color: '#555' }}>(서명 또는 날인)</td>
+            <td style={{ ...S.td, textAlign: 'center', color: '#555' }}>{sig || '(서명 또는 날인)'}</td>
           </tr>
         </tbody>
       </table>

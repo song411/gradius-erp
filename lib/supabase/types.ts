@@ -355,6 +355,30 @@ export interface Evaluation {
   evaluated_at: string
 }
 
+export type LaborContractStatus = '대기' | '서명완료' | '취소'
+
+/** 근로계약서 전자서명 한 건 (020). fields 는 링크를 만든 순간의 계약서 칸 전부 — 서명 뒤엔 이것이 원본 */
+export interface LaborContract {
+  id: string
+  token: string
+  assignment_id: string
+  inquiry_id?: string | null
+  staff_id?: string | null
+  staff_name?: string | null
+  phone?: string | null
+  variant: string
+  fields: Record<string, string>
+  status: LaborContractStatus
+  signed_at?: string | null
+  signature_data?: string | null
+  signer_ua?: string | null
+  signer_ip?: string | null
+  verified_by?: string | null
+  verify_fails: number
+  created_at: string
+  updated_at?: string
+}
+
 export interface Payout {
   id: string
   payout_code?: string

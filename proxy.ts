@@ -11,6 +11,8 @@ const PUBLIC_PATHS = [
   '/api/auth/verify',
   '/c/',            // 크루 셀프 출석 체크인 페이지 (이름·직무만 노출)
   '/api/checkin',   // 위 페이지 전용 좁은 API — 범용 /api/db 는 잠금 유지
+  '/s/',            // 근로계약서 전자서명 페이지 (token 을 아는 사람만, 계약서 본문만 노출)
+  '/api/sign',      // 위 페이지 전용 — 대기 중인 계약서에 서명 한 번만
   '/_next',
   '/favicon.ico',
   '/logo.png',

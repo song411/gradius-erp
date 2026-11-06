@@ -295,6 +295,30 @@ export const CLAUSES: Record<ContractVariant, Clause[]> = {
   ],
 }
 
+// ── 전자서명 ────────────────────────────────────────────
+/** 서명 링크 토큰 — 32자리 hex(128bit). 브라우저의 난수로 만든다 */
+export function makeToken(): string {
+  const bytes = new Uint8Array(16)
+  crypto.getRandomValues(bytes)
+  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('')
+}
+
+/** 카톡에 붙여넣는 문구 — 사람 이름·행사·링크 */
+export function signLinkMessage(name: string, eventName: string, url: string): string {
+  return `[가디어스] ${name}님, ${eventName ? `${eventName} ` : ''}근로계약서입니다. 아래 링크를 열어 내용을 확인하고 서명해 주세요. (본인 확인: 전화번호 뒷 4자리)
+${url}`
+}
+
+/** 서명 시각 "2026년 4월 23일 14:05" (한국 시간) */
+export function fmtSignedAt(iso: string): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  const p = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Seoul', hour12: false, year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }).formatToParts(d)
+  const g = (t: string) => p.find(x => x.type === t)?.value || ''
+  return `${g('year')}년 ${g('month')}월 ${g('day')}일 ${g('hour')}:${g('minute')}`
+}
+
 /** 양식별 호칭: 회사 쪽을 뭐라 부르는지 */
 export function employerLabel(variant: ContractVariant): string {
   return variant === '상세' ? '사업주' : '사용자'
