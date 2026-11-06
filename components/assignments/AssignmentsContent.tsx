@@ -32,9 +32,6 @@ import { toast } from 'sonner'
 import { DndContext, DragEndEvent, useDraggable, useDroppable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
 
-// 본사 인원 ID 목록 (certifications에 '본사직원' 포함)
-const COMPANY_STAFF_NAMES = ['최규성', '송무재', '여지은', '김영찬']
-
 // 배정 상태 색상
 const STATUS_COLOR: Record<string, string> = {
   확정:   'bg-green-100 text-green-700',

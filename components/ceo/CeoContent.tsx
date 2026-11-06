@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { db } from '@/lib/supabase/api'
-import { HQ_STAFF_NAMES, needsTaxInvoice } from '@/lib/finance'
+import { isHeadOfficePayout, needsTaxInvoice } from '@/lib/finance'
 import type { Inquiry, Settlement, Payout, Assignment, Customer, EstimateItem, Estimate, EventExpense, EstimateVersion } from '@/lib/supabase/types'
 import { BarChart3, Receipt, Banknote, Building2, TrendingUp } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -90,7 +90,7 @@ export default function CeoContent() {
     if (id === 'payment') {
       // 본사 인원 제외, 미지급(대기+검토완료) 건수
       return data.payouts.filter(p =>
-        !(p.staff_name && HQ_STAFF_NAMES.has(p.staff_name)) &&
+        !isHeadOfficePayout(p) &&
         !['지급완료', '완료'].includes(p.status)
       ).length
     }

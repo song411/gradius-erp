@@ -119,9 +119,24 @@ export const PAYOUT_SOURCE_LABEL: Record<PayoutSource, string> = {
 /** 본사 인원 판정. 배정의 staff_type 이 기준이고, 타입이 비어 있던 시절의 행을 위해
  *  이름 목록을 보조로 둔다. 이름 목록은 여기 한 곳에만 있다 — 화면마다 복사해 두면
  *  사람이 바뀔 때 하나씩 어긋난다. (2026-09-28 실측: 본사 이름 161줄 중 159줄이 '본사' 타입) */
-export const HQ_STAFF_NAMES = new Set(['최규성', '송무재', '여지은', '김영찬'])
-export const isHeadOfficeAssignment = (a: Pick<Assignment, 'staff_type' | 'staff_name'>): boolean =>
-  a.staff_type === '본사' || (!!a.staff_name && HQ_STAFF_NAMES.has(a.staff_name))
+export const HQ_STAFF_NAMES = new Set(['최규성', '송무재', '여지은'])
+
+/** 본사였다가 나간 사람 — 적힌 날짜 전의 기록만 본사로 본다. 그 뒤 배정·지급은 다른 크루와 똑같이 돈이 나간다.
+ *  (2026-11-06 사장님: 김영찬은 이제 본사 아님) */
+export const HQ_FORMER: Record<string, string> = { 김영찬: '2026-11-06' }
+
+/** 이름이 본사인가. 날짜가 있으면 "그 시점에" 본사였는지로 본다 */
+export function isHeadOfficeName(name?: string | null, date?: string | null): boolean {
+  if (!name) return false
+  if (HQ_STAFF_NAMES.has(name)) return true
+  const until = HQ_FORMER[name]
+  return !!until && !!date && String(date).slice(0, 10) < until
+}
+
+export const isHeadOfficeAssignment = (
+  a: Pick<Assignment, 'staff_type' | 'staff_name'> & Partial<Pick<Assignment, 'start_date' | 'assigned_at'>>,
+): boolean =>
+  a.staff_type === '본사' || isHeadOfficeName(a.staff_name, a.start_date || a.assigned_at)
 
 /** 지급 행의 본사 판정. 지급 행에는 staff_type 이 없어 이름으로만 본다.
  *
@@ -130,8 +145,8 @@ export const isHeadOfficeAssignment = (a: Pick<Assignment, 'staff_type' | 'staff
  *  금액까지 붙어 있었다 — 베이비페어 3/12 여지은 39만원, 연구학교 컨퍼런스 3/30 송무재 8.5만원.
  *  지급관리는 이름으로 걸러 '처리 완료'로 숨겼는데 수익보고는 그대로 세서, 한 화면에선
  *  '일부 지급'으로 보이고 다른 화면에선 아무 이유가 안 보였다. 두 화면이 이 한 함수를 쓴다. */
-export const isHeadOfficePayout = (p: Pick<Payout, 'staff_name'>): boolean =>
-  !!p.staff_name && HQ_STAFF_NAMES.has(p.staff_name)
+export const isHeadOfficePayout = (p: Pick<Payout, 'staff_name'> & Partial<Pick<Payout, 'created_at'>>): boolean =>
+  isHeadOfficeName(p.staff_name, p.created_at)
 
 /** 화면에서 '이 숫자 믿어도 되나'를 가르는 기준 */
 export const isEstimated = (s: PayoutSource) => s === 'settlement' || s === 'assignment'

@@ -21,7 +21,7 @@ import type {
 } from '@/lib/supabase/types'
 import {
   buildFinanceIndex, dedupeSettlements, toRows, countableRows, sumRows, unpaidTotal,
-  payoutOf, expenseOf, PAYOUT_SOURCE_LABEL, PAYOUT_STAGE_LABEL, HQ_STAFF_NAMES,
+  payoutOf, expenseOf, PAYOUT_SOURCE_LABEL, PAYOUT_STAGE_LABEL, isHeadOfficePayout,
 } from '@/lib/finance'
 import { toast } from 'sonner'
 import RelatedLinks from '@/components/ui/RelatedLinks'
@@ -759,7 +759,7 @@ export default function SettlementsContent() {
                                   </div>
                                 ) : (() => {
                                   const pays = detailPayouts[s.id] || []
-                                  const payable = pays.filter(p => !(p.staff_name && HQ_STAFF_NAMES.has(p.staff_name)))
+                                  const payable = pays.filter(p => !isHeadOfficePayout(p))
                                   const calcTotal = payable.reduce((sum, p) => sum + p.final_pay, 0)
                                   const matches = s.payout_amount > 0 && Math.abs(calcTotal - s.payout_amount) < 1000
 
