@@ -39,6 +39,9 @@ export interface RosterItem {
   status: string | null
   clockIn: string | null
   selfCheckin: boolean
+  /** 본인 확인(전화 뒷 4자리)을 할 수 있는지 — 번호 자체는 내려보내지 않는다 */
+  hasPhone: boolean
+  signed: boolean
 }
 
 export interface CheckinView {
@@ -68,22 +71,32 @@ export async function getCheckinView(inquiryId: string): Promise<CheckinView | n
   const [{ data: asgns }, { data: atts }] = await Promise.all([
     supabase
       .from('assignments')
-      .select('id, staff_name, job_type, role_type, status')
+      .select('id, staff_name, job_type, role_type, status, phone, staff_id')
       .eq('inquiry_id', inquiryId)
       .order('assigned_at', { ascending: true }),
     supabase
       .from('attendances')
-      .select('assignment_id, status, clock_in, notes')
+      .select('assignment_id, status, clock_in, notes, signature_data')
       .eq('inquiry_id', inquiryId)
       .eq('work_date', workDate),
   ])
 
   const attList = atts || []
+  // 배정에 전화가 없으면 크루관리 번호로 본인 확인한다 — 있는지만 본다
+  const needStaff = (asgns || []).filter(a => String(a.phone || '').replace(/\D/g, '').length < 4 && a.staff_id).map(a => a.staff_id as string)
+  const { data: staffPhones } = needStaff.length
+    ? await supabase.from('staff').select('id, phone').in('id', needStaff)
+    : { data: [] as { id: string; phone: string | null }[] }
   const roster: RosterItem[] = (asgns || [])
     .filter(a => a.status !== '취소')
     .map(a => {
       const att = attList.find(t => t.assignment_id === a.id)
+      const phone = String(a.phone || '').replace(/\D/g, '').length >= 4
+        ? a.phone
+        : staffPhones?.find(st => st.id === a.staff_id)?.phone || ''
       return {
+        hasPhone: String(phone || '').replace(/\D/g, '').length >= 4,
+        signed: !!att?.signature_data,
         assignmentId: a.id,
         name: a.staff_name || '이름 없음',
         jobType: a.job_type || '',

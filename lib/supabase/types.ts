@@ -330,6 +330,9 @@ export interface Attendance {
   status: AttendanceStatus
   reason?: string
   notes?: string
+  signature_data?: string | null   // 셀프 체크인 서명 (022)
+  pledge_at?: string | null        // 안전교육 서약 동의 시각
+  signer_ua?: string | null
   created_at: string
 }
 

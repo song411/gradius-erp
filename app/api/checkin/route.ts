@@ -7,11 +7,15 @@ import { sendToAll, subjectFrom } from '@/lib/push'
 // proxy.ts의 PUBLIC_PATHS에 등록되어 있으므로 다루는 범위를 최대한 좁게 유지한다.
 //  · 쓰기 전용(POST). 명단 조회는 서버 컴포넌트에서 직접 하므로 공개 GET을 두지 않는다.
 //  · 상태는 '출석' 고정 — 임의 상태를 지정할 수 없다.
+//  · 체크인 = 본인 확인(전화 뒷 4자리) + 안전교육 서약 동의 + 손가락 서명. 셋이 다 있어야 기록된다 (2026-11-06).
+//    담당자가 이미 출결을 적어 둔 사람은 상태는 그대로 두고 서명만 붙인다.
 //  · 범용 /api/db 라우트(모든 테이블 admin 접근)는 잠금 뒤에 그대로 둔다.
 export const dynamic = 'force-dynamic'
 
+const MAX_SIGNATURE_BYTES = 400_000
+
 export async function POST(request: NextRequest) {
-  let body: { inquiryId?: string; assignmentId?: string; action?: string }
+  let body: { inquiryId?: string; assignmentId?: string; action?: string; last4?: string; signature?: string; pledged?: boolean }
   try {
     body = await request.json()
   } catch {
@@ -30,7 +34,7 @@ export async function POST(request: NextRequest) {
 
   const { data: inq } = await supabase
     .from('inquiries')
-    .select('id, event_start, event_end')
+    .select('id, event_start, event_end, event_name')
     .eq('id', inquiryId)
     .maybeSingle()
   if (!inq) return NextResponse.json({ error: '행사를 찾을 수 없습니다.' }, { status: 404 })
@@ -38,7 +42,7 @@ export async function POST(request: NextRequest) {
   // 배정이 이 행사에 실제로 속하는지 확인 — 다른 행사 인원을 건드리지 못하게 한다
   const { data: asgn } = await supabase
     .from('assignments')
-    .select('id, staff_name, pay_rate, status')
+    .select('id, staff_name, pay_rate, status, phone, staff_id')
     .eq('id', assignmentId)
     .eq('inquiry_id', inquiryId)
     .maybeSingle()
@@ -51,7 +55,7 @@ export async function POST(request: NextRequest) {
 
   const { data: existing } = await supabase
     .from('attendances')
-    .select('id, status, notes')
+    .select('id, status, notes, signature_data')
     .eq('assignment_id', assignmentId)
     .eq('work_date', workDate)
     .maybeSingle()
@@ -69,15 +73,39 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
-  // ── 체크인 ──
-  // 담당자가 이미 지각·결근 등으로 기록해 둔 경우엔 덮어쓰지 않는다
-  if (existing && existing.status && existing.status !== '출석') {
-    return NextResponse.json(
-      { error: `담당자가 '${existing.status}'(으)로 기록해 두었습니다.` }, { status: 409 }
-    )
+  // ── 체크인: 본인 확인 → 서약 동의 → 서명 ──
+  const last4 = String(body.last4 || '').trim()
+  const signature = String(body.signature || '')
+  if (!/^\d{4}$/.test(last4)) return NextResponse.json({ error: '전화번호 뒷 4자리를 입력해 주세요.' }, { status: 400 })
+  if (body.pledged !== true) return NextResponse.json({ error: '안전교육 서약 확인에 체크해 주세요.' }, { status: 400 })
+  if (!signature.startsWith('data:image/png;base64,') || signature.length > MAX_SIGNATURE_BYTES) {
+    return NextResponse.json({ error: '서명을 그려 주세요.' }, { status: 400 })
   }
+
+  // 전화번호: 배정에 적힌 것 우선, 없으면 크루관리
+  let phone = String(asgn.phone || '')
+  if (phone.replace(/\D/g, '').length < 4 && asgn.staff_id) {
+    const { data: st } = await supabase.from('staff').select('phone').eq('id', asgn.staff_id).maybeSingle()
+    phone = String(st?.phone || '')
+  }
+  const digits = phone.replace(/\D/g, '')
+  if (digits.length < 4) {
+    return NextResponse.json({ error: '전화번호가 등록되지 않아 본인 확인을 할 수 없습니다. 담당자에게 말씀해 주세요.' }, { status: 409 })
+  }
+  if (digits.slice(-4) !== last4) {
+    return NextResponse.json({ error: '전화번호 뒷 4자리가 맞지 않습니다.' }, { status: 403 })
+  }
+
+  const now = new Date().toISOString()
+  const ua = (request.headers.get('user-agent') || '').slice(0, 300) || null
+
   if (existing) {
-    // 이미 출석 처리됨 — 중복 탭은 조용히 성공 처리
+    // 담당자가 먼저 적어 둔 기록(지각 등)이든 셀프 출석이든 — 상태는 두고 서명만 붙인다
+    if (existing.signature_data) return NextResponse.json({ ok: true, already: true })
+    const { error } = await supabase.from('attendances')
+      .update({ signature_data: signature, pledge_at: now, signer_ua: ua })
+      .eq('id', existing.id)
+    if (error) return NextResponse.json({ error: '저장에 실패했습니다. 022 마이그레이션을 확인해 주세요.' }, { status: 500 })
     return NextResponse.json({ ok: true })
   }
 
@@ -91,17 +119,19 @@ export async function POST(request: NextRequest) {
     daily_pay: asgn.pay_rate || 0,
     status: '출석',
     notes: SELF_NOTE,
+    signature_data: signature,
+    pledge_at: now,
+    signer_ua: ua,
   })
-  if (error) return NextResponse.json({ error: '저장에 실패했습니다.' }, { status: 500 })
+  if (error) return NextResponse.json({ error: '저장에 실패했습니다. 022 마이그레이션을 확인해 주세요.' }, { status: 500 })
 
   await supabase.from('assignments').update({ is_present: true }).eq('id', assignmentId)
 
   // 알림을 켠 휴대폰에 "누가 체크인했다"를 알린다. 실패해도 체크인은 이미 됐다
   try {
-    const { data: ev } = await supabase.from('inquiries').select('event_name').eq('id', inquiryId).maybeSingle()
     await sendToAll({
-      title: `체크인 · ${ev?.event_name || '행사'}`,
-      body: `${asgn.staff_name || '크루'} ${nowHHMM()} 셀프 체크인`,
+      title: `체크인 · ${inq.event_name || '행사'}`,
+      body: `${asgn.staff_name || '크루'} ${nowHHMM()} 셀프 체크인 · 안전교육 서명`,
       url: '/m/today', tag: `checkin:${inquiryId}`,
     }, subjectFrom(request), { kind: 'checkin' })
   } catch (e) { console.error('체크인 알림 실패', e) }

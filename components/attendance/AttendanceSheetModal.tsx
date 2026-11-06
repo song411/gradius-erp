@@ -54,27 +54,8 @@ function compactDate(dateStr: string): string {
 type ExcelJSModule = { Workbook: new () => Workbook }
 
 // ── 현장 안전관리 교육 확인 및 서약서 ────────────────────
-// 출석부에 서명하는 행위가 곧 안전교육 이수 확인이 되도록 명단 위에 둔다.
-// 인쇄와 엑셀이 같은 문구를 써야 하므로 여기 한 곳에만 적는다.
-const PLEDGE_TITLE = '현장 안전관리 교육 확인 및 서약서'
-const PLEDGE_LEAD =
-  '본인은 주식회사 가디어스가 실시한 현장 안전관리 교육에 참석하여 아래 사항을 교육받았으며, '
-  + '배포된 현장 운영 매뉴얼을 정독하고 그 내용을 충분히 이해하였음을 확인합니다.'
-const PLEDGE_TRAINING = [
-  '근무 기본자세·복장 및 금지 사항',
-  '담당 구역의 임무와 배치 위치',
-  '비상구·소화기·대피 동선 확인',
-  '보고 체계 (가디어스 책임자 우선 보고)',
-  '긴급 상황 대응 절차 (119·112 신고 기준)',
-  '관람객 응대 원칙 (안전·친절·신뢰)',
-]
-const PLEDGE_OATH = [
-  '본인은 본 교육을 이수하고 현장 운영 매뉴얼을 정독하였으며, 근무 중 이를 준수합니다.',
-  '지정된 배치 위치와 보고 체계를 따르며, 문제 발생 시 가디어스 현장 책임자에게 먼저 보고합니다.',
-  '본인의 고의 또는 중대한 부주의로 교육 및 매뉴얼의 안전 수칙을 위반하여 발생한 사고에 대하여는 '
-  + '그에 상응하는 과실 책임이 따를 수 있음을 이해하였습니다.',
-]
-const PLEDGE_NOTE = '아래 명단의 서명란 서명은 본 교육 이수 및 서약에 대한 확인을 겸합니다.'
+// 문구는 lib/safetyPledge.ts 한 곳 — 크루 셀프 체크인 화면(/c/)이 같은 글을 읽고 서명한다.
+import { PLEDGE_TITLE, PLEDGE_LEAD, PLEDGE_TRAINING, PLEDGE_OATH, PLEDGE_NOTE } from '@/lib/safetyPledge'
 
 // ── 엑셀 서식 상수 ───────────────────────────────────────
 const THIN: Partial<Borders> = {
@@ -177,6 +158,8 @@ interface SheetRow {
   clockOut: string
   status: string
   notes: string
+  /** 셀프 체크인 서명 그림(data URL). 있으면 인쇄 서명란에 찍힌다 */
+  signature: string
 }
 
 export default function AttendanceSheetModal({
@@ -241,6 +224,7 @@ export default function AttendanceSheetModal({
       clockOut: hhmm(att?.clock_out),
       status: att?.status || '',
       notes: att?.notes || att?.reason || '',
+      signature: att?.signature_data || '',
     }
   }
 
@@ -293,7 +277,7 @@ export default function AttendanceSheetModal({
           <td class="c">${esc(r.clockIn)}</td>
           <td class="c">${esc(r.clockOut)}</td>
           <td class="c">${esc(r.status)}</td>
-          <td class="sig"></td>
+          <td class="sig">${r.signature ? `<img src="${r.signature}" alt="서명" style="height:26px;max-width:100%;vertical-align:middle">` : ''}</td>
           <td>${esc(r.notes)}</td>
         </tr>`).join('')
 
