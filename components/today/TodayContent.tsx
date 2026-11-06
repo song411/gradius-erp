@@ -14,13 +14,18 @@ import Link from 'next/link'
 import { db } from '@/lib/supabase/api'
 import { todayKST } from '@/lib/utils'
 import { coversDate, eventDatesOf } from '@/components/schedule/matrixCore'
-import { EVAL_FIELDS, evalTotal, saveEvaluation, type EvalScores } from '@/lib/evaluation'
+import {
+  EVAL_FIELDS, QUICK_SCORES, evalTotal, guideForScore, saveEvaluation,
+  PROFILE_FIELDS, profileFormOf, profileChips, profilePatch, saveStaffProfile,
+  type EvalScores, type EvalScoreKey, type ProfileForm,
+} from '@/lib/evaluation'
+import { HalfStarInput } from '@/components/ui/HalfStarInput'
 import { toast } from 'sonner'
 import {
   MapPin, Phone, Clock, Users, ChevronDown, ChevronUp, RefreshCw, Monitor,
   PenLine, Share, MoreVertical, X, CheckCircle2, Crown, Star, Trash2,
 } from 'lucide-react'
-import type { Inquiry, Assignment, Attendance, FieldLog, FieldLogKind, Evaluation } from '@/lib/supabase/types'
+import type { Inquiry, Assignment, Attendance, FieldLog, FieldLogKind, Evaluation, Staff } from '@/lib/supabase/types'
 
 // 운영 단계의 행사만. 현장 기록 화면과 같은 기준
 const OPS_STATUSES = ['체결', '배정완료', '진행중', '완료', '정산완료']
@@ -66,6 +71,8 @@ export default function TodayContent() {
   const [assignments, setAssignments] = useState<Assignment[]>([])
   const [attendances, setAttendances] = useState<Attendance[]>([])
   const [evaluations, setEvaluations] = useState<Evaluation[]>([])
+  // 크루 프로필(키·몸무게·MBTI 등) — 평가 칸에서 확인·보정하는 용도
+  const [staffMap, setStaffMap]       = useState<Record<string, Staff>>({})
   const [logs, setLogs]               = useState<FieldLog[]>([])
   const [openId, setOpenId]           = useState<string | null>(null)
   const [showPast, setShowPast]       = useState(false)
@@ -110,7 +117,7 @@ export default function TodayContent() {
       const inWindow = all.filter(i => eventDatesOf(i).some(d => d >= from && d <= to))
       setInquiries(inWindow)
       const ids = inWindow.map(i => i.id)
-      if (ids.length === 0) { setAssignments([]); setAttendances([]); setEvaluations([]); setLogs([]); return }
+      if (ids.length === 0) { setAssignments([]); setAttendances([]); setEvaluations([]); setLogs([]); setStaffMap({}); return }
       const [asgns, atts, lg] = await Promise.all([
         db.list<Assignment>('assignments', { inFilter: { inquiry_id: ids }, order: 'assigned_at', asc: true }),
         db.list<Attendance>('attendances', { inFilter: { inquiry_id: ids }, order: 'work_date', asc: true }),
@@ -123,6 +130,10 @@ export default function TodayContent() {
       // 평가는 배정 id 로 찾는다 (id 가 많아도 db.list 가 알아서 끊어 묻는다)
       const evals = await db.list<Evaluation>('evaluations', { inFilter: { assignment_id: asgns.map(a => a.id) }, order: 'evaluated_at', asc: false }).catch(() => [] as Evaluation[])
       setEvaluations(evals)
+      // 크루 프로필은 덤 — 못 읽어도 평가는 된다
+      const staffIds = [...new Set(asgns.map(a => a.staff_id).filter((x): x is string => !!x))]
+      const staffList = staffIds.length ? await db.list<Staff>('staff', { inFilter: { id: staffIds } }).catch(() => [] as Staff[]) : []
+      setStaffMap(Object.fromEntries(staffList.map(st => [st.id, st])))
     } catch (e) {
       setError((e as Error).message || '불러오지 못했습니다')
     } finally {
@@ -216,7 +227,7 @@ export default function TodayContent() {
             <EventCard key={i.id} inq={i} viewDate={today} isToday
               assignments={assignments.filter(a => a.inquiry_id === i.id)}
               attendances={attendances.filter(t => t.inquiry_id === i.id && t.work_date === today)}
-              evaluations={evaluations}
+              evaluations={evaluations} staffMap={staffMap}
               logs={logs.filter(l => l.inquiry_id === i.id)}
               open={openId === i.id} onToggle={() => setOpenId(openId === i.id ? null : i.id)}
               author={author} onAuthor={setAuthor} onSaved={load} />
@@ -230,7 +241,7 @@ export default function TodayContent() {
               <EventCard key={i.id} inq={i} viewDate={d}
                 assignments={assignments.filter(a => a.inquiry_id === i.id)}
                 attendances={[]}
-                evaluations={evaluations}
+                evaluations={evaluations} staffMap={staffMap}
                 logs={logs.filter(l => l.inquiry_id === i.id)}
                 open={openId === i.id} onToggle={() => setOpenId(openId === i.id ? null : i.id)}
                 author={author} onAuthor={setAuthor} onSaved={load} />
@@ -253,7 +264,7 @@ export default function TodayContent() {
                     <EventCard key={i.id} inq={i} viewDate={d} isPast
                       assignments={assignments.filter(a => a.inquiry_id === i.id)}
                       attendances={attendances.filter(t => t.inquiry_id === i.id && t.work_date === d)}
-                      evaluations={evaluations}
+                      evaluations={evaluations} staffMap={staffMap}
                       logs={logs.filter(l => l.inquiry_id === i.id)}
                       open={openId === i.id} onToggle={() => setOpenId(openId === i.id ? null : i.id)}
                       author={author} onAuthor={setAuthor} onSaved={load} />
@@ -290,6 +301,7 @@ interface CardProps {
   assignments: Assignment[]
   attendances: Attendance[]
   evaluations: Evaluation[]
+  staffMap: Record<string, Staff>
   logs: FieldLog[]
   open: boolean
   onToggle: () => void
@@ -298,7 +310,7 @@ interface CardProps {
   onSaved: () => void
 }
 
-function EventCard({ inq, viewDate, isToday, isPast, assignments, attendances, evaluations, logs, open, onToggle, author, onAuthor, onSaved }: CardProps) {
+function EventCard({ inq, viewDate, isToday, isPast, assignments, attendances, evaluations, staffMap, logs, open, onToggle, author, onAuthor, onSaved }: CardProps) {
   // 크루 한 명을 누르면 평가 칸이 펼쳐진다 (오늘·지난 행사만)
   const [evalFor, setEvalFor] = useState<string | null>(null)
   const canEval = !!(isToday || isPast)
@@ -394,7 +406,7 @@ function EventCard({ inq, viewDate, isToday, isPast, assignments, attendances, e
                         )}
                       </div>
                       {isOpen && (
-                        <EvalPanel key={ev?.id || 'new'} assignment={a} existing={ev} siteName={inq.event_name || ''} author={author} onAuthor={onAuthor}
+                        <EvalPanel key={ev?.id || 'new'} assignment={a} existing={ev} staff={a.staff_id ? staffMap[a.staff_id] : undefined} siteName={inq.event_name || ''} author={author} onAuthor={onAuthor}
                           onClose={() => setEvalFor(null)} onSaved={onSaved} />
                       )}
                     </li>
@@ -412,9 +424,10 @@ function EventCard({ inq, viewDate, isToday, isPast, assignments, attendances, e
   )
 }
 
-// 크루 한 명 평가 — 항목 다섯 줄에 1~5 버튼. 저장 규칙은 lib/evaluation.ts (출석부와 같은 함수)
-function EvalPanel({ assignment, existing, siteName, author, onAuthor, onClose, onSaved }: {
-  assignment: Assignment; existing?: Evaluation; siteName: string
+// 크루 한 명 평가 — 항목 다섯 줄에 반 개 단위 별점(0.5~5) + 크루 정보 확인(키·몸무게·MBTI 등).
+// 점수 저장 규칙은 lib/evaluation.ts (출석부와 같은 함수). 크루 정보는 평가가 아니라 staff 프로필에 쓴다.
+function EvalPanel({ assignment, existing, staff, siteName, author, onAuthor, onClose, onSaved }: {
+  assignment: Assignment; existing?: Evaluation; staff?: Staff; siteName: string
   author: string; onAuthor: (v: string) => void; onClose: () => void; onSaved: () => void
 }) {
   const init = (): EvalScores => ({
@@ -425,14 +438,30 @@ function EvalPanel({ assignment, existing, siteName, author, onAuthor, onClose, 
     adaptability_score: existing?.adaptability_score ?? 3,
   })
   const [scores, setScores]         = useState<EvalScores>(init)
+  const [lastKey, setLastKey]       = useState<EvalScoreKey | null>(null)
   const [reRecommend, setReRec]     = useState<boolean>(existing?.re_recommend ?? true)
   const [strengths, setStrengths]   = useState(existing?.strengths || '')
   const [improvements, setImprove]  = useState(existing?.improvements || '')
   const [saving, setSaving]         = useState(false)
   const { total, grade } = evalTotal(scores)
 
+  // 크루 정보 — 비어 있는 핵심 칸(키·몸무게·MBTI)이 있으면 처음부터 펼쳐 둔다
+  const baseProfile = profileFormOf(staff)
+  const [profile, setProfile]       = useState<ProfileForm>(baseProfile)
+  const [profileOpen, setProfileOpen] = useState<boolean>(!!staff && (!baseProfile.height || !baseProfile.weight || !baseProfile.mbti))
+  const patch = profilePatch(baseProfile, profile)
+  const changedCount = Object.keys(patch).length
+  const chips = profileChips(profile)
+  const lastField = lastKey ? EVAL_FIELDS.find(f => f.key === lastKey) : undefined
+  const guideLine = lastField ? guideForScore(lastField.guide, scores[lastField.key]) : ''
+
+  function setOne(key: EvalScoreKey, v: number) {
+    setScores(s => ({ ...s, [key]: v }))
+    setLastKey(key)
+  }
   function setAll(v: number) {
     setScores({ attendance_score: v, performance_score: v, appearance_score: v, teamwork_score: v, adaptability_score: v })
+    setLastKey(null)
   }
 
   async function save() {
@@ -443,8 +472,14 @@ function EvalPanel({ assignment, existing, siteName, author, onAuthor, onClose, 
         scores, reRecommend, strengths: strengths.trim() || null, improvements: improvements.trim() || null,
         evaluator: author.trim() || null, existingId: existing?.id,
       })
+      // 크루 정보는 바뀐 칸만, 점수 칸은 손대지 않는다 (lib 가 걸러 준다)
+      let wrote = 0
+      if (assignment.staff_id && changedCount > 0) {
+        try { wrote = await saveStaffProfile(assignment.staff_id, patch) }
+        catch (e) { toast.error('크루 정보 저장 실패: ' + (e as Error).message) }
+      }
       try { localStorage.setItem(AUTHOR_KEY, author.trim()) } catch { /* 무시 */ }
-      toast.success(`${assignment.staff_name} 평가 저장 (${r.grade} · ${r.total}점)`)
+      toast.success(`${assignment.staff_name} 평가 저장 (${r.grade} · ${r.total}점)${wrote ? ` · 크루 정보 ${wrote}칸 갱신` : ''}`)
       onSaved()
       onClose()
     } catch (e) {
@@ -452,34 +487,42 @@ function EvalPanel({ assignment, existing, siteName, author, onAuthor, onClose, 
     } finally { setSaving(false) }
   }
 
+  const pill = (active: boolean) =>
+    `h-10 px-3 rounded-full text-sm font-bold border-2 active:scale-95 ${active ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-300'}`
+  const inputCls = 'h-11 w-full rounded-xl border-2 border-gray-300 bg-white px-3 text-base focus:border-gray-900 focus:outline-none'
+
   return (
     <div className="mt-1 mb-2 rounded-2xl border-2 border-amber-300 bg-amber-50/60 p-3">
       <div className="flex items-center justify-between mb-2">
         <p className="text-sm font-extrabold text-gray-900 flex items-center gap-1"><Star className="h-4 w-4 text-amber-500" />{assignment.staff_name} 평가{existing ? ' (수정)' : ''}</p>
         <button onClick={onClose} className="h-9 w-9 flex items-center justify-center text-gray-400" title="닫기"><X className="h-5 w-5" /></button>
       </div>
+
       {/* 한 번에 깔기 — 열 명 평가할 때 */}
-      <div className="flex items-center gap-1.5 mb-2">
-        <span className="text-2xs font-bold text-gray-500 mr-1">전부</span>
-        {[3, 4, 5].map(v => (
+      <div className="flex items-center gap-1 mb-2 overflow-x-auto">
+        <span className="text-2xs font-bold text-gray-500 mr-1 shrink-0">전부</span>
+        {QUICK_SCORES.map(v => (
           <button key={v} type="button" onClick={() => setAll(v)}
-            className="h-9 px-3 rounded-full border-2 border-gray-300 bg-white text-sm font-bold text-gray-700 active:scale-95">{v}점</button>
+            className="h-9 px-2.5 rounded-full border-2 border-gray-300 bg-white text-sm font-bold text-gray-700 active:scale-95 shrink-0">{v}</button>
         ))}
       </div>
-      <div className="space-y-1.5">
+
+      {/* 다섯 항목 — 별 왼쪽 반을 누르면 .5 */}
+      <div className="space-y-1">
         {EVAL_FIELDS.map(f => (
-          <div key={f.key} className="flex items-center gap-2">
-            <span className="w-9 text-sm font-bold text-gray-700 shrink-0">{f.label}</span>
-            <div className="flex-1 grid grid-cols-5 gap-1">
-              {[1, 2, 3, 4, 5].map(v => (
-                <button key={v} type="button" onClick={() => setScores(s => ({ ...s, [f.key]: v }))}
-                  className={`h-10 rounded-lg text-base font-bold border-2 active:scale-95 ${
-                    scores[f.key] === v ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200'}`}>{v}</button>
-              ))}
-            </div>
+          <div key={f.key} className="flex items-center gap-1.5">
+            <span className="w-8 text-sm font-bold text-gray-700 shrink-0">{f.label}</span>
+            <HalfStarInput value={scores[f.key]} onChange={v => setOne(f.key, v)} />
+            <span className="ml-auto w-7 text-right text-base font-extrabold text-gray-900 tabular-nums">{scores[f.key]}</span>
           </div>
         ))}
       </div>
+      <p className="text-2xs text-gray-500 mt-1.5 leading-relaxed">
+        {lastField && guideLine
+          ? <><b className="text-gray-700">{lastField.full} {scores[lastField.key]}점</b> · {guideLine}</>
+          : '별 왼쪽 반을 누르면 3.5, 4.5처럼 반 점이 됩니다.'}
+      </p>
+
       <div className="flex items-center justify-between mt-3">
         <p className="text-sm font-extrabold text-gray-900">평점 {total} <span className={grade === '우수' ? 'text-amber-600' : grade === '미흡' ? 'text-red-600' : 'text-gray-500'}>{grade}</span></p>
         <div className="flex gap-1.5">
@@ -493,7 +536,57 @@ function EvalPanel({ assignment, existing, siteName, author, onAuthor, onClose, 
         className="mt-2 h-11 w-full rounded-xl border-2 border-gray-300 bg-white px-3 text-sm focus:border-gray-900 focus:outline-none" />
       <input value={improvements} onChange={e => setImprove(e.target.value)} placeholder="보완할 점 (선택)"
         className="mt-1.5 h-11 w-full rounded-xl border-2 border-gray-300 bg-white px-3 text-sm focus:border-gray-900 focus:outline-none" />
-      <div className="flex gap-2 mt-2">
+
+      {/* 크루 정보 확인 — 평가표에 원래 있던 칸(키·몸무게·MBTI 등). 저장하면 크루관리 프로필이 갱신된다 */}
+      {staff ? (
+        <div className="mt-3 rounded-xl border-2 border-dashed border-gray-300 bg-white/70">
+          <button type="button" onClick={() => setProfileOpen(o => !o)} className="w-full flex items-center gap-2 px-3 h-11 text-left">
+            <span className="text-sm font-extrabold text-gray-800 shrink-0">크루 정보</span>
+            <span className="flex-1 min-w-0 text-xs text-gray-500 truncate">
+              {chips.length ? chips.join(' · ') : '아직 적힌 게 없어요'}
+              {changedCount > 0 && <span className="ml-1 text-amber-700 font-bold">· {changedCount}칸 바뀜</span>}
+            </span>
+            {profileOpen ? <ChevronUp className="h-5 w-5 text-gray-400 shrink-0" /> : <ChevronDown className="h-5 w-5 text-gray-400 shrink-0" />}
+          </button>
+          {profileOpen && (
+            <div className="px-3 pb-3 space-y-2.5">
+              <div className="grid grid-cols-3 gap-2">
+                {PROFILE_FIELDS.filter(f => f.kind === 'number').map(f => (
+                  <label key={f.key} className="block">
+                    <span className="text-2xs font-bold text-gray-500">{f.label} ({f.unit})</span>
+                    <input type="number" inputMode="decimal" value={profile[f.key]} onChange={e => setProfile(p => ({ ...p, [f.key]: e.target.value }))}
+                      className={`${inputCls} text-center`} />
+                  </label>
+                ))}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="block">
+                  <span className="text-2xs font-bold text-gray-500">MBTI</span>
+                  <input value={profile.mbti} maxLength={4} autoCapitalize="characters" placeholder="ENFP"
+                    onChange={e => setProfile(p => ({ ...p, mbti: e.target.value.toUpperCase() }))} className={`${inputCls} text-center uppercase`} />
+                </label>
+                <label className="block">
+                  <span className="text-2xs font-bold text-gray-500">이동가능지역</span>
+                  <input value={profile.region} placeholder="서울, 경기" onChange={e => setProfile(p => ({ ...p, region: e.target.value }))} className={inputCls} />
+                </label>
+              </div>
+              {PROFILE_FIELDS.filter(f => f.kind === 'pick').map(f => (
+                <div key={f.key} className="flex items-center gap-1.5 flex-wrap">
+                  <span className="w-9 text-2xs font-bold text-gray-500 shrink-0">{f.label}</span>
+                  {f.options.map(o => (
+                    <button key={o} type="button" onClick={() => setProfile(p => ({ ...p, [f.key]: p[f.key] === o ? '' : o }))} className={pill(profile[f.key] === o)}>{o}</button>
+                  ))}
+                </div>
+              ))}
+              <p className="text-2xs text-gray-500">바뀐 칸만 크루관리에 저장됩니다. 비워 둔 칸은 지우지 않습니다.</p>
+            </div>
+          )}
+        </div>
+      ) : (
+        <p className="mt-3 text-2xs text-gray-500">크루관리에 연결되지 않은 사람이라 키·몸무게·MBTI는 여기서 못 적습니다. PC 크루관리에서 먼저 등록하세요.</p>
+      )}
+
+      <div className="flex gap-2 mt-3">
         <input value={author} onChange={e => onAuthor(e.target.value)} placeholder="평가자"
           className="h-12 w-28 rounded-xl border-2 border-gray-300 bg-white px-3 text-sm focus:border-gray-900 focus:outline-none" />
         <button onClick={save} disabled={saving}

@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { db } from '@/lib/supabase/api'
-import { saveEvaluation } from '@/lib/evaluation'
+import { saveEvaluation, guideForScore, EVAL_FIELDS as LIB_EVAL_FIELDS } from '@/lib/evaluation'
+import { HalfStarInput } from '@/components/ui/HalfStarInput'
 import type { Inquiry, Assignment, Attendance, Evaluation, Staff } from '@/lib/supabase/types'
 import type { AttendanceStatus } from '@/lib/supabase/types'
 import { formatDate, formatKRW } from '@/lib/utils'
@@ -59,38 +60,8 @@ interface EvalField {
   guide: string
 }
 
-const EVAL_FIELDS: EvalField[] = [
-  {
-    key: 'attendance_score',
-    label: '근태',
-    emoji: '📅',
-    guide: '집결시간·휴게시간 준수 여부\n5점: 15분 전 도착, 시간 완벽 준수\n4점: 제시간 도착, 전반적으로 양호\n3점: 소폭 지각 또는 짧은 이탈 (업무 지장 없음)\n2점: 지각·이탈로 팀에 영향\n1점: 심각한 지각·무단이탈·조퇴',
-  },
-  {
-    key: 'performance_score',
-    label: '직무·서비스',
-    emoji: '🎯',
-    guide: '업무 수행 능력 + 고객 응대 태도\n5점: 매뉴얼 완벽 숙지, 장비 능숙, 응대 탁월\n4점: 임무 우수, 고객 응대 원활\n3점: 기본 수행, 응대 방식 일부 보완 필요\n2점: 임무 미흡, 상급자 지시 반복 필요\n1점: 임무 불이행 또는 고객 민원 발생',
-  },
-  {
-    key: 'appearance_score',
-    label: '외형',
-    emoji: '✨',
-    guide: '복장·청결도가 현장에 적합한가\n5점: 복장 완벽, 청결 우수, 행사 이미지 완전 부합\n4점: 전반적으로 단정, 소소한 보완만 필요\n3점: 기본은 갖췄으나 일부 흐트러짐\n2점: 복장 불량 또는 청결 문제 눈에 띔\n1점: 현장 이미지에 심각하게 부적합',
-  },
-  {
-    key: 'teamwork_score',
-    label: '팀워크·보고',
-    emoji: '📡',
-    guide: '무전 보고 정확성 및 팀 협업\n5점: 보고 정확·신속, 팀 소통 완벽\n4점: 팀워크 우수, 소통 원활\n3점: 기본 소통 가능, 보고 누락·지연 있음\n2점: 소통 미흡, 무전 응답 지연, 단독행동\n1점: 팀워크 저해, 지시 불이행',
-  },
-  {
-    key: 'adaptability_score',
-    label: '상황대응',
-    emoji: '⚡',
-    guide: '돌발 상황 시 초동 대응 능력\n5점: 즉각 판단·대응, 보고 완벽, 능동적 해결\n4점: 대부분 적절하게 대응\n3점: 기본 대응하나 판단이 느리거나 수동적\n2점: 돌발상황에 당황, 지시 대기만 함\n1점: 상황 대응 불가, 오히려 악화',
-  },
-]
+// 항목 이름·기준 문구는 lib/evaluation.ts 한 벌 — 휴대폰 현장 화면과 같은 글을 보여 준다
+const EVAL_FIELDS: EvalField[] = LIB_EVAL_FIELDS.map(f => ({ key: f.key, label: f.full, emoji: f.emoji, guide: f.guide }))
 
 interface EvalScores {
   attendance_score: number
@@ -114,11 +85,6 @@ type EvalEntry = EvalScores & {
   dirty: boolean
 }
 
-// 특정 점수(1~5)에 해당하는 가이드 한 줄 추출 ("4점: ..." 형태)
-function guideForScore(guide: string, score: number): string {
-  const line = guide.split('\n').find(l => l.trim().startsWith(`${score}점`))
-  return line ? line.replace(/^\s*\d점\s*:\s*/, '') : ''
-}
 
 // 별점 + 숫자 입력 통합 컴포넌트
 // - 별 클릭: 정수/반개 토글
@@ -1231,6 +1197,7 @@ function FieldEvalMode({ assignments, evalMap, staffMap, onScoreChange, onFieldC
   if (staff?.gender) chips.push(staff.gender)
   if (staff?.age) chips.push(`${staff.age}세`)
   if (data.height) chips.push(`${data.height}cm`)
+  if (data.weight) chips.push(`${data.weight}kg`)
   if (staff?.driving) chips.push('🚗 운전')
   if (staff?.english_skill && staff.english_skill !== '없음') chips.push(`🗣 ${staff.english_skill}`)
 
@@ -1310,11 +1277,10 @@ function FieldEvalMode({ assignments, evalMap, staffMap, onScoreChange, onFieldC
           {staff?.memo && <p className="mt-3 text-xs text-gray-500 bg-gray-50 rounded-lg px-2.5 py-2">📝 {staff.memo}</p>}
         </div>
 
-        {/* 5축 큰 버튼 */}
+        {/* 5축 큰 별 — 왼쪽 반을 누르면 .5 */}
         {EVAL_FIELDS.map(f => {
           const val = data[f.key]
-          const picked = Math.round(val)
-          const guideLine = guideForScore(f.guide, picked)
+          const guideLine = guideForScore(f.guide, val)
           return (
             <div key={f.key} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
               <div className="flex items-center gap-2 mb-3">
@@ -1322,27 +1288,10 @@ function FieldEvalMode({ assignments, evalMap, staffMap, onScoreChange, onFieldC
                 <span className="text-base font-bold text-gray-800">{f.label}</span>
                 <span className={`ml-auto text-lg font-black ${scoreColor(val)}`}>{val}</span>
               </div>
-              <div className="grid grid-cols-5 gap-2">
-                {[1, 2, 3, 4, 5].map(n => {
-                  const active = picked === n
-                  return (
-                    <button
-                      key={n}
-                      onClick={() => onScoreChange(asgn.id, f.key, n)}
-                      className={`h-14 rounded-xl text-lg font-extrabold transition-all active:scale-95 ${
-                        active
-                          ? 'bg-purple-600 text-white shadow-md scale-105'
-                          : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
-                      }`}
-                    >
-                      {n}
-                    </button>
-                  )
-                })}
-              </div>
+              <HalfStarInput size="lg" tone="purple" value={val} onChange={v => onScoreChange(asgn.id, f.key, v)} className="justify-center" />
               {guideLine && (
                 <p className="text-xs text-gray-500 mt-2.5 leading-relaxed bg-purple-50/60 rounded-lg px-2.5 py-1.5">
-                  <b className="text-purple-600">{picked}점</b> · {guideLine}
+                  <b className="text-purple-600">{val}점</b> · {guideLine}
                 </p>
               )}
             </div>
