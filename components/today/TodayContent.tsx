@@ -25,7 +25,7 @@ import {
   MapPin, Phone, Clock, Users, ChevronDown, ChevronUp, RefreshCw, Monitor,
   PenLine, Share, MoreVertical, X, CheckCircle2, Crown, Star, Trash2,
 } from 'lucide-react'
-import type { Inquiry, Assignment, Attendance, FieldLog, FieldLogKind, Evaluation, Staff } from '@/lib/supabase/types'
+import type { Inquiry, Assignment, Attendance, AttendanceStatus, FieldLog, FieldLogKind, Evaluation, Staff } from '@/lib/supabase/types'
 
 // 운영 단계의 행사만. 현장 기록 화면과 같은 기준
 const OPS_STATUSES = ['체결', '배정완료', '진행중', '완료', '정산완료']
@@ -39,6 +39,10 @@ const KIND_HINT: Record<FieldLogKind, string> = {
 }
 // 현장 기록 화면과 같은 키 — 한 번 적은 이름을 두 화면이 같이 쓴다
 const AUTHOR_KEY = 'field_log_author'
+// 출석 — 칩을 누르면 바로 '출석', 다시 누르면 상태 고르기. 출석부(PC)·셀프 체크인(/c/)과 같은 모양으로 저장한다
+const ATT_STATUSES: AttendanceStatus[] = ['출석', '지각', '결근', '조퇴', '외출']
+const FIELD_NOTE = '현장 화면'
+function nowHHMM(): string { return new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(11, 16) }
 const INSTALL_HINT_KEY = 'today_install_hint_dismissed'
 const WEEKDAY = ['일', '월', '화', '수', '목', '금', '토']
 
@@ -71,7 +75,7 @@ export default function TodayContent() {
   const [assignments, setAssignments] = useState<Assignment[]>([])
   const [attendances, setAttendances] = useState<Attendance[]>([])
   const [evaluations, setEvaluations] = useState<Evaluation[]>([])
-  // 크루 프로필(키·몸무게·MBTI 등) — 평가 칸에서 확인·보정하는 용도
+  // 크루 프로필(키·몸무게·MBTI 등) — 평가 칸에서 확인·보정하는 용도. 키는 배정 id
   const [staffMap, setStaffMap]       = useState<Record<string, Staff>>({})
   const [logs, setLogs]               = useState<FieldLog[]>([])
   const [openId, setOpenId]           = useState<string | null>(null)
@@ -131,9 +135,24 @@ export default function TodayContent() {
       const evals = await db.list<Evaluation>('evaluations', { inFilter: { assignment_id: asgns.map(a => a.id) }, order: 'evaluated_at', asc: false }).catch(() => [] as Evaluation[])
       setEvaluations(evals)
       // 크루 프로필은 덤 — 못 읽어도 평가는 된다
+      // 배정에 staff_id 가 있으면 그걸로, 없으면 이름으로 크루관리에서 찾는다 (동명이인은 전화번호로 가른다).
+      // 배정만 되고 크루관리와 안 이어진 사람도 이전 평가·누적 점수가 보여야 한다 (정광영 건, 2026-11-06)
       const staffIds = [...new Set(asgns.map(a => a.staff_id).filter((x): x is string => !!x))]
-      const staffList = staffIds.length ? await db.list<Staff>('staff', { inFilter: { id: staffIds } }).catch(() => [] as Staff[]) : []
-      setStaffMap(Object.fromEntries(staffList.map(st => [st.id, st])))
+      const byId = staffIds.length ? await db.list<Staff>('staff', { inFilter: { id: staffIds } }).catch(() => [] as Staff[]) : []
+      const names = [...new Set(asgns.filter(a => !a.staff_id && a.staff_name).map(a => a.staff_name as string))]
+      const byName = names.length ? await db.list<Staff>('staff', { inFilter: { name: names } }).catch(() => [] as Staff[]) : []
+      const m: Record<string, Staff> = {}
+      for (const a of asgns) {
+        let hit: Staff | undefined
+        if (a.staff_id) hit = byId.find(st => st.id === a.staff_id)
+        else {
+          const same = byName.filter(st => st.name === a.staff_name)
+          const digits = (a.phone || '').replace(/\D/g, '')
+          hit = same.length === 1 ? same[0] : same.find(st => digits && (st.phone || '').replace(/\D/g, '') === digits)
+        }
+        if (hit) m[a.id] = hit
+      }
+      setStaffMap(m)
     } catch (e) {
       setError((e as Error).message || '불러오지 못했습니다')
     } finally {
@@ -314,11 +333,38 @@ function EventCard({ inq, viewDate, isToday, isPast, assignments, attendances, e
   // 크루 한 명을 누르면 평가 칸이 펼쳐진다 (오늘·지난 행사만)
   const [evalFor, setEvalFor] = useState<string | null>(null)
   const canEval = !!(isToday || isPast)
+  // 출석 칩 — 미기록이면 한 번에 '출석', 기록이 있으면 상태 고르기 줄이 펼쳐진다
+  const [attFor, setAttFor] = useState<string | null>(null)
+  const [attBusy, setAttBusy] = useState<string | null>(null)
+  async function saveAttendance(a: Assignment, att: Attendance | undefined, status: AttendanceStatus | null) {
+    setAttBusy(a.id)
+    try {
+      if (status === null) {
+        if (att) { await db.delete('attendances', att.id); await db.update('assignments', a.id, { is_present: false }) }
+        toast.success(`${a.staff_name} 출석 기록을 지웠습니다`)
+      } else {
+        // 출석부(PC) handleSaveAttendance 와 같은 모양. 시각은 오늘 처음 찍을 때만 자동
+        const payload = {
+          assignment_id: a.id, inquiry_id: inq.id, staff_name: a.staff_name || '', work_date: viewDate,
+          clock_in: att?.clock_in || (isToday && status !== '결근' ? nowHHMM() : null),
+          daily_pay: a.pay_rate || 0, status, notes: att?.notes || FIELD_NOTE,
+        }
+        if (att) await db.update('attendances', att.id, payload)
+        else await db.insert('attendances', payload)
+        await db.update('assignments', a.id, { is_present: status !== '결근' })
+        toast.success(`${a.staff_name} ${status}${!att && payload.clock_in ? ` · ${payload.clock_in}` : ''}`)
+      }
+      setAttFor(null)
+      onSaved()
+    } catch (e) {
+      toast.error('출석 저장 실패: ' + (e as Error).message)
+    } finally { setAttBusy(null) }
+  }
   // 후보는 아직 사람이 아니다. 확정·배정중만 명단에 올린다
   const crew = assignments.filter(a => a.status === '확정' || a.status === '배정중')
   const evaluated = crew.filter(a => evaluations.some(e => e.assignment_id === a.id)).length
   const confirmed = crew.filter(a => a.status === '확정').length
-  const present = attendances.filter(t => t.status === '출석' || t.status === '지각' || t.status === '조퇴' || t.status === '외출').length
+  const present = attendances.filter(t => t.work_date === viewDate && (t.status === '출석' || t.status === '지각' || t.status === '조퇴' || t.status === '외출')).length
   const pendingLogs = logs.filter(l => !l.applied_at).length
   const dates = eventDatesOf(inq)
   const multi = dates.length > 1
@@ -361,13 +407,13 @@ function EventCard({ inq, viewDate, isToday, isPast, assignments, attendances, e
         <div className="border-t border-gray-100">
           {/* 크루 명단 */}
           <div className="p-4">
-            <p className="text-2xs font-bold text-gray-500 tracking-wider mb-2">크루 {crew.length}명{canEval && crew.length > 0 ? ' · 이름을 누르면 평가' : ''}</p>
+            <p className="text-2xs font-bold text-gray-500 tracking-wider mb-2">크루 {crew.length}명{canEval && crew.length > 0 ? ' · 이름 누르면 평가, 오른쪽 칩 누르면 출석' : ''}</p>
             {crew.length === 0 ? (
               <p className="text-sm text-gray-400">배정된 크루가 없습니다.</p>
             ) : (
               <ul className="divide-y divide-gray-100">
                 {crew.map(a => {
-                  const att = attendances.find(t => t.assignment_id === a.id)
+                  const att = attendances.find(t => t.assignment_id === a.id && t.work_date === viewDate)
                   const ev = evaluations.find(e => e.assignment_id === a.id)
                   const tel = (a.phone || '').replace(/[^0-9+]/g, '')
                   const isOpen = evalFor === a.id
@@ -390,11 +436,16 @@ function EventCard({ inq, viewDate, isToday, isPast, assignments, attendances, e
                           <p className="text-xs text-gray-500">{a.job_type || '-'}{att?.clock_in ? ` · ${String(att.clock_in).slice(0, 5)} 체크인` : ''}</p>
                         </button>
                         {canEval && (
-                          <span className={`text-xs font-bold px-2 py-1 rounded-full ${
-                            !att ? 'bg-gray-100 text-gray-400'
-                            : att.status === '출석' ? 'bg-green-100 text-green-700'
-                            : att.status === '결근' ? 'bg-red-100 text-red-700'
-                            : 'bg-amber-100 text-amber-700'}`}>{att?.status || '미기록'}</span>
+                          <button type="button" disabled={attBusy === a.id}
+                            onClick={() => att ? setAttFor(attFor === a.id ? null : a.id) : saveAttendance(a, att, '출석')}
+                            title={att ? '누르면 출석 상태 바꾸기' : '누르면 출석 처리'}
+                            className={`h-9 px-2.5 rounded-full text-xs font-bold border-2 shrink-0 active:scale-95 disabled:opacity-50 ${
+                            !att ? 'bg-white text-gray-500 border-gray-300'
+                            : att.status === '출석' ? 'bg-green-100 text-green-700 border-green-200'
+                            : att.status === '결근' ? 'bg-red-100 text-red-700 border-red-200'
+                            : 'bg-amber-100 text-amber-700 border-amber-200'}`}>
+                            {attBusy === a.id ? '저장…' : att ? att.status : '출석 ✓'}
+                          </button>
                         )}
                         {tel ? (
                           <a href={`tel:${tel}`} title={`${a.staff_name} 전화`}
@@ -405,8 +456,18 @@ function EventCard({ inq, viewDate, isToday, isPast, assignments, attendances, e
                           <span className="h-11 w-11 rounded-full bg-gray-100 text-gray-300 flex items-center justify-center shrink-0"><Phone className="h-5 w-5" /></span>
                         )}
                       </div>
+                      {attFor === a.id && (
+                        <div className="mb-2 flex flex-wrap gap-1.5">
+                          {ATT_STATUSES.map(st => (
+                            <button key={st} type="button" disabled={attBusy === a.id} onClick={() => saveAttendance(a, att, st)}
+                              className={`h-10 px-3 rounded-full text-sm font-bold border-2 active:scale-95 ${att?.status === st ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-700 border-gray-300'}`}>{st}</button>
+                          ))}
+                          <button type="button" disabled={attBusy === a.id} onClick={() => saveAttendance(a, att, null)}
+                            className="h-10 px-3 rounded-full text-sm font-bold border-2 border-red-200 text-red-600 bg-white active:scale-95">기록 지우기</button>
+                        </div>
+                      )}
                       {isOpen && (
-                        <EvalPanel key={ev?.id || 'new'} assignment={a} existing={ev} staff={a.staff_id ? staffMap[a.staff_id] : undefined} siteName={inq.event_name || ''} author={author} onAuthor={onAuthor}
+                        <EvalPanel key={ev?.id || 'new'} assignment={a} existing={ev} staff={staffMap[a.id]} siteName={inq.event_name || ''} author={author} onAuthor={onAuthor}
                           onClose={() => setEvalFor(null)} onSaved={onSaved} />
                       )}
                     </li>
@@ -430,6 +491,8 @@ function EvalPanel({ assignment, existing, staff, siteName, author, onAuthor, on
   assignment: Assignment; existing?: Evaluation; staff?: Staff; siteName: string
   author: string; onAuthor: (v: string) => void; onClose: () => void; onSaved: () => void
 }) {
+  // 배정에 staff_id 가 없어도 이름으로 찾은 크루가 있으면 그 사람으로 본다 (이전 평가·누적 점수·정보 저장 모두)
+  const staffId = assignment.staff_id || staff?.id || null
   const init = (): EvalScores => ({
     attendance_score:   existing?.attendance_score   ?? 3,
     performance_score:  existing?.performance_score  ?? 3,
@@ -447,15 +510,15 @@ function EvalPanel({ assignment, existing, staff, siteName, author, onAuthor, on
 
   // 이전 평가 — 같은 사람의 지난 평가(이번 배정 것은 빼고, 최근 순). 누르면 바로 보이게 펼쳐 둔다.
   // 이번 배정 평가가 아직 없으면 가장 최근 평가 점수로 별을 미리 채운다 — 사람이 건드리기 전에만.
-  const [history, setHistory]       = useState<Evaluation[] | null>(assignment.staff_id ? null : [])
+  const [history, setHistory]       = useState<Evaluation[] | null>(staffId ? null : [])
   const [historyOpen, setHistoryOpen] = useState(true)
   const [prefillNote, setPrefillNote] = useState('')
   const touched = useRef(false)
   const existingId = existing?.id
   useEffect(() => {
     let alive = true
-    if (!assignment.staff_id) return
-    db.list<Evaluation>('evaluations', { filters: { staff_id: assignment.staff_id }, order: 'evaluated_at', asc: false, limit: 20 })
+    if (!staffId) return
+    db.list<Evaluation>('evaluations', { filters: { staff_id: staffId }, order: 'evaluated_at', asc: false, limit: 20 })
       .then(rows => {
         if (!alive) return
         const past = rows.filter(e => e.assignment_id !== assignment.id)
@@ -474,7 +537,7 @@ function EvalPanel({ assignment, existing, staff, siteName, author, onAuthor, on
       })
       .catch(() => { if (alive) setHistory([]) })
     return () => { alive = false }
-  }, [assignment.id, assignment.staff_id, existingId])
+  }, [assignment.id, staffId, existingId])
 
   // 크루 정보 — 비어 있는 핵심 칸(키·몸무게·MBTI)이 있으면 처음부터 펼쳐 둔다
   const baseProfile = profileFormOf(staff)
@@ -501,14 +564,16 @@ function EvalPanel({ assignment, existing, staff, siteName, author, onAuthor, on
     setSaving(true)
     try {
       const r = await saveEvaluation({
-        assignmentId: assignment.id, staffId: assignment.staff_id, staffName: assignment.staff_name, siteName,
+        assignmentId: assignment.id, staffId, staffName: assignment.staff_name, siteName,
         scores, reRecommend, strengths: strengths.trim() || null, improvements: improvements.trim() || null,
         evaluator: author.trim() || null, existingId: existing?.id,
       })
       // 크루 정보는 바뀐 칸만, 점수 칸은 손대지 않는다 (lib 가 걸러 준다)
       let wrote = 0
-      if (assignment.staff_id && changedCount > 0) {
-        try { wrote = await saveStaffProfile(assignment.staff_id, patch) }
+      // 이름으로만 찾은 사람이면 이 기회에 배정을 크루관리와 이어 둔다 (다음부터 바로 찾힘)
+      if (!assignment.staff_id && staffId) await db.update('assignments', assignment.id, { staff_id: staffId }).catch(() => {})
+      if (staffId && changedCount > 0) {
+        try { wrote = await saveStaffProfile(staffId, patch) }
         catch (e) { toast.error('크루 정보 저장 실패: ' + (e as Error).message) }
       }
       try { localStorage.setItem(AUTHOR_KEY, author.trim()) } catch { /* 무시 */ }
@@ -556,6 +621,13 @@ function EvalPanel({ assignment, existing, staff, siteName, author, onAuthor, on
           : '별 왼쪽 반을 누르면 3.5, 4.5처럼 반 점이 됩니다.'}
       </p>
 
+      {/* 크루관리에 쌓인 누적 점수 — 평가 이력이 표에 없어도(엑셀로 들어온 사람) 이건 보인다 */}
+      {staff && staff.total_score > 0 && (
+        <p className="text-2xs text-gray-600 mt-2 leading-relaxed">
+          <b className="text-gray-800">크루관리 누적 ★ {staff.total_score}</b> · {EVAL_FIELDS.map(f => `${f.label} ${staff[f.key] || '-'}`).join(' · ')}
+        </p>
+      )}
+
       {/* 이전 평가 — 같은 사람이 지난 행사에서 받은 점수 */}
       {history === null ? (
         <p className="text-2xs text-gray-400 mt-2">이전 평가 불러오는 중…</p>
@@ -564,7 +636,7 @@ function EvalPanel({ assignment, existing, staff, siteName, author, onAuthor, on
           <button type="button" onClick={() => setHistoryOpen(o => !o)} className="w-full flex items-center gap-2 px-3 h-10 text-left">
             <span className="text-sm font-extrabold text-gray-800 shrink-0">이전 평가 {history.length}회</span>
             <span className="flex-1 min-w-0 text-2xs text-gray-500 truncate">
-              {staff && staff.total_score > 0 ? `누적 ${staff.total_score}점` : ''}{prefillNote ? `${staff && staff.total_score > 0 ? ' · ' : ''}${prefillNote}` : ''}
+              {prefillNote}
             </span>
             {historyOpen ? <ChevronUp className="h-5 w-5 text-gray-400 shrink-0" /> : <ChevronDown className="h-5 w-5 text-gray-400 shrink-0" />}
           </button>
@@ -588,7 +660,7 @@ function EvalPanel({ assignment, existing, staff, siteName, author, onAuthor, on
             </ul>
           )}
         </div>
-      ) : assignment.staff_id ? (
+      ) : staffId ? (
         <p className="text-2xs text-gray-400 mt-2">이전 평가 없음 — 처음 평가받는 사람입니다.</p>
       ) : null}
 
