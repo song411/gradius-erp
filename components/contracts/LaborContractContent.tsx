@@ -309,11 +309,13 @@ export default function LaborContractContent() {
               <li key={d.id} className="flex items-center gap-1.5 text-xs">
                 <span className="font-bold text-gray-800 w-16 truncate">{d.fields.workerName || '(이름 없음)'}</span>
                 {d.signed ? (
-                  <span className="inline-flex items-center gap-0.5 text-emerald-700 font-bold"><CheckCircle2 className="h-3.5 w-3.5" />서명완료 <span className="font-normal text-gray-500">{fmtSignedAt(d.signed.signed_at || '')}</span></span>
+                  <>
+                    <span className="inline-flex items-center gap-0.5 text-emerald-700 font-bold"><CheckCircle2 className="h-3.5 w-3.5" />서명완료 <span className="font-normal text-gray-500">{fmtSignedAt(d.signed.signed_at || '')}</span></span>
                     {d.signed.content_hash && (
                       <button type="button" onClick={() => verifySeal(d.signed!)} title="저장된 내용으로 지문을 다시 계산해 맞춰 봅니다"
                         className="text-2xs font-mono text-gray-500 hover:text-emerald-700 hover:underline">봉인 {shortHash(d.signed.content_hash)}</button>
                     )}
+                  </>
                 ) : d.latest ? (
                   <span className="inline-flex items-center gap-0.5 text-amber-700 font-bold"><Clock className="h-3.5 w-3.5" />서명 대기</span>
                 ) : (
