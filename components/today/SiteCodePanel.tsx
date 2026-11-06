@@ -59,7 +59,7 @@ export default function SiteCodePanel({ inquiryId }: { inquiryId: string }) {
   return (
     <div className="mt-2 mb-3 rounded-2xl border-2 border-gray-900 bg-white p-4 text-center">
       <p className="text-sm font-extrabold text-gray-900 flex items-center justify-center gap-1"><QrCode className="h-4 w-4" />현장 출석 QR · 코드</p>
-      <p className="text-2xs text-gray-500 mt-0.5">크루에게 이 화면을 보여 주세요. QR을 찍거나 아래 숫자를 넣어야 출석이 됩니다.</p>
+      <p className="text-2xs text-gray-500 mt-0.5">크루는 링크만 열면 됩니다(현장 근처 위치면 바로 출석). 위치가 안 잡힌 크루에게만 이 QR이나 숫자를 보여 주세요.</p>
       {error ? (
         <p className="text-sm text-red-600 mt-3">{error}</p>
       ) : !data ? (
@@ -74,8 +74,8 @@ export default function SiteCodePanel({ inquiryId }: { inquiryId: string }) {
       <p className={`mt-2 text-2xs inline-flex items-center gap-1 ${geo === 'ok' ? 'text-green-700' : 'text-gray-500'}`}>
         <MapPin className="h-3.5 w-3.5" />
         {geo === 'asking' ? '이 폰 위치를 행사장 기준점으로 잡는 중…'
-          : geo === 'ok' ? `기준점 설정됨 (오차 ±${geoAcc ?? '?'}m) · 크루 거리가 기록됩니다`
-          : geo === 'denied' ? '위치 허용 안 됨 — 거리 기록 없이 출석만 받습니다'
+          : geo === 'ok' ? `기준점 설정됨 (오차 ±${geoAcc ?? '?'}m) · 이 근처(500m)면 크루가 코드 없이 출석됩니다`
+          : geo === 'denied' ? '위치 허용 안 됨 — 기준점이 없으면 크루 전원이 현장 코드를 넣어야 합니다'
           : '기준점 저장 실패 (023 SQL 확인) — 출석은 됩니다'}
       </p>
       <div>
