@@ -59,7 +59,7 @@
 - `app/manifest.ts`와 `public/icon-*.png`가 홈 화면 추가(PWA)입니다. 브라우저가 쿠키 없이 가져가므로 `proxy.ts`의 `PUBLIC_PATHS`에 열려 있어야 합니다.
 - `ViewportToggle`(PC 화면을 휴대폰에서 축소해 보는 버튼)은 `/m`에서 꺼집니다.
 - 크루 셀프 체크인(`/c/행사id`)은 본인 확인(전화 뒷 4자리) → 현장 확인(위치 우선: 팀장 기준점에서 `lib/geo.ts` FAR_M 안이면 통과, 아니면 팀장의 휴대폰 현장 화면 ‘출석 QR’의 현장 코드 `lib/checkinCode.ts` HMAC, 10분마다 바뀜, `/api/site-code`는 잠금 안) → 안전교육 서약서(`lib/safetyPledge.ts`, 출석부 인쇄와 같은 글) 체크 → 손가락 서명 순이고, 위치는 받을 수 있으면 받아 팀장 기준점(팀장이 ‘출석 QR’을 열 때 저장, `inquiries.site_*`)까지 거리를 `attendances.distance_m`(023)에 적습니다. 거리로 막지 않고 `lib/geo.ts`의 FAR_M(500m, 두 폰 오차는 빼고)을 넘으면 표시만 합니다. 셋이 다 있어야 `/api/checkin`이 출석을 적습니다. 서명은 `attendances.signature_data`(022)에 붙고 출석부 인쇄 서명란에 찍힙니다. 담당자가 먼저 적은 출결은 상태를 두고 서명만 붙입니다.
-- 현장 기록 사진(영수증 등)은 `lib/photos.ts`가 휴대폰에서 1280px JPEG로 줄여 Storage `field-photos` 버킷에 올리고, `field_logs.photos`(026)에는 주소만 남깁니다. DB에 그림을 넣지 않고, 목록은 썸네일만 그립니다. 기록을 지우면 사진도 지웁니다.
+- 현장 기록 사진(영수증 등)은 `lib/photos.ts`가 휴대폰에서 1280px JPEG로 줄여 Storage `field-photos` 버킷에 올리고, `field_logs.photos`(026)에는 주소만 남깁니다. DB에 그림을 넣지 않고, 목록은 썸네일만 그립니다. 기록을 지우면 사진도 지웁니다. 크루 얼굴 사진(`staff.photo_path`, 027)은 비공개 버킷 `crew-photos`에 두고 `/api/storage` GET의 서명 주소(1시간)로만 보입니다(`components/ui/CrewPhoto.tsx`). 휴대폰 평가 칸의 ‘사진 찍기’와 PC 크루관리 수정 창에서 올리며 즉시 저장됩니다.
 - 푸시 알림은 `lib/push.ts` 한 곳에서만 보냅니다. 크루 셀프 체크인, 현장 기록 저장, 아침 8시 요약(Vercel 크론, `CRON_SECRET` 환경변수 필요). 키는 `push_config` 표에 서버가 만들어 넣으므로 환경변수가 없습니다. 켜는 곳은 휴대폰 더보기 탭이고, 아이폰은 홈 화면 앱으로 열어야 됩니다. 표는 018 마이그레이션입니다.
 
 ## 6. 고치고 나서 확인하는 법

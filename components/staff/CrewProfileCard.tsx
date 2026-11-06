@@ -1,5 +1,6 @@
 'use client'
 
+import CrewPhoto from '@/components/ui/CrewPhoto'
 import { useState, useEffect, useCallback } from 'react'
 import type { Staff, Assignment, Payout, Evaluation } from '@/lib/supabase/types'
 import { X, Edit2, Star, Phone, MapPin, Languages, Car, CreditCard, FileText, Eye, EyeOff, IdCard, History, CalendarDays, Briefcase, TrendingUp } from 'lucide-react'
@@ -168,6 +169,7 @@ export default function CrewProfileCard({ staff, onClose, onEdit }: Props) {
 
             <div className="pb-1 flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
+                <CrewPhoto path={staff.photo_path} name={staff.name} size={48} className="border-2 border-white/70" />
                 <h2 className="text-2xl font-bold text-white">{staff.name}</h2>
                 {staff.certifications?.includes('본사직원') && (
                   <span className="text-xs bg-white/20 text-white rounded-full px-2 py-0.5 font-semibold">[본사]</span>

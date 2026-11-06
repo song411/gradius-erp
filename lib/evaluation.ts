@@ -137,6 +137,7 @@ export const PROFILE_FIELDS = [
   { key: 'english_skill', label: '영어',   kind: 'pick',   options: ['하', '중', '상', '원어민'] },
   { key: 'driving',       label: '운전',   kind: 'pick',   options: ['1종', '2종', '없음'] },
   { key: 'region',        label: '지역',   kind: 'text' },
+  { key: 'photo_path',    label: '사진',   kind: 'photo' },  // 비공개 버킷 경로 (027). 화면은 CrewPhoto 로 보여 준다
 ] as const
 
 export type ProfileKey = typeof PROFILE_FIELDS[number]['key']
@@ -148,6 +149,7 @@ export function profileFormOf(staff?: Staff | null): ProfileForm {
   return {
     gender: v(staff?.gender), age: v(staff?.age), height: v(staff?.height), weight: v(staff?.weight),
     mbti: v(staff?.mbti), english_skill: v(staff?.english_skill), driving: v(staff?.driving), region: v(staff?.region),
+    photo_path: v(staff?.photo_path),
   }
 }
 

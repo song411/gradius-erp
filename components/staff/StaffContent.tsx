@@ -42,6 +42,8 @@ function buildActivity(assignments: Assignment[]): Map<string, Activity> {
   return out
 }
 import StaffExcelUpload from './StaffExcelUpload'
+import CrewPhoto from '@/components/ui/CrewPhoto'
+import { uploadPhoto, CREW_BUCKET } from '@/lib/photos'
 
 const RECOMMEND_OPTIONS: StaffRecommend[] = ['우선투입', '일반', '보류']
 
@@ -119,6 +121,22 @@ export default function StaffContent() {
   const [profileStaff, setProfileStaff] = useState<Staff | null>(null) // 프로필 카드용
   const [showModal, setShowModal]     = useState(false)
   const [editTarget, setEditTarget]   = useState<Staff | null>(null)
+  // 크루 사진 — 수정 창에서 올리면 즉시 저장 (비공개 버킷, lib/photos)
+  const [photoPath, setPhotoPath]     = useState<string | null>(null)
+  const [photoBusy, setPhotoBusy]     = useState(false)
+  async function uploadCrewPhoto(file: File) {
+    if (!editTarget) return
+    setPhotoBusy(true)
+    try {
+      const ref = await uploadPhoto(file, `staff/${editTarget.id}`, { bucket: CREW_BUCKET, maxEdge: 640 })
+      await db.update('staff', editTarget.id, { photo_path: ref.path })
+      setPhotoPath(ref.path)
+      setStaffList(list => list.map(s => s.id === editTarget.id ? { ...s, photo_path: ref.path } : s))
+      toast.success('사진을 저장했습니다')
+    } catch (e) {
+      toast.error('사진 저장 실패: ' + (e as Error).message + ' (027 SQL 확인)')
+    } finally { setPhotoBusy(false) }
+  }
   const [form, setForm]               = useState(emptyForm)
   const [saving, setSaving]           = useState(false)
   const [error, setError]             = useState('')
@@ -167,6 +185,7 @@ export default function StaffContent() {
 
   function openEdit(s: Staff) {
     setEditTarget(s)
+    setPhotoPath(s.photo_path || null)
     setForm({
       name: s.name,
       gender: s.gender || '',
@@ -494,12 +513,14 @@ export default function StaffContent() {
                       >
                         <td>
                           <div className="flex items-center gap-2">
+                            {s.photo_path ? <CrewPhoto path={s.photo_path} name={s.name} size={28} /> : (
                             <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0
                               ${s.recommend === '우선투입' ? 'bg-emerald-100 text-emerald-700' :
                                 s.recommend === '보류'    ? 'bg-orange-100 text-orange-700' :
                                                             'bg-blue-100 text-blue-700'}`}>
                               {s.name[0]}
                             </div>
+                            )}
                             <span className="font-medium hover:text-blue-700">{s.name}</span>
                             {s.certifications?.includes('본사직원') && (
                               <span className="text-2xs bg-slate-100 text-slate-500 px-1 rounded">[본사]</span>
@@ -680,6 +701,19 @@ export default function StaffContent() {
               <label className="text-xs font-medium text-gray-600 mb-1 block">계좌번호</label>
               <Input value={form.account_number} onChange={e => setForm(f => ({ ...f, account_number: e.target.value }))} />
             </div>
+            {editTarget && (
+              <div>
+                <label className="text-xs font-medium text-gray-600 mb-1 block">사진 <span className="text-gray-400">(비공개 보관)</span></label>
+                <div className="flex items-center gap-2">
+                  <CrewPhoto path={photoPath} name={editTarget.name} size={40} />
+                  <label className="text-xs font-bold text-blue-700 cursor-pointer hover:underline">
+                    {photoBusy ? '올리는 중…' : photoPath ? '사진 바꾸기' : '사진 올리기'}
+                    <input type="file" accept="image/*" className="hidden" disabled={photoBusy}
+                      onChange={e => { const f = e.target.files?.[0]; if (f) uploadCrewPhoto(f); e.target.value = '' }} />
+                  </label>
+                </div>
+              </div>
+            )}
             <div>
               <label className="text-xs font-medium text-gray-600 mb-1 block">주민등록번호</label>
               <div className="relative">

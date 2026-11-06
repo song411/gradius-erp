@@ -24,12 +24,13 @@ import SiteCodePanel from './SiteCodePanel'
 import { fmtDistance, isFar, getFix } from '@/lib/geo'
 import { ensureLinksForCrew } from '@/lib/contractLinks'
 import { groupLinkMessage } from '@/lib/laborContract'
-import { uploadPhoto, deletePhotos } from '@/lib/photos'
+import { uploadPhoto, deletePhotos, CREW_BUCKET } from '@/lib/photos'
+import CrewPhoto from '@/components/ui/CrewPhoto'
 import { PhotoPicker, PhotoThumbs } from '@/components/ui/PhotoPicker'
 import { toast } from 'sonner'
 import {
   MapPin, Phone, Clock, Users, ChevronDown, ChevronUp, RefreshCw, Monitor,
-  PenLine, Share, MoreVertical, X, CheckCircle2, Crown, Star, Trash2, QrCode, Link2, FileSignature,
+  PenLine, Share, MoreVertical, X, CheckCircle2, Crown, Star, Trash2, QrCode, Link2, FileSignature, Camera,
 } from 'lucide-react'
 import type { Inquiry, Assignment, Attendance, AttendanceStatus, FieldLog, FieldLogKind, Evaluation, Staff } from '@/lib/supabase/types'
 
@@ -624,6 +625,20 @@ function EvalPanel({ assignment, existing, staff, siteName, author, onAuthor, on
   const [profile, setProfile]       = useState<ProfileForm>(baseProfile)
   const [profileOpen, setProfileOpen] = useState<boolean>(!!staff && (!baseProfile.height || !baseProfile.weight || !baseProfile.mbti))
   const patch = profilePatch(baseProfile, profile)
+  // 크루 사진 — 찍는 즉시 비공개 버킷에 올리고 크루관리에 저장 (평가 저장과 무관)
+  const [photoBusy, setPhotoBusy] = useState(false)
+  async function takeCrewPhoto(file: File) {
+    if (!staffId) return
+    setPhotoBusy(true)
+    try {
+      const ref = await uploadPhoto(file, `staff/${staffId}`, { bucket: CREW_BUCKET, maxEdge: 640 })
+      await saveStaffProfile(staffId, { photo_path: ref.path })
+      setProfile(p => ({ ...p, photo_path: ref.path }))
+      toast.success('크루 사진을 크루관리에 저장했습니다')
+    } catch (e) {
+      toast.error('사진 저장 실패: ' + (e as Error).message + ' (027 SQL 확인)')
+    } finally { setPhotoBusy(false) }
+  }
   const changedCount = Object.keys(patch).length
   const chips = profileChips(profile)
   const lastField = lastKey ? EVAL_FIELDS.find(f => f.key === lastKey) : undefined
@@ -762,6 +777,7 @@ function EvalPanel({ assignment, existing, staff, siteName, author, onAuthor, on
       {staff ? (
         <div className="mt-3 rounded-xl border-2 border-dashed border-gray-300 bg-white/70">
           <button type="button" onClick={() => setProfileOpen(o => !o)} className="w-full flex items-center gap-2 px-3 h-11 text-left">
+            <CrewPhoto path={profile.photo_path} name={staff.name} size={28} />
             <span className="text-sm font-extrabold text-gray-800 shrink-0">크루 정보</span>
             <span className="flex-1 min-w-0 text-xs text-gray-500 truncate">
               {chips.length ? chips.join(' · ') : '아직 적힌 게 없어요'}
@@ -771,6 +787,15 @@ function EvalPanel({ assignment, existing, staff, siteName, author, onAuthor, on
           </button>
           {profileOpen && (
             <div className="px-3 pb-3 space-y-2.5">
+              <div className="flex items-center gap-3">
+                <CrewPhoto path={profile.photo_path} name={staff.name} size={56} />
+                <label className={`h-10 px-3 rounded-full border-2 border-gray-300 bg-white text-sm font-bold text-gray-700 inline-flex items-center gap-1 active:scale-95 cursor-pointer ${photoBusy ? 'opacity-50' : ''}`}>
+                  <Camera className="h-4 w-4" />{photoBusy ? '올리는 중…' : profile.photo_path ? '사진 다시 찍기' : '사진 찍기'}
+                  <input type="file" accept="image/*" capture="environment" className="hidden" disabled={photoBusy}
+                    onChange={e => { const f = e.target.files?.[0]; if (f) takeCrewPhoto(f); e.target.value = '' }} />
+                </label>
+                <span className="text-2xs text-gray-400">찍는 즉시 저장 · 비공개</span>
+              </div>
               <div className="grid grid-cols-3 gap-2">
                 {PROFILE_FIELDS.filter(f => f.kind === 'number').map(f => (
                   <label key={f.key} className="block">

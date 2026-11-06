@@ -81,6 +81,7 @@ export interface Staff {
   recommend: StaffRecommend
   phone?: string
   address?: string            // 근로계약서 주소 칸 (019)
+  photo_path?: string | null  // 크루 사진 — 비공개 버킷 경로 (027)
   attendance_score: number
   performance_score: number
   appearance_score: number

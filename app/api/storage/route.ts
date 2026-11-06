@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 // 허용된 버킷 목록 (보안 화이트리스트)
-const ALLOWED_BUCKETS = ['guard-documents', 'field-photos']   // field-photos: 현장 기록 사진(영수증 등). 없으면 아래서 만든다
+const ALLOWED_BUCKETS = ['guard-documents', 'field-photos', 'crew-photos']   // 없으면 아래서 만든다
+// 공개로 만들 버킷. crew-photos(사람 얼굴)는 비공개 — GET 의 서명 주소로만 본다
+const PUBLIC_BUCKETS = ['guard-documents', 'field-photos']
 
 // 허용된 파일 타입
 const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/pdf']
@@ -39,7 +41,7 @@ export async function POST(request: NextRequest) {
 
     // 버킷이 아직 없으면 만들고 한 번 더 — 사진 버킷은 Supabase 콘솔을 거치지 않아도 되게
     if (error && /bucket/i.test(error.message) && /not found/i.test(error.message)) {
-      await supabase.storage.createBucket(bucket, { public: true, fileSizeLimit: 10 * 1024 * 1024 })
+      await supabase.storage.createBucket(bucket, { public: PUBLIC_BUCKETS.includes(bucket), fileSizeLimit: 10 * 1024 * 1024 })
       const retry = await supabase.storage.from(bucket).upload(path, buffer, { contentType: file.type, upsert: true })
       data = retry.data; error = retry.error
     }
@@ -51,6 +53,17 @@ export async function POST(request: NextRequest) {
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 })
   }
+}
+
+// 비공개 버킷의 서명 주소 (1시간). 이 라우트는 잠금 안이라 ERP 에 들어온 사람만 받는다
+export async function GET(request: NextRequest) {
+  const bucket = request.nextUrl.searchParams.get('bucket') || ''
+  const path   = request.nextUrl.searchParams.get('path') || ''
+  if (!ALLOWED_BUCKETS.includes(bucket) || !path) return NextResponse.json({ error: '잘못된 요청입니다.' }, { status: 400 })
+  const supabase = createAdminClient()
+  const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 3600)
+  if (error || !data) return NextResponse.json({ error: error?.message || '주소를 만들지 못했습니다.' }, { status: 500 })
+  return NextResponse.json({ url: data.signedUrl })
 }
 
 // 파일 삭제

@@ -6,7 +6,8 @@
 
 export interface PhotoRef { url: string; path: string }
 
-export const PHOTO_BUCKET = 'field-photos'
+export const PHOTO_BUCKET = 'field-photos'   // 공개(주소만 알면 열림, 경로는 랜덤) — 영수증·현장 사진
+export const CREW_BUCKET  = 'crew-photos'    // 비공개 — 사람 얼굴. 서명된 주소(signedPhotoUrl)로만 본다
 const MAX_EDGE = 1280
 const QUALITY = 0.8
 
@@ -32,17 +33,25 @@ function randomId(): string {
 }
 
 /** 줄여서 올리고 주소를 돌려준다. folder 는 'field-logs/<행사id>' 처럼 어디 것인지 */
-export async function uploadPhoto(file: File, folder: string): Promise<PhotoRef> {
-  const blob = await shrinkImage(file)
+export async function uploadPhoto(file: File, folder: string, opts: { bucket?: string; maxEdge?: number } = {}): Promise<PhotoRef> {
+  const blob = await shrinkImage(file, opts.maxEdge ?? MAX_EDGE)
   const path = `${folder}/${new Date().toISOString().slice(0, 10)}-${randomId()}.jpg`
   const fd = new FormData()
   fd.append('file', new File([blob], 'photo.jpg', { type: 'image/jpeg' }))
   fd.append('path', path)
-  fd.append('bucket', PHOTO_BUCKET)
+  fd.append('bucket', opts.bucket || PHOTO_BUCKET)
   const res = await fetch('/api/storage', { method: 'POST', body: fd })
   const json = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(json.error || '사진 올리기 실패')
   return { url: json.url, path: json.path }
+}
+
+/** 비공개 버킷 사진의 서명된 주소(1시간). ERP 잠금 안에서만 받을 수 있다 */
+export async function signedPhotoUrl(bucket: string, path: string): Promise<string> {
+  const res = await fetch(`/api/storage?bucket=${encodeURIComponent(bucket)}&path=${encodeURIComponent(path)}`)
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok || !json.url) throw new Error(json.error || '사진 주소를 못 받았습니다')
+  return json.url
 }
 
 /** 기록을 지울 때 사진도 같이. 실패해도 기록 삭제는 막지 않는다 */
