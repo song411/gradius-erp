@@ -80,6 +80,7 @@ export interface Staff {
   certifications?: string[]
   recommend: StaffRecommend
   phone?: string
+  address?: string            // 근로계약서 주소 칸 (019)
   attendance_score: number
   performance_score: number
   appearance_score: number

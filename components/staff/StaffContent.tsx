@@ -59,6 +59,7 @@ const emptyForm = {
   certifications: '',
   recommend: '일반' as StaffRecommend,
   phone: '',
+  address: '',
   bank_name: '',
   account_number: '',
   id_number: '',
@@ -180,6 +181,7 @@ export default function StaffContent() {
       certifications: (s.certifications || []).join(', '),
       recommend: s.recommend,
       phone: s.phone || '',
+      address: s.address || '',
       bank_name: s.bank_name || '',
       account_number: s.account_number || '',
       id_number: s.id_number || '',
@@ -229,6 +231,8 @@ export default function StaffContent() {
         ? form.certifications.split(',').map(s => s.trim()).filter(Boolean) : [],
       recommend: form.recommend,
       phone: form.phone || null,
+      // 주소 칸(019)은 아직 안 만든 DB 에서도 저장이 깨지지 않게 — 값이 있거나 칸이 있는 게 확인될 때만 보낸다
+      ...(form.address.trim() || editTarget?.address !== undefined ? { address: form.address.trim() || null } : {}),
       bank_name: form.bank_name || null,
       account_number: form.account_number || null,
       id_number: form.id_number || null,
@@ -649,6 +653,10 @@ export default function StaffContent() {
             <div>
               <label className="text-xs font-medium text-gray-600 mb-1 block">연락처</label>
               <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="010-0000-0000" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-1 block">주소 <span className="text-gray-400">(근로계약서용)</span></label>
+              <Input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="서울시 종로구 ..." />
             </div>
             <div>
               <label className="text-xs font-medium text-gray-600 mb-1 block">영어능력</label>

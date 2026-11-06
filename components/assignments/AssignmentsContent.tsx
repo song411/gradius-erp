@@ -12,7 +12,7 @@ import { Card } from '@/components/ui/card'
 import {
   Search, UserPlus, CheckCircle2, Clock, XCircle, ChevronRight,
   Users, CalendarDays, MapPin, Briefcase, Trash2, AlertCircle, UserX, Edit2, Sparkles,
-  PanelLeftClose, PanelLeftOpen, GripVertical, Megaphone, MessageCircle
+  PanelLeftClose, PanelLeftOpen, GripVertical, Megaphone, MessageCircle, FileText
 } from 'lucide-react'
 import StaffSearchModal from './StaffSearchModal'
 import TeamAssignModal, { type TeamAssignData } from './TeamAssignModal'
@@ -1229,6 +1229,11 @@ export default function AssignmentsContent() {
                     <Megaphone className="h-3.5 w-3.5" />
                     공지문 생성
                   </Button>
+                  <Button size="sm" variant="outline" onClick={() => window.open(`/assignments/contract?inq=${selectedInq.id}`, '_blank')}
+                    title="확정 크루 전원의 일용직 근로계약서를 한 번에" className="h-7 text-xs border-emerald-400 text-emerald-700 hover:bg-emerald-50">
+                    <FileText className="h-3.5 w-3.5" />
+                    근로계약서
+                  </Button>
                   <Button
                     size="sm"
                     variant="outline"
@@ -1529,6 +1534,11 @@ export default function AssignmentsContent() {
                                 {asgn.status}
                               </span>
 
+                              {/* 근로계약서 (새 탭) */}
+                              <a href={`/assignments/contract?a=${asgn.id}`} target="_blank" rel="noreferrer"
+                                className="text-gray-300 hover:text-emerald-600 transition-colors" title="근로계약서 만들기">
+                                <FileText className="h-3.5 w-3.5" />
+                              </a>
                               {/* 삭제 */}
                               <button
                                 onClick={() => handleDelete(asgn)}
