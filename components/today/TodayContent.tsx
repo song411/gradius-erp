@@ -21,7 +21,7 @@ import {
 } from '@/lib/evaluation'
 import { HalfStarInput } from '@/components/ui/HalfStarInput'
 import SiteCodePanel from './SiteCodePanel'
-import { fmtDistance, isFar } from '@/lib/geo'
+import { fmtDistance, isFar, getFix } from '@/lib/geo'
 import { toast } from 'sonner'
 import {
   MapPin, Phone, Clock, Users, ChevronDown, ChevronUp, RefreshCw, Monitor,
@@ -341,18 +341,33 @@ function EventCard({ inq, viewDate, isToday, isPast, assignments, attendances, e
   // 출석 칩 — 미기록이면 한 번에 '출석', 기록이 있으면 상태 고르기 줄이 펼쳐진다
   const [attFor, setAttFor] = useState<string | null>(null)
   const [showCode, setShowCode] = useState(false)   // 팀장이 크루에게 보여 주는 현장 QR·코드
-  // 체크인 링크 — 휴대폰이면 공유 창(카톡 등), 아니면 복사. PC 출석부의 '출석 링크'와 같은 주소
+  // 현장 기준점 — 이 폰 위치를 행사장 기준점으로 저장 (출석 QR 패널과 같은 길). 거리 기록·근처 판정의 기준
+  async function setSiteAnchor(): Promise<void> {
+    const fix = await getFix()
+    if (!fix) { toast.info('위치 허용이 안 되어 기준점은 못 잡았습니다. 출석 QR에서 다시 시도하세요'); return }
+    try {
+      const res = await fetch('/api/site-code', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inq: inq.id, ...fix }) })
+      if (res.ok) { toast.success(`현장 기준점을 지금 위치로 잡았습니다 (오차 ±${fix.acc}m)`); onSaved() }
+      else toast.error('기준점 저장 실패 — 023 SQL 을 확인하세요')
+    } catch { toast.error('기준점 저장 실패 (연결)') }
+  }
+
+  // 체크인 링크 — 휴대폰이면 공유 창(카톡 등), 아니면 복사. PC 출석부의 '출석 링크'와 같은 주소.
+  // 누르는 김에 기준점도 잡는다 (사장님 2026-11-06). 공유 창은 손가락을 뗀 직후에만 열리므로 위치는 그 뒤에 받는다
   async function shareCheckinLink() {
     const url = `${window.location.origin}/c/${inq.id}`
     const text = `[가디어스] ${inq.event_name || ''} 출석 체크인\n행사장에 도착하면 아래 링크를 열어 본인 이름을 누르고 안전교육 확인 후 서명해 주세요. (위치 허용을 눌러 주세요)\n${url}`
-    try {
-      if (typeof navigator !== 'undefined' && navigator.share) { await navigator.share({ text }); return }
-      await navigator.clipboard.writeText(text)
-      toast.success('체크인 링크 문구를 복사했습니다. 단톡방에 붙여넣으세요.')
-    } catch (e) {
-      if ((e as Error).name === 'AbortError') return
-      toast.info(text, { duration: 15000 })
-    }
+    const shared = (async () => {
+      try {
+        if (typeof navigator !== 'undefined' && navigator.share) { await navigator.share({ text }); return }
+        await navigator.clipboard.writeText(text)
+        toast.success('체크인 링크 문구를 복사했습니다. 단톡방에 붙여넣으세요.')
+      } catch (e) {
+        if ((e as Error).name === 'AbortError') return
+        toast.info(text, { duration: 15000 })
+      }
+    })()
+    await Promise.all([shared, setSiteAnchor()])
   }
   const [attBusy, setAttBusy] = useState<string | null>(null)
   async function saveAttendance(a: Assignment, att: Attendance | undefined, status: AttendanceStatus | null) {
@@ -439,6 +454,11 @@ function EventCard({ inq, viewDate, isToday, isPast, assignments, attendances, e
                 </button>
               </div>
             </div>
+            <p className="text-2xs text-gray-500 -mt-1 mb-2">
+              {inq.site_at
+                ? `현장 기준점 ${fmtWhen(inq.site_at)} 설정됨${inq.site_acc ? ` (±${Math.round(inq.site_acc)}m)` : ''} · 체크인 링크나 출석 QR을 다시 누르면 지금 위치로 바뀝니다`
+                : '현장 기준점 없음 · 체크인 링크나 출석 QR을 누르면 이 폰 위치로 잡힙니다'}
+            </p>
             {showCode && <SiteCodePanel inquiryId={inq.id} isToday={!!isToday} />}
             {crew.length === 0 ? (
               <p className="text-sm text-gray-400">배정된 크루가 없습니다.</p>
