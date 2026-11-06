@@ -349,21 +349,32 @@ function EventCard({ inq, viewDate, isToday, isPast, assignments, attendances, e
   // 근로계약서 — 확정 크루 전원 링크를 준비하고(상세 양식, 자동 채움) 행사 공용 링크를 공유한다.
   // 칸을 고치거나 인쇄하는 건 PC 계약서 화면, 휴대폰은 "보내기"까지만 (사장님 2026-11-06)
   const [contractBusy, setContractBusy] = useState(false)
+  // 공유 창·복사는 손가락을 뗀 직후에만 열린다 — 서버 왕복(링크 만들기) 뒤에 부르면 휴대폰이 막는다.
+  // 그래서 공유를 먼저 띄우고 링크 준비는 뒤에서 한다. 공용 링크 주소는 행사 id 라 미리 안다.
   async function shareContractLinks() {
+    if (crew.filter(a => a.status === '확정').length === 0) { toast.error('확정된 크루가 없습니다'); return }
     setContractBusy(true)
+    const url = `${window.location.origin}/s/e/${inq.id}`
+    const text = groupLinkMessage(inq.event_name || '', url)
+    const shared = shareOrCopy(text, '계약서 공용 링크 문구')
     try {
       const r = await ensureLinksForCrew({ inquiry: inq, assignments: crew, staffOf: a => staffMap[a.id] || null, variant: '상세', today: todayKST() })
-      if (!r.total) { toast.error('확정된 크루가 없습니다'); return }
-      const url = `${window.location.origin}/s/e/${inq.id}`
-      const text = groupLinkMessage(inq.event_name || '', url)
       toast.success(`계약서 링크 준비: 새로 ${r.made}명, 이미 서명 ${r.signed}명 / 확정 ${r.total}명`)
-      try {
-        if (typeof navigator !== 'undefined' && navigator.share) await navigator.share({ text })
-        else { await navigator.clipboard.writeText(text); toast.success('공용 링크 문구를 복사했습니다. 단톡방에 붙여넣으세요.') }
-      } catch (e) { if ((e as Error).name !== 'AbortError') toast.info(text, { duration: 15000 }) }
     } catch (e) {
-      toast.error('계약서 링크 실패: ' + (e as Error).message)
+      toast.error('계약서 링크 준비 실패: ' + (e as Error).message + ' — 공용 링크를 열어도 명단이 비어 있을 수 있습니다')
     } finally { setContractBusy(false) }
+    await shared
+  }
+
+  // 공유 창 → 안 되면 복사 → 그것도 막히면 화면에 문구를 띄워 길게 눌러 복사하게
+  async function shareOrCopy(text: string, what: string): Promise<void> {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.share) { await navigator.share({ text }); return }
+    } catch (e) {
+      if ((e as Error).name === 'AbortError') return   // 사용자가 공유 창을 닫음
+    }
+    try { await navigator.clipboard.writeText(text); toast.success(`${what}를 복사했습니다. 단톡방에 붙여넣으세요.`); return } catch { /* 아래로 */ }
+    toast.info(text, { duration: 20000 })
   }
 
   // 현장 기준점 — 이 폰 위치를 행사장 기준점으로 저장 (출석 QR 패널과 같은 길). 거리 기록·근처 판정의 기준
@@ -382,16 +393,7 @@ function EventCard({ inq, viewDate, isToday, isPast, assignments, attendances, e
   async function shareCheckinLink() {
     const url = `${window.location.origin}/c/${inq.id}`
     const text = `[가디어스] ${inq.event_name || ''} 출석 체크인\n행사장에 도착하면 아래 링크를 열어 본인 이름을 누르고 안전교육 확인 후 서명해 주세요. (위치 허용을 눌러 주세요)\n${url}`
-    const shared = (async () => {
-      try {
-        if (typeof navigator !== 'undefined' && navigator.share) { await navigator.share({ text }); return }
-        await navigator.clipboard.writeText(text)
-        toast.success('체크인 링크 문구를 복사했습니다. 단톡방에 붙여넣으세요.')
-      } catch (e) {
-        if ((e as Error).name === 'AbortError') return
-        toast.info(text, { duration: 15000 })
-      }
-    })()
+    const shared = shareOrCopy(text, '체크인 링크 문구')
     await Promise.all([shared, setSiteAnchor()])
   }
   const [attBusy, setAttBusy] = useState<string | null>(null)
