@@ -268,7 +268,11 @@ export default function LaborContractContent() {
       .labor-contract-page:last-child{page-break-after:auto}
       @media print{@page{size:A4;margin:12mm} .labor-contract-page{width:auto !important;min-height:0 !important;padding:0 !important}}
     </style></head><body>${docsRef.current.innerHTML}</body></html>`)
-    win.document.close(); win.print()
+    win.document.close()
+    // 도장·서명 그림이 다 그려진 뒤 인쇄
+    const imgs = Array.from(win.document.images)
+    Promise.all(imgs.map(img => img.complete ? Promise.resolve() : new Promise<void>(r => { img.onload = () => r(); img.onerror = () => r() })))
+      .then(() => win.print())
   }
 
   if (loading) return <div className="flex items-center justify-center h-40"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" /></div>

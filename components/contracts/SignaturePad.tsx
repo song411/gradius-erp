@@ -71,7 +71,27 @@ const SignaturePad = forwardRef<SignaturePadHandle, { height?: number; onChange?
     }
 
     useImperativeHandle(ref, () => ({
-      toDataURL: () => (hasInk && canvasRef.current ? canvasRef.current.toDataURL('image/png') : null),
+      // 잉크가 있는 부분만 잘라 내보낸다 — 출석부 서명란처럼 작은 칸에서도 획이 보이게
+      toDataURL: () => {
+        const c = canvasRef.current
+        if (!hasInk || !c) return null
+        const ctx = c.getContext('2d')
+        if (!ctx) return c.toDataURL('image/png')
+        const { width, height } = c
+        const px = ctx.getImageData(0, 0, width, height).data
+        let minX = width, minY = height, maxX = -1, maxY = -1
+        for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+          if (px[(y * width + x) * 4 + 3] > 10) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y }
+        }
+        if (maxX < 0) return null
+        const pad = Math.round((window.devicePixelRatio || 1) * 8)
+        const sx = Math.max(0, minX - pad), sy = Math.max(0, minY - pad)
+        const sw = Math.min(width, maxX + pad) - sx, sh = Math.min(height, maxY + pad) - sy
+        const out = document.createElement('canvas')
+        out.width = sw; out.height = sh
+        out.getContext('2d')?.drawImage(c, sx, sy, sw, sh, 0, 0, sw, sh)
+        return out.toDataURL('image/png')
+      },
       clear: () => {
         const c = canvasRef.current
         const ctx = c?.getContext('2d')

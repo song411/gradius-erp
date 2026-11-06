@@ -167,7 +167,8 @@ export default function AttendanceSheetModal({
   open, onClose, inquiry, assignments, attendances, staffMap, dates, currentDate,
 }: Props) {
   const isMultiDay = dates.length > 1
-  const [mode, setMode] = useState<SheetMode>('blank')
+  // 저장된 출결이 있으면 '기록 포함'이 기본 — 서명이 들어간 출석부를 바로 뽑게 (2026-11-07)
+  const [mode, setMode] = useState<SheetMode>(() => (attendances.length > 0 ? 'record' : 'blank'))
   // 날짜는 "출석 탭에서 보고 있던 날짜"가 기본값. 사용자가 직접 고르면 그 값이 우선.
   // ('all' = 전체 날짜를 날짜별 여러 장으로) 닫을 때 null로 되돌려 다음 열기에 기본값 복귀.
   const [dateOverride, setDateOverride] = useState<string | null>(null)
@@ -278,7 +279,7 @@ export default function AttendanceSheetModal({
           <td class="c">${esc(r.clockIn)}</td>
           <td class="c">${esc(r.clockOut)}</td>
           <td class="c">${esc(r.status)}</td>
-          <td class="sig">${r.signature ? `<img src="${r.signature}" alt="서명" style="height:26px;max-width:100%;vertical-align:middle">` : ''}</td>
+          <td class="sig">${r.signature ? `<img src="${r.signature}" alt="서명" style="height:34px;max-width:96%;vertical-align:middle;display:inline-block">` : ''}</td>
           <td>${esc(r.notes)}</td>
         </tr>`).join('')
 
@@ -361,7 +362,8 @@ export default function AttendanceSheetModal({
   .roster td.c { text-align: center; }
   .roster td.nm { font-weight: 600; }
   .roster td.ph { font-size: 10.5px; white-space: nowrap; }
-  .roster td.sig { background: #fcfcfc; }
+  .roster td.sig { background: #fcfcfc; text-align: center; padding: 2px 3px; }
+  .roster td.sig img { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .tag { font-size: 8.5px; border: 1px solid #666; padding: 0 2px; border-radius: 2px; font-weight: 700; vertical-align: 1px; }
   .pledge { border: 1px solid #000; padding: 3mm 3.5mm; margin-bottom: 4mm; }
   .pledge h2 { text-align: center; font-size: 13px; letter-spacing: 2px; font-weight: 700; margin-bottom: 2mm; }
@@ -383,7 +385,10 @@ export default function AttendanceSheetModal({
 </style></head><body>${pages}</body></html>`)
     win.document.close()
     win.focus()
-    win.print()
+    // 서명 그림이 다 그려진 뒤 인쇄 — 바로 부르면 PDF 에 빈 칸으로 나올 수 있다
+    const imgs = Array.from(win.document.images)
+    Promise.all(imgs.map(img => img.complete ? Promise.resolve() : new Promise<void>(r => { img.onload = () => r(); img.onerror = () => r() })))
+      .then(() => win.print())
   }
 
   // ── 엑셀 다운로드 ──────────────────────────────────────
