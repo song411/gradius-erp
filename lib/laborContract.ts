@@ -106,12 +106,22 @@ export function workDatesOf(a: Assignment, inq?: Inquiry | null): string[] {
   return out
 }
 
-export function periodTextOf(variant: ContractVariant, dates: string[], workDays?: number): string {
+/** 행사 기간 — 띄엄띄엄 행사(event_dates)면 그 날들, 아니면 시작~종료 */
+export function eventRangeOf(inq?: Inquiry | null): string[] {
+  if (!inq) return []
+  if (inq.event_dates && inq.event_dates.length) return [...inq.event_dates].sort()
+  const s = inq.event_start || ''
+  const e = inq.event_end || s
+  if (!s) return []
+  return e > s ? [s, e] : [s]
+}
+
+/** Ⓐ 근로계약기간 — 사람마다 근무일이 달라 일일이 세지 않는다. 행사 기간을 적고 "그중 실제 근로한 날"로 둔다 (사장님 결정 2026-11-06) */
+export function periodTextOf(dates: string[]): string {
   if (!dates.length) return ''
   const first = dates[0], last = dates[dates.length - 1]
-  const n = workDays && workDays > 0 ? workDays : dates.length
-  if (variant === '상세') return `${fmtKorean(first)}부터 ${fmtKoreanShort(last)} 까지 중 실제 근로한 날`
-  return `${fmtKorean(first)}부터 ${fmtKoreanShort(last)} (${n}일)까지로 한다.`
+  if (first === last) return `${fmtKorean(first)} 하루`
+  return `${fmtKorean(first)}부터 ${fmtKorean(last)}까지 중 실제 근로한 날`
 }
 
 // ── 근로시간 ────────────────────────────────────────────
@@ -193,12 +203,12 @@ export interface BuildInput {
 
 /** 배정·문의·크루에서 계약서 칸을 채운다. 비어 있는 칸은 빈 문자열 — 화면이 빈 칸으로 알려 준다 */
 export function buildContractFields({ assignment: a, inquiry, staff, variant, today }: BuildInput): ContractFields {
-  const dates = workDatesOf(a, inquiry)
+  // 기간은 행사 전체(문의의 시작~종료). 문의가 없을 때만 배정의 근무일로 대신한다
+  const eventDates = eventRangeOf(inquiry)
+  const dates = eventDates.length ? eventDates : workDatesOf(a, inquiry)
   const last = dates[dates.length - 1] || ''
   const idNumber = formatIdNumber(a.id_number || staff?.id_number)
   const dailyPay = Number(a.pay_rate) || 0
-  const days = Number(a.work_days) || dates.length
-  const total = dailyPay * days
   return {
     variant,
     workerName: a.staff_name || staff?.name || '',
@@ -206,16 +216,15 @@ export function buildContractFields({ assignment: a, inquiry, staff, variant, to
     workerIdNumber: idNumber,
     workerBirth: birthFromIdNumber(idNumber),
     workerAccount: accountTextOf(a.bank_name || staff?.bank_name, a.account_number || staff?.account_number),
-    periodText: periodTextOf(variant, dates, Number(a.work_days) || undefined),
+    periodText: periodTextOf(dates),
     positionText: positionTextOf(variant, a.job_type),
     dutyText: dutyTextOf(a.job_type),
     placeText: inquiry?.location || '',
     hoursText: hoursTextOf(inquiry?.event_time),
     payMethodText: payDeadlineText(last),
     dailyPayText: dailyPay ? won(dailyPay) : '',
-    totalPayText: variant === '상세'
-      ? (dailyPay ? `${won(dailyPay)} × 근무일(${days}일) = ${won(total)}` : '포괄임금 × 근무일')
-      : (dailyPay ? won(total) : ''),
+    // 근무일이 사람마다 달라 총액을 못 박지 않는다 — 일당 × 실제 근무일
+    totalPayText: dailyPay ? `${won(dailyPay)} × 실제 근무일수` : '기본 일당 × 실제 근무일수',
     signDate: today,
   }
 }
