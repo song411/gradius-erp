@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { UUID_RE, SELF_NOTE, nowHHMM, resolveWorkDate } from '@/lib/checkin'
 import { sendToAll, subjectFrom } from '@/lib/push'
 import { verifyCode } from '@/lib/checkinCode'
+import { distanceMeters } from '@/lib/geo'
 
 // 크루 셀프 출석 체크인 — 로그인 없이 호출되는 공개 라우트.
 // proxy.ts의 PUBLIC_PATHS에 등록되어 있으므로 다루는 범위를 최대한 좁게 유지한다.
@@ -17,7 +18,7 @@ export const dynamic = 'force-dynamic'
 const MAX_SIGNATURE_BYTES = 400_000
 
 export async function POST(request: NextRequest) {
-  let body: { inquiryId?: string; assignmentId?: string; action?: string; last4?: string; siteCode?: string; signature?: string; pledged?: boolean }
+  let body: { inquiryId?: string; assignmentId?: string; action?: string; last4?: string; siteCode?: string; signature?: string; pledged?: boolean; lat?: number; lng?: number; acc?: number }
   try {
     body = await request.json()
   } catch {
@@ -36,7 +37,7 @@ export async function POST(request: NextRequest) {
 
   const { data: inq } = await supabase
     .from('inquiries')
-    .select('id, event_start, event_end, event_name')
+    .select('id, event_start, event_end, event_name, site_lat, site_lng')
     .eq('id', inquiryId)
     .maybeSingle()
   if (!inq) return NextResponse.json({ error: '행사를 찾을 수 없습니다.' }, { status: 404 })
@@ -104,11 +105,19 @@ export async function POST(request: NextRequest) {
   const now = new Date().toISOString()
   const ua = (request.headers.get('user-agent') || '').slice(0, 300) || null
 
+  // 위치 — 크루 폰 좌표가 오고 행사 기준점(팀장 폰)이 있으면 거리를 잰다. 없으면 NULL. 막지 않는다
+  const lat = Number(body.lat), lng = Number(body.lng)
+  const hasFix = Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180
+  const geo = hasFix ? {
+    lat, lng, acc: Math.round(Number(body.acc) || 0),
+    distance_m: typeof inq.site_lat === 'number' && typeof inq.site_lng === 'number' ? distanceMeters(inq.site_lat, inq.site_lng, lat, lng) : null,
+  } : {}
+
   if (existing) {
     // 담당자가 먼저 적어 둔 기록(지각 등)이든 셀프 출석이든 — 상태는 두고 서명만 붙인다
     if (existing.signature_data) return NextResponse.json({ ok: true, already: true })
     const { error } = await supabase.from('attendances')
-      .update({ signature_data: signature, pledge_at: now, signer_ua: ua })
+      .update({ signature_data: signature, pledge_at: now, signer_ua: ua, ...geo })
       .eq('id', existing.id)
     if (error) return NextResponse.json({ error: '저장에 실패했습니다. 022 마이그레이션을 확인해 주세요.' }, { status: 500 })
     return NextResponse.json({ ok: true })
@@ -127,6 +136,7 @@ export async function POST(request: NextRequest) {
     signature_data: signature,
     pledge_at: now,
     signer_ua: ua,
+    ...geo,
   })
   if (error) return NextResponse.json({ error: '저장에 실패했습니다. 022 마이그레이션을 확인해 주세요.' }, { status: 500 })
 

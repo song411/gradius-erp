@@ -10,6 +10,7 @@ import { CheckCircle2, MapPin, CalendarDays, Clock, ShieldCheck, PenLine, Eraser
 import type { CheckinView, RosterItem } from '@/lib/checkin'
 import SignaturePad, { type SignaturePadHandle } from '@/components/contracts/SignaturePad'
 import { PLEDGE_TITLE, PLEDGE_LEAD, PLEDGE_TRAINING, PLEDGE_OATH } from '@/lib/safetyPledge'
+import { getFix, type GeoFix } from '@/lib/geo'
 
 function formatDateLong(dateStr: string): string {
   const d = new Date(dateStr)
@@ -29,6 +30,8 @@ export default function CheckinClient({ inquiryId, view, codeFromQr = '' }: { in
   const [last4, setLast4] = useState('')
   // 현장 코드 — 팀장 화면의 QR 을 찍고 왔으면 채워져 있고, 아니면 숫자를 받는다
   const [siteCode, setSiteCode] = useState(codeFromQr)
+  // 위치 — 시트를 열 때 한 번. 거부·실패면 null 로 두고 출석은 그대로 받는다 (거리 기록만 빠진다)
+  const [fix, setFix] = useState<GeoFix | null | 'asking'>('asking')
   const [pledged, setPledged] = useState(false)
   const [hasInk, setHasInk] = useState(false)
   const [sheetError, setSheetError] = useState('')
@@ -36,6 +39,7 @@ export default function CheckinClient({ inquiryId, view, codeFromQr = '' }: { in
 
   function open(item: RosterItem) {
     setPicked(item); setLast4(''); setPledged(false); setHasInk(false); setSheetError('')
+    setFix('asking'); getFix().then(f => setFix(f))
   }
 
   async function submit() {
@@ -49,7 +53,7 @@ export default function CheckinClient({ inquiryId, view, codeFromQr = '' }: { in
     try {
       const res = await fetch('/api/checkin', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inquiryId, assignmentId: picked.assignmentId, action: 'checkin', last4, siteCode, pledged, signature }),
+        body: JSON.stringify({ inquiryId, assignmentId: picked.assignmentId, action: 'checkin', last4, siteCode, pledged, signature, ...(fix && fix !== 'asking' ? { lat: fix.lat, lng: fix.lng, acc: fix.acc } : {}) }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) { setSheetError(json.error || '처리하지 못했습니다.'); return }
@@ -220,6 +224,7 @@ export default function CheckinClient({ inquiryId, view, codeFromQr = '' }: { in
                   {pending ? '저장 중…' : picked.status ? '서명하고 확인' : '서명하고 출석'}
                 </button>
                 <p className="text-xs text-gray-500">서명 시각과 기기 정보가 출석 기록과 함께 저장되고, 출석부 서명란에 찍힙니다.</p>
+                <p className="text-xs text-gray-500">위치: {fix === 'asking' ? '확인 중…' : fix ? `확인됨 (오차 ±${fix.acc}m) · 현장과의 거리가 기록됩니다` : '허용 안 됨 · 거리 기록 없이 출석됩니다'}</p>
               </div>
             )}
           </div>

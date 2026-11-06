@@ -111,6 +111,11 @@ export interface Inquiry {
   event_dates?: string[] | null
   date_memo?: string
   event_time?: string
+  /** 체크인 거리 기준점 — 팀장 폰 위치 (023) */
+  site_lat?: number | null
+  site_lng?: number | null
+  site_acc?: number | null
+  site_at?: string | null
   service_type?: string
   required_staff?: number
   expected_pay?: number
@@ -331,6 +336,10 @@ export interface Attendance {
   reason?: string
   notes?: string
   signature_data?: string | null   // 셀프 체크인 서명 (022)
+  lat?: number | null              // 크루 폰 위치 (023)
+  lng?: number | null
+  acc?: number | null
+  distance_m?: number | null       // 팀장 기준점까지 거리(m). NULL = 위치 없음
   pledge_at?: string | null        // 안전교육 서약 동의 시각
   signer_ua?: string | null
   created_at: string

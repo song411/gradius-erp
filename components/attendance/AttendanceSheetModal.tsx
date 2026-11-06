@@ -56,6 +56,7 @@ type ExcelJSModule = { Workbook: new () => Workbook }
 // ── 현장 안전관리 교육 확인 및 서약서 ────────────────────
 // 문구는 lib/safetyPledge.ts 한 곳 — 크루 셀프 체크인 화면(/c/)이 같은 글을 읽고 서명한다.
 import { PLEDGE_TITLE, PLEDGE_LEAD, PLEDGE_TRAINING, PLEDGE_OATH, PLEDGE_NOTE } from '@/lib/safetyPledge'
+import { fmtDistance, isFar } from '@/lib/geo'
 
 // ── 엑셀 서식 상수 ───────────────────────────────────────
 const THIN: Partial<Borders> = {
@@ -223,7 +224,7 @@ export default function AttendanceSheetModal({
       clockIn: hhmm(att?.clock_in),
       clockOut: hhmm(att?.clock_out),
       status: att?.status || '',
-      notes: att?.notes || att?.reason || '',
+      notes: [att?.notes || att?.reason || '', att?.distance_m != null ? `현장 ${fmtDistance(att.distance_m)}${isFar(att.distance_m, att.acc, inquiry.site_acc) ? ' (멀리서 찍음)' : ''}` : ''].filter(Boolean).join(' · '),
       signature: att?.signature_data || '',
     }
   }

@@ -21,6 +21,7 @@ import {
 } from '@/lib/evaluation'
 import { HalfStarInput } from '@/components/ui/HalfStarInput'
 import SiteCodePanel from './SiteCodePanel'
+import { fmtDistance, isFar } from '@/lib/geo'
 import { toast } from 'sonner'
 import {
   MapPin, Phone, Clock, Users, ChevronDown, ChevronUp, RefreshCw, Monitor,
@@ -455,7 +456,7 @@ function EventCard({ inq, viewDate, isToday, isPast, assignments, attendances, e
                             : att.status === '출석' ? 'bg-green-100 text-green-700 border-green-200'
                             : att.status === '결근' ? 'bg-red-100 text-red-700 border-red-200'
                             : 'bg-amber-100 text-amber-700 border-amber-200'}`}>
-                            {attBusy === a.id ? '저장…' : att ? `${att.status}${att.signature_data ? ' ✍' : ''}` : '출석 ✓'}
+                            {attBusy === a.id ? '저장…' : att ? `${att.status}${att.signature_data ? ' ✍' : ''}${att.distance_m != null ? ` ${fmtDistance(att.distance_m)}${isFar(att.distance_m, att.acc, inq.site_acc) ? '⚠' : ''}` : ''}` : '출석 ✓'}
                           </button>
                         )}
                         {tel ? (
