@@ -9,13 +9,13 @@
 // 쓰는 것은 field_logs 한 줄뿐 — 현장 기록(/field)과 같은 칸에 같은 모양으로 들어가므로
 // 사무실 반영 대기함에서 똑같이 보인다. 돈·배정 표는 여기서 건드리지 않는다.
 
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { db } from '@/lib/supabase/api'
 import { todayKST } from '@/lib/utils'
 import { coversDate, eventDatesOf } from '@/components/schedule/matrixCore'
 import {
-  EVAL_FIELDS, QUICK_SCORES, evalTotal, guideForScore, saveEvaluation,
+  EVAL_FIELDS, QUICK_SCORES, evalTotal, guideForScore, saveEvaluation, snapHalf,
   PROFILE_FIELDS, profileFormOf, profileChips, profilePatch, saveStaffProfile,
   type EvalScores, type EvalScoreKey, type ProfileForm,
 } from '@/lib/evaluation'
@@ -445,6 +445,37 @@ function EvalPanel({ assignment, existing, staff, siteName, author, onAuthor, on
   const [saving, setSaving]         = useState(false)
   const { total, grade } = evalTotal(scores)
 
+  // 이전 평가 — 같은 사람의 지난 평가(이번 배정 것은 빼고, 최근 순). 누르면 바로 보이게 펼쳐 둔다.
+  // 이번 배정 평가가 아직 없으면 가장 최근 평가 점수로 별을 미리 채운다 — 사람이 건드리기 전에만.
+  const [history, setHistory]       = useState<Evaluation[] | null>(assignment.staff_id ? null : [])
+  const [historyOpen, setHistoryOpen] = useState(true)
+  const [prefillNote, setPrefillNote] = useState('')
+  const touched = useRef(false)
+  const existingId = existing?.id
+  useEffect(() => {
+    let alive = true
+    if (!assignment.staff_id) return
+    db.list<Evaluation>('evaluations', { filters: { staff_id: assignment.staff_id }, order: 'evaluated_at', asc: false, limit: 20 })
+      .then(rows => {
+        if (!alive) return
+        const past = rows.filter(e => e.assignment_id !== assignment.id)
+        setHistory(past)
+        if (!existingId && past.length && !touched.current) {
+          const last = past[0]
+          setScores({
+            attendance_score:   snapHalf(Number(last.attendance_score)   || 3),
+            performance_score:  snapHalf(Number(last.performance_score)  || 3),
+            appearance_score:   snapHalf(Number(last.appearance_score)   || 3),
+            teamwork_score:     snapHalf(Number(last.teamwork_score)     || 3),
+            adaptability_score: snapHalf(Number(last.adaptability_score) || 3),
+          })
+          setPrefillNote(`${(last.evaluated_at || '').slice(5, 10)} ${last.site_name || ''} 점수로 미리 채움`)
+        }
+      })
+      .catch(() => { if (alive) setHistory([]) })
+    return () => { alive = false }
+  }, [assignment.id, assignment.staff_id, existingId])
+
   // 크루 정보 — 비어 있는 핵심 칸(키·몸무게·MBTI)이 있으면 처음부터 펼쳐 둔다
   const baseProfile = profileFormOf(staff)
   const [profile, setProfile]       = useState<ProfileForm>(baseProfile)
@@ -456,10 +487,12 @@ function EvalPanel({ assignment, existing, staff, siteName, author, onAuthor, on
   const guideLine = lastField ? guideForScore(lastField.guide, scores[lastField.key]) : ''
 
   function setOne(key: EvalScoreKey, v: number) {
+    touched.current = true
     setScores(s => ({ ...s, [key]: v }))
     setLastKey(key)
   }
   function setAll(v: number) {
+    touched.current = true
     setScores({ attendance_score: v, performance_score: v, appearance_score: v, teamwork_score: v, adaptability_score: v })
     setLastKey(null)
   }
@@ -522,6 +555,42 @@ function EvalPanel({ assignment, existing, staff, siteName, author, onAuthor, on
           ? <><b className="text-gray-700">{lastField.full} {scores[lastField.key]}점</b> · {guideLine}</>
           : '별 왼쪽 반을 누르면 3.5, 4.5처럼 반 점이 됩니다.'}
       </p>
+
+      {/* 이전 평가 — 같은 사람이 지난 행사에서 받은 점수 */}
+      {history === null ? (
+        <p className="text-2xs text-gray-400 mt-2">이전 평가 불러오는 중…</p>
+      ) : history.length > 0 ? (
+        <div className="mt-2 rounded-xl border border-gray-200 bg-white/80">
+          <button type="button" onClick={() => setHistoryOpen(o => !o)} className="w-full flex items-center gap-2 px-3 h-10 text-left">
+            <span className="text-sm font-extrabold text-gray-800 shrink-0">이전 평가 {history.length}회</span>
+            <span className="flex-1 min-w-0 text-2xs text-gray-500 truncate">
+              {staff && staff.total_score > 0 ? `누적 ${staff.total_score}점` : ''}{prefillNote ? `${staff && staff.total_score > 0 ? ' · ' : ''}${prefillNote}` : ''}
+            </span>
+            {historyOpen ? <ChevronUp className="h-5 w-5 text-gray-400 shrink-0" /> : <ChevronDown className="h-5 w-5 text-gray-400 shrink-0" />}
+          </button>
+          {historyOpen && (
+            <ul className="px-3 pb-2 divide-y divide-gray-100">
+              {history.slice(0, 10).map(e => (
+                <li key={e.id} className="py-1.5 text-xs">
+                  <p className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-gray-500">{(e.evaluated_at || '').slice(0, 10)}</span>
+                    <span className="font-bold text-gray-800">{e.site_name || '-'}</span>
+                    <span className={`font-bold ${e.grade === '우수' ? 'text-amber-700' : e.grade === '미흡' ? 'text-red-600' : 'text-gray-600'}`}>★ {e.total_score} {e.grade}</span>
+                    {e.re_recommend === false && <span className="text-red-600 font-bold">재투입 아니오</span>}
+                  </p>
+                  <p className="text-gray-600">{EVAL_FIELDS.map(f => `${f.label} ${e[f.key]}`).join(' · ')}</p>
+                  {(e.strengths || e.improvements) && (
+                    <p className="text-gray-500">{e.strengths ? `잘한 점: ${e.strengths}` : ''}{e.strengths && e.improvements ? ' / ' : ''}{e.improvements ? `보완: ${e.improvements}` : ''}</p>
+                  )}
+                </li>
+              ))}
+              {history.length > 10 && <li className="py-1 text-2xs text-gray-400">최근 10회만 보입니다. 전체는 PC 크루관리에서.</li>}
+            </ul>
+          )}
+        </div>
+      ) : assignment.staff_id ? (
+        <p className="text-2xs text-gray-400 mt-2">이전 평가 없음 — 처음 평가받는 사람입니다.</p>
+      ) : null}
 
       <div className="flex items-center justify-between mt-3">
         <p className="text-sm font-extrabold text-gray-900">평점 {total} <span className={grade === '우수' ? 'text-amber-600' : grade === '미흡' ? 'text-red-600' : 'text-gray-500'}>{grade}</span></p>
