@@ -22,10 +22,12 @@ import {
 import { HalfStarInput } from '@/components/ui/HalfStarInput'
 import SiteCodePanel from './SiteCodePanel'
 import { fmtDistance, isFar, getFix } from '@/lib/geo'
+import { ensureLinksForCrew } from '@/lib/contractLinks'
+import { groupLinkMessage } from '@/lib/laborContract'
 import { toast } from 'sonner'
 import {
   MapPin, Phone, Clock, Users, ChevronDown, ChevronUp, RefreshCw, Monitor,
-  PenLine, Share, MoreVertical, X, CheckCircle2, Crown, Star, Trash2, QrCode, Link2,
+  PenLine, Share, MoreVertical, X, CheckCircle2, Crown, Star, Trash2, QrCode, Link2, FileSignature,
 } from 'lucide-react'
 import type { Inquiry, Assignment, Attendance, AttendanceStatus, FieldLog, FieldLogKind, Evaluation, Staff } from '@/lib/supabase/types'
 
@@ -341,6 +343,26 @@ function EventCard({ inq, viewDate, isToday, isPast, assignments, attendances, e
   // 출석 칩 — 미기록이면 한 번에 '출석', 기록이 있으면 상태 고르기 줄이 펼쳐진다
   const [attFor, setAttFor] = useState<string | null>(null)
   const [showCode, setShowCode] = useState(false)   // 팀장이 크루에게 보여 주는 현장 QR·코드
+  // 근로계약서 — 확정 크루 전원 링크를 준비하고(상세 양식, 자동 채움) 행사 공용 링크를 공유한다.
+  // 칸을 고치거나 인쇄하는 건 PC 계약서 화면, 휴대폰은 "보내기"까지만 (사장님 2026-11-06)
+  const [contractBusy, setContractBusy] = useState(false)
+  async function shareContractLinks() {
+    setContractBusy(true)
+    try {
+      const r = await ensureLinksForCrew({ inquiry: inq, assignments: crew, staffOf: a => staffMap[a.id] || null, variant: '상세', today: todayKST() })
+      if (!r.total) { toast.error('확정된 크루가 없습니다'); return }
+      const url = `${window.location.origin}/s/e/${inq.id}`
+      const text = groupLinkMessage(inq.event_name || '', url)
+      toast.success(`계약서 링크 준비: 새로 ${r.made}명, 이미 서명 ${r.signed}명 / 확정 ${r.total}명`)
+      try {
+        if (typeof navigator !== 'undefined' && navigator.share) await navigator.share({ text })
+        else { await navigator.clipboard.writeText(text); toast.success('공용 링크 문구를 복사했습니다. 단톡방에 붙여넣으세요.') }
+      } catch (e) { if ((e as Error).name !== 'AbortError') toast.info(text, { duration: 15000 }) }
+    } catch (e) {
+      toast.error('계약서 링크 실패: ' + (e as Error).message)
+    } finally { setContractBusy(false) }
+  }
+
   // 현장 기준점 — 이 폰 위치를 행사장 기준점으로 저장 (출석 QR 패널과 같은 길). 거리 기록·근처 판정의 기준
   async function setSiteAnchor(): Promise<void> {
     const fix = await getFix()
@@ -444,13 +466,17 @@ function EventCard({ inq, viewDate, isToday, isPast, assignments, attendances, e
             <div className="flex items-center justify-between mb-2 gap-2">
               <p className="text-2xs font-bold text-gray-500 tracking-wider">크루 {crew.length}명{canEval && crew.length > 0 ? ' · 이름 누르면 평가, 칩 누르면 출석' : ''}</p>
               <div className="flex gap-1.5 shrink-0">
+                <button type="button" onClick={shareContractLinks} disabled={contractBusy} title="확정 크루 전원 근로계약서 링크를 만들고 공용 링크 공유"
+                  className="h-9 px-2.5 rounded-full text-xs font-bold border-2 inline-flex items-center gap-1 bg-white text-emerald-700 border-emerald-600 active:scale-95 disabled:opacity-50">
+                  <FileSignature className="h-4 w-4" />{contractBusy ? '준비 중…' : '계약서'}
+                </button>
                 <button type="button" onClick={shareCheckinLink} title="크루에게 보낼 체크인 링크 복사·공유"
                   className="h-9 px-3 rounded-full text-xs font-bold border-2 inline-flex items-center gap-1 bg-white text-blue-700 border-blue-600 active:scale-95">
-                  <Link2 className="h-4 w-4" />체크인 링크
+                  <Link2 className="h-4 w-4" />체크인
                 </button>
                 <button type="button" onClick={() => setShowCode(v => !v)}
                   className={`h-9 px-3 rounded-full text-xs font-bold border-2 inline-flex items-center gap-1 shrink-0 active:scale-95 ${showCode ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-800 border-gray-800'}`}>
-                  <QrCode className="h-4 w-4" />출석 QR
+                  <QrCode className="h-4 w-4" />QR
                 </button>
               </div>
             </div>

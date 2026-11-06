@@ -20,8 +20,9 @@ import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
 import { Printer, AlertTriangle, RotateCcw, Link2, Copy, CheckCircle2, Clock, RefreshCw } from 'lucide-react'
 import LaborContractDoc from './LaborContractDoc'
+import { upsertContractLink } from '@/lib/contractLinks'
 import {
-  buildContractFields, missingFields, FIELD_LABELS, PER_PERSON_KEYS, VARIANT_DESC, makeToken, signLinkMessage, groupLinkMessage, fmtSignedAt,
+  buildContractFields, missingFields, FIELD_LABELS, PER_PERSON_KEYS, VARIANT_DESC, signLinkMessage, groupLinkMessage, fmtSignedAt,
   formatIdNumber, accountTextOf, splitAccount,
   type ContractFields, type ContractVariant,
 } from '@/lib/laborContract'
@@ -216,18 +217,9 @@ export default function LaborContractContent() {
   const linkOf = (c: LaborContract) => `${origin}/s/${c.token}`
 
   /** 한 명 링크 만들기. 대기 중인 링크가 있으면 내용만 갱신(링크 유지), 없으면 새로 만든다 */
-  async function makeLink(d: typeof docs[number]): Promise<LaborContract | null> {
-    const phone = d.fields.workerPhone || d.person.assignment.phone || d.person.staff?.phone || ''
-    const payload = {
-      assignment_id: d.id, inquiry_id: inquiry?.id || null, staff_id: d.person.assignment.staff_id || null,
-      staff_name: d.fields.workerName, phone, variant, fields: d.fields, status: '대기',
-    }
-    if (d.latest && d.latest.status === '대기') {
-      const rows = await db.update<LaborContract>('labor_contracts', d.latest.id, { ...payload, updated_at: new Date().toISOString() })
-      return rows[0] || ({ ...d.latest, ...payload } as unknown as LaborContract)
-    }
-    const rows = await db.insert<LaborContract>('labor_contracts', { ...payload, token: makeToken() })
-    return rows[0] || null
+  function makeLink(d: typeof docs[number]): Promise<LaborContract | null> {
+    // 규칙은 lib/contractLinks 한 곳 — 휴대폰 현장 화면의 '계약서 링크'도 같은 함수
+    return upsertContractLink({ assignment: d.person.assignment, inquiry, staff: d.person.staff, variant, fields: d.fields, latest: d.latest, today })
   }
 
   async function makeLinks(only?: string) {
