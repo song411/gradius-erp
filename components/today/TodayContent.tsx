@@ -25,7 +25,7 @@ import { fmtDistance, isFar } from '@/lib/geo'
 import { toast } from 'sonner'
 import {
   MapPin, Phone, Clock, Users, ChevronDown, ChevronUp, RefreshCw, Monitor,
-  PenLine, Share, MoreVertical, X, CheckCircle2, Crown, Star, Trash2, QrCode,
+  PenLine, Share, MoreVertical, X, CheckCircle2, Crown, Star, Trash2, QrCode, Link2,
 } from 'lucide-react'
 import type { Inquiry, Assignment, Attendance, AttendanceStatus, FieldLog, FieldLogKind, Evaluation, Staff } from '@/lib/supabase/types'
 
@@ -334,10 +334,26 @@ interface CardProps {
 function EventCard({ inq, viewDate, isToday, isPast, assignments, attendances, evaluations, staffMap, logs, open, onToggle, author, onAuthor, onSaved }: CardProps) {
   // 크루 한 명을 누르면 평가 칸이 펼쳐진다 (오늘·지난 행사만)
   const [evalFor, setEvalFor] = useState<string | null>(null)
-  const canEval = !!(isToday || isPast)
+  // 날짜로 막지 않는다 — 관리자가 행사 전날 평가·출석·링크를 미리 확인하고 시험해야 한다 (사장님 2026-11-06).
+  // 시험으로 찍은 출석은 칩을 다시 눌러 '기록 지우기'로 지운다
+  const canEval = true
+  void isPast
   // 출석 칩 — 미기록이면 한 번에 '출석', 기록이 있으면 상태 고르기 줄이 펼쳐진다
   const [attFor, setAttFor] = useState<string | null>(null)
   const [showCode, setShowCode] = useState(false)   // 팀장이 크루에게 보여 주는 현장 QR·코드
+  // 체크인 링크 — 휴대폰이면 공유 창(카톡 등), 아니면 복사. PC 출석부의 '출석 링크'와 같은 주소
+  async function shareCheckinLink() {
+    const url = `${window.location.origin}/c/${inq.id}`
+    const text = `[가디어스] ${inq.event_name || ''} 출석 체크인\n행사장에 도착하면 아래 링크를 열어 본인 이름을 누르고 안전교육 확인 후 서명해 주세요. (위치 허용을 눌러 주세요)\n${url}`
+    try {
+      if (typeof navigator !== 'undefined' && navigator.share) { await navigator.share({ text }); return }
+      await navigator.clipboard.writeText(text)
+      toast.success('체크인 링크 문구를 복사했습니다. 단톡방에 붙여넣으세요.')
+    } catch (e) {
+      if ((e as Error).name === 'AbortError') return
+      toast.info(text, { duration: 15000 })
+    }
+  }
   const [attBusy, setAttBusy] = useState<string | null>(null)
   async function saveAttendance(a: Assignment, att: Attendance | undefined, status: AttendanceStatus | null) {
     setAttBusy(a.id)
@@ -412,14 +428,18 @@ function EventCard({ inq, viewDate, isToday, isPast, assignments, attendances, e
           <div className="p-4">
             <div className="flex items-center justify-between mb-2 gap-2">
               <p className="text-2xs font-bold text-gray-500 tracking-wider">크루 {crew.length}명{canEval && crew.length > 0 ? ' · 이름 누르면 평가, 칩 누르면 출석' : ''}</p>
-              {isToday && (
+              <div className="flex gap-1.5 shrink-0">
+                <button type="button" onClick={shareCheckinLink} title="크루에게 보낼 체크인 링크 복사·공유"
+                  className="h-9 px-3 rounded-full text-xs font-bold border-2 inline-flex items-center gap-1 bg-white text-blue-700 border-blue-600 active:scale-95">
+                  <Link2 className="h-4 w-4" />체크인 링크
+                </button>
                 <button type="button" onClick={() => setShowCode(v => !v)}
                   className={`h-9 px-3 rounded-full text-xs font-bold border-2 inline-flex items-center gap-1 shrink-0 active:scale-95 ${showCode ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-800 border-gray-800'}`}>
                   <QrCode className="h-4 w-4" />출석 QR
                 </button>
-              )}
+              </div>
             </div>
-            {showCode && isToday && <SiteCodePanel inquiryId={inq.id} />}
+            {showCode && <SiteCodePanel inquiryId={inq.id} isToday={!!isToday} />}
             {crew.length === 0 ? (
               <p className="text-sm text-gray-400">배정된 크루가 없습니다.</p>
             ) : (

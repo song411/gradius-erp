@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react'
 import { QrCode, RefreshCw, MapPin } from 'lucide-react'
 import { getFix } from '@/lib/geo'
 
-export default function SiteCodePanel({ inquiryId }: { inquiryId: string }) {
+export default function SiteCodePanel({ inquiryId, isToday = true }: { inquiryId: string; isToday?: boolean }) {
   const [data, setData] = useState<{ code: string; secondsLeft: number; svg: string } | null>(null)
   const [error, setError] = useState('')
   const [tick, setTick] = useState(0)
@@ -60,6 +60,11 @@ export default function SiteCodePanel({ inquiryId }: { inquiryId: string }) {
     <div className="mt-2 mb-3 rounded-2xl border-2 border-gray-900 bg-white p-4 text-center">
       <p className="text-sm font-extrabold text-gray-900 flex items-center justify-center gap-1"><QrCode className="h-4 w-4" />현장 출석 QR · 코드</p>
       <p className="text-2xs text-gray-500 mt-0.5">크루는 링크만 열면 됩니다(현장 근처 위치면 바로 출석). 위치가 안 잡힌 크루에게만 이 QR이나 숫자를 보여 주세요.</p>
+      {!isToday && (
+        <p className="mt-2 rounded-lg bg-amber-50 border border-amber-200 px-2 py-1.5 text-2xs text-amber-800">
+          오늘은 행사일이 아닙니다. 지금 잡히는 기준점은 시험용이니 행사 당일 현장에서 이 화면을 다시 열어 기준점을 잡으세요. 시험 출석은 크루 칩의 ‘기록 지우기’로 지웁니다.
+        </p>
+      )}
       {error ? (
         <p className="text-sm text-red-600 mt-3">{error}</p>
       ) : !data ? (
