@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { UUID_RE, SELF_NOTE, nowHHMM, resolveWorkDate } from '@/lib/checkin'
 import { sendToAll, subjectFrom } from '@/lib/push'
+import { verifyCode } from '@/lib/checkinCode'
 
 // 크루 셀프 출석 체크인 — 로그인 없이 호출되는 공개 라우트.
 // proxy.ts의 PUBLIC_PATHS에 등록되어 있으므로 다루는 범위를 최대한 좁게 유지한다.
 //  · 쓰기 전용(POST). 명단 조회는 서버 컴포넌트에서 직접 하므로 공개 GET을 두지 않는다.
 //  · 상태는 '출석' 고정 — 임의 상태를 지정할 수 없다.
-//  · 체크인 = 본인 확인(전화 뒷 4자리) + 안전교육 서약 동의 + 손가락 서명. 셋이 다 있어야 기록된다 (2026-11-06).
+//  · 체크인 = 본인 확인(전화 뒷 4자리) + 현장 코드(팀장 화면 QR, 10분마다 바뀜) + 안전교육 서약 동의 + 손가락 서명.
+//    넷이 다 있어야 기록된다 (2026-11-06). 현장 코드가 '현장에 있었다'의 증거다.
 //    담당자가 이미 출결을 적어 둔 사람은 상태는 그대로 두고 서명만 붙인다.
 //  · 범용 /api/db 라우트(모든 테이블 admin 접근)는 잠금 뒤에 그대로 둔다.
 export const dynamic = 'force-dynamic'
@@ -15,7 +17,7 @@ export const dynamic = 'force-dynamic'
 const MAX_SIGNATURE_BYTES = 400_000
 
 export async function POST(request: NextRequest) {
-  let body: { inquiryId?: string; assignmentId?: string; action?: string; last4?: string; signature?: string; pledged?: boolean }
+  let body: { inquiryId?: string; assignmentId?: string; action?: string; last4?: string; siteCode?: string; signature?: string; pledged?: boolean }
   try {
     body = await request.json()
   } catch {
@@ -77,6 +79,9 @@ export async function POST(request: NextRequest) {
   const last4 = String(body.last4 || '').trim()
   const signature = String(body.signature || '')
   if (!/^\d{4}$/.test(last4)) return NextResponse.json({ error: '전화번호 뒷 4자리를 입력해 주세요.' }, { status: 400 })
+  if (!verifyCode(inquiryId, String(body.siteCode || ''))) {
+    return NextResponse.json({ error: '현장 코드가 맞지 않습니다. 팀장 휴대폰 화면의 QR이나 숫자를 다시 확인해 주세요.' }, { status: 403 })
+  }
   if (body.pledged !== true) return NextResponse.json({ error: '안전교육 서약 확인에 체크해 주세요.' }, { status: 400 })
   if (!signature.startsWith('data:image/png;base64,') || signature.length > MAX_SIGNATURE_BYTES) {
     return NextResponse.json({ error: '서명을 그려 주세요.' }, { status: 400 })

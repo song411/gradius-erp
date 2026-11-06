@@ -17,7 +17,7 @@ function formatDateLong(dateStr: string): string {
   return `${d.getMonth() + 1}월 ${d.getDate()}일 (${day})`
 }
 
-export default function CheckinClient({ inquiryId, view }: { inquiryId: string; view: CheckinView }) {
+export default function CheckinClient({ inquiryId, view, codeFromQr = '' }: { inquiryId: string; view: CheckinView; codeFromQr?: string }) {
   const router = useRouter()
   // 서버 컴포넌트 재조회(router.refresh) 완료까지 대기 상태 유지
   const [refreshing, startRefresh] = useTransition()
@@ -27,6 +27,8 @@ export default function CheckinClient({ inquiryId, view }: { inquiryId: string; 
   // 바닥 시트 — 누른 사람과 입력값
   const [picked, setPicked] = useState<RosterItem | null>(null)
   const [last4, setLast4] = useState('')
+  // 현장 코드 — 팀장 화면의 QR 을 찍고 왔으면 채워져 있고, 아니면 숫자를 받는다
+  const [siteCode, setSiteCode] = useState(codeFromQr)
   const [pledged, setPledged] = useState(false)
   const [hasInk, setHasInk] = useState(false)
   const [sheetError, setSheetError] = useState('')
@@ -40,13 +42,14 @@ export default function CheckinClient({ inquiryId, view }: { inquiryId: string; 
     if (!picked) return
     const signature = padRef.current?.toDataURL()
     if (!/^\d{4}$/.test(last4)) { setSheetError('전화번호 뒷 4자리를 입력해 주세요.'); return }
+    if (!/^\d{6}$/.test(siteCode)) { setSheetError('현장 코드 6자리를 입력해 주세요. 팀장 화면에 있습니다.'); return }
     if (!pledged) { setSheetError('안전교육 서약 확인에 체크해 주세요.'); return }
     if (!signature) { setSheetError('서명을 그려 주세요.'); return }
     setPending(picked.assignmentId); setSheetError('')
     try {
       const res = await fetch('/api/checkin', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inquiryId, assignmentId: picked.assignmentId, action: 'checkin', last4, pledged, signature }),
+        body: JSON.stringify({ inquiryId, assignmentId: picked.assignmentId, action: 'checkin', last4, siteCode, pledged, signature }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) { setSheetError(json.error || '처리하지 못했습니다.'); return }
@@ -97,7 +100,7 @@ export default function CheckinClient({ inquiryId, view }: { inquiryId: string; 
       )}
 
       <div className="mx-4 mt-3 rounded-xl bg-white border border-gray-200 px-4 py-3 text-sm text-gray-700">
-        본인 이름을 누르고, 전화번호 뒷 4자리 → 안전교육 서약서 확인 → 서명 순서로 진행하면 출석이 됩니다.
+        본인 이름을 누르고, 전화번호 뒷 4자리 → 현장 코드(팀장 화면의 QR·숫자) → 안전교육 서약서 확인 → 서명 순서로 진행하면 출석이 됩니다.
       </div>
 
       <div className="px-5 pt-4 pb-2 flex items-center justify-between">
@@ -174,8 +177,21 @@ export default function CheckinClient({ inquiryId, view }: { inquiryId: string; 
                     className="h-14 w-44 rounded-xl border-2 border-gray-300 px-4 text-2xl font-extrabold tracking-[0.3em] text-center focus:border-gray-900 focus:outline-none" />
                 </section>
 
+                <section>
+                  <p className="font-extrabold text-gray-900 flex items-center gap-1.5 mb-1.5"><MapPin className="h-5 w-5 text-gray-700" />2. 현장 코드</p>
+                  {codeFromQr && siteCode === codeFromQr ? (
+                    <p className="text-sm text-green-700 font-bold">QR로 들어와서 현장 코드가 채워졌습니다. ({siteCode})</p>
+                  ) : (
+                    <>
+                      <label className="text-sm text-gray-600 block mb-1">팀장 휴대폰 화면에 보이는 6자리 숫자</label>
+                      <input value={siteCode} onChange={e => setSiteCode(e.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" maxLength={6} placeholder="000000"
+                        className="h-14 w-56 rounded-xl border-2 border-gray-300 px-4 text-2xl font-extrabold tracking-[0.25em] text-center focus:border-gray-900 focus:outline-none" />
+                    </>
+                  )}
+                </section>
+
                 <section className="rounded-2xl border-2 border-gray-200 p-4">
-                  <p className="font-extrabold text-gray-900 mb-1">2. {PLEDGE_TITLE}</p>
+                  <p className="font-extrabold text-gray-900 mb-1">3. {PLEDGE_TITLE}</p>
                   <p className="text-sm text-gray-700 leading-relaxed">{PLEDGE_LEAD}</p>
                   <ul className="mt-2 space-y-1 text-sm text-gray-700">
                     {PLEDGE_TRAINING.map((t, i) => <li key={i} className="flex gap-2"><span className="text-gray-400">{i + 1}.</span><span>{t}</span></li>)}
@@ -191,7 +207,7 @@ export default function CheckinClient({ inquiryId, view }: { inquiryId: string; 
 
                 <section>
                   <div className="flex items-center justify-between mb-1.5">
-                    <p className="font-extrabold text-gray-900 flex items-center gap-1.5"><PenLine className="h-5 w-5 text-gray-700" />3. 서명</p>
+                    <p className="font-extrabold text-gray-900 flex items-center gap-1.5"><PenLine className="h-5 w-5 text-gray-700" />4. 서명</p>
                     <button type="button" onClick={() => padRef.current?.clear()} className="h-9 px-3 rounded-full border-2 border-gray-300 text-sm font-bold text-gray-600 flex items-center gap-1 active:scale-95"><Eraser className="h-4 w-4" />지우기</button>
                   </div>
                   <SignaturePad ref={padRef} height={160} onChange={setHasInk} />
@@ -199,7 +215,7 @@ export default function CheckinClient({ inquiryId, view }: { inquiryId: string; 
 
                 {sheetError && <p className="text-sm font-bold text-red-600">{sheetError}</p>}
 
-                <button type="button" onClick={submit} disabled={!!pending || last4.length !== 4 || !pledged || !hasInk}
+                <button type="button" onClick={submit} disabled={!!pending || last4.length !== 4 || siteCode.length !== 6 || !pledged || !hasInk}
                   className="h-14 w-full rounded-2xl bg-gray-900 text-white text-lg font-extrabold active:scale-[0.98] disabled:opacity-40">
                   {pending ? '저장 중…' : picked.status ? '서명하고 확인' : '서명하고 출석'}
                 </button>

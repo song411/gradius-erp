@@ -20,10 +20,11 @@ import {
   type EvalScores, type EvalScoreKey, type ProfileForm,
 } from '@/lib/evaluation'
 import { HalfStarInput } from '@/components/ui/HalfStarInput'
+import SiteCodePanel from './SiteCodePanel'
 import { toast } from 'sonner'
 import {
   MapPin, Phone, Clock, Users, ChevronDown, ChevronUp, RefreshCw, Monitor,
-  PenLine, Share, MoreVertical, X, CheckCircle2, Crown, Star, Trash2,
+  PenLine, Share, MoreVertical, X, CheckCircle2, Crown, Star, Trash2, QrCode,
 } from 'lucide-react'
 import type { Inquiry, Assignment, Attendance, AttendanceStatus, FieldLog, FieldLogKind, Evaluation, Staff } from '@/lib/supabase/types'
 
@@ -335,6 +336,7 @@ function EventCard({ inq, viewDate, isToday, isPast, assignments, attendances, e
   const canEval = !!(isToday || isPast)
   // 출석 칩 — 미기록이면 한 번에 '출석', 기록이 있으면 상태 고르기 줄이 펼쳐진다
   const [attFor, setAttFor] = useState<string | null>(null)
+  const [showCode, setShowCode] = useState(false)   // 팀장이 크루에게 보여 주는 현장 QR·코드
   const [attBusy, setAttBusy] = useState<string | null>(null)
   async function saveAttendance(a: Assignment, att: Attendance | undefined, status: AttendanceStatus | null) {
     setAttBusy(a.id)
@@ -407,7 +409,16 @@ function EventCard({ inq, viewDate, isToday, isPast, assignments, attendances, e
         <div className="border-t border-gray-100">
           {/* 크루 명단 */}
           <div className="p-4">
-            <p className="text-2xs font-bold text-gray-500 tracking-wider mb-2">크루 {crew.length}명{canEval && crew.length > 0 ? ' · 이름 누르면 평가, 오른쪽 칩 누르면 출석' : ''}</p>
+            <div className="flex items-center justify-between mb-2 gap-2">
+              <p className="text-2xs font-bold text-gray-500 tracking-wider">크루 {crew.length}명{canEval && crew.length > 0 ? ' · 이름 누르면 평가, 칩 누르면 출석' : ''}</p>
+              {isToday && (
+                <button type="button" onClick={() => setShowCode(v => !v)}
+                  className={`h-9 px-3 rounded-full text-xs font-bold border-2 inline-flex items-center gap-1 shrink-0 active:scale-95 ${showCode ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-800 border-gray-800'}`}>
+                  <QrCode className="h-4 w-4" />출석 QR
+                </button>
+              )}
+            </div>
+            {showCode && isToday && <SiteCodePanel inquiryId={inq.id} />}
             {crew.length === 0 ? (
               <p className="text-sm text-gray-400">배정된 크루가 없습니다.</p>
             ) : (
