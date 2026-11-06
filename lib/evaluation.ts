@@ -137,6 +137,7 @@ export const PROFILE_FIELDS = [
   { key: 'english_skill', label: '영어',   kind: 'pick',   options: ['하', '중', '상', '원어민'] },
   { key: 'driving',       label: '운전',   kind: 'pick',   options: ['1종', '2종', '없음'] },
   { key: 'region',        label: '지역',   kind: 'text' },
+  { key: 'address',       label: '주소',   kind: 'text' },   // 근로계약서 주소 칸 (019)
 ] as const
 
 export type ProfileKey = typeof PROFILE_FIELDS[number]['key']
@@ -148,6 +149,7 @@ export function profileFormOf(staff?: Staff | null): ProfileForm {
   return {
     gender: v(staff?.gender), age: v(staff?.age), height: v(staff?.height), weight: v(staff?.weight),
     mbti: v(staff?.mbti), english_skill: v(staff?.english_skill), driving: v(staff?.driving), region: v(staff?.region),
+    address: v(staff?.address),
   }
 }
 
@@ -162,6 +164,7 @@ export function profileChips(form: ProfileForm): string[] {
   if (form.english_skill) out.push(`영어 ${form.english_skill}`)
   if (form.driving) out.push(`운전 ${form.driving}`)
   if (form.region)  out.push(form.region)
+  if (form.address) out.push(`주소 ${form.address}`)
   return out
 }
 

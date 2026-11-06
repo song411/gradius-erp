@@ -24,6 +24,7 @@ import {
   buildContractFields, missingFields, FIELD_LABELS, PER_PERSON_KEYS, VARIANT_DESC, makeToken, signLinkMessage, fmtSignedAt,
   type ContractFields, type ContractVariant,
 } from '@/lib/laborContract'
+import { saveStaffProfile } from '@/lib/evaluation'
 import type { Assignment, Inquiry, Staff, LaborContract } from '@/lib/supabase/types'
 
 type Person = { assignment: Assignment; staff: Staff | null }
@@ -131,6 +132,24 @@ export default function LaborContractContent() {
     else setEach(m => ({ ...m, [target]: { ...(m[target] || {}), [key]: value } }))
   }
   function reset() { setCommon({}); setEach({}) }
+
+  // 주소가 비어 있으면 계약서 화면에서 바로 적고 크루관리에도 저장한다 — 다음 계약서부터는 자동으로 들어온다
+  const [savingAddr, setSavingAddr] = useState(false)
+  async function saveAddressToStaff(d: typeof docs[number]) {
+    const staffId = d.person.assignment.staff_id
+    const address = (d.fields.workerAddress || '').trim()
+    if (!staffId || !address) return
+    setSavingAddr(true)
+    try {
+      await saveStaffProfile(staffId, { address })
+      setPeople(ps => ps.map(p => p.assignment.id === d.id && p.staff ? { ...p, staff: { ...p.staff, address } } : p))
+      // 손으로 적은 값이 이제 자동값과 같아졌으니 덮어쓰기 기록은 지운다
+      setEach(m => { const { workerAddress: _drop, ...rest } = m[d.id] || {}; void _drop; return { ...m, [d.id]: rest } })
+      toast.success(`${d.fields.workerName} 주소를 크루관리에 저장했습니다`)
+    } catch (e) {
+      toast.error('주소 저장 실패: ' + (e as Error).message)
+    } finally { setSavingAddr(false) }
+  }
 
   const warnings = docs.flatMap(d => {
     const miss = missingFields(d.fields)
@@ -298,7 +317,17 @@ export default function LaborContractContent() {
                   <label className="text-xs font-bold text-gray-600 mb-0.5 block">{FIELD_LABELS[key]}{disabled && <span className="text-gray-400 font-normal"> · 사람마다 다름</span>}</label>
                   {long
                     ? <Textarea value={val} disabled={disabled} rows={2} onChange={e => setField(key, e.target.value)} className="text-sm" />
-                    : <Input value={val} disabled={disabled} type={key === 'signDate' ? 'date' : 'text'} onChange={e => setField(key, e.target.value)} className="h-9 text-sm" />}
+                    : <Input value={val} disabled={disabled} type={key === 'signDate' ? 'date' : 'text'} onChange={e => setField(key, e.target.value)}
+                        placeholder={key === 'workerAddress' && !val ? '비어 있음 — 여기에 적으면 됩니다' : undefined} className="h-9 text-sm" />}
+                  {key === 'workerAddress' && !disabled && current.person.staff && val.trim() && val.trim() !== (current.person.staff.address || '').trim() && (
+                    <button type="button" disabled={savingAddr} onClick={() => saveAddressToStaff(current)}
+                      className="mt-1 text-xs font-bold text-emerald-700 hover:underline disabled:opacity-50">
+                      {savingAddr ? '저장 중…' : '이 주소를 크루관리에도 저장 (다음부터 자동)'}
+                    </button>
+                  )}
+                  {key === 'workerAddress' && !current.person.staff && !val.trim() && (
+                    <p className="mt-0.5 text-2xs text-gray-400">크루관리에 연결되지 않은 사람이라 여기 적은 주소는 이 계약서에만 쓰입니다.</p>
+                  )}
                 </div>
               )
             })}
