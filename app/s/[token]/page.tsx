@@ -25,6 +25,11 @@ export default async function SignPage({ params }: { params: Promise<{ token: st
       .maybeSingle()
     : { data: null }
 
+  // 회사 도장 (021). 표가 없거나 비어 있으면 도장 없이 보여 준다
+  const { data: stampRow } = row
+    ? await supabase.from('app_assets').select('data_url').eq('id', 'company_stamp').maybeSingle()
+    : { data: null }
+
   if (!row) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-gray-50 px-6 text-center">
@@ -43,6 +48,7 @@ export default async function SignPage({ params }: { params: Promise<{ token: st
       status={row.status}
       signedAt={row.signed_at}
       signatureData={row.signature_data}
+      stampSrc={stampRow?.data_url || null}
     />
   )
 }

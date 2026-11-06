@@ -56,6 +56,49 @@ export default function LaborContractContent() {
   const [target, setTarget]   = useState<string>('')                          // '' = 전체(공통), 아니면 배정 id
   const [showSigned, setShowSigned] = useState(true)                          // 서명 끝난 사람은 서명본으로 보기
   const [linking, setLinking] = useState(false)
+  // 회사 도장 — app_assets 'company_stamp' (021). 저장소에 그림을 안 넣으려고 DB 에 둔다
+  const [stamp, setStamp] = useState<string | null>(null)
+  const [stampReady, setStampReady] = useState(false)
+  const [stampSaving, setStampSaving] = useState(false)
+  useEffect(() => {
+    let alive = true
+    db.list<{ id: string; data_url: string }>('app_assets', { filters: { id: 'company_stamp' }, limit: 1 })
+      .then(rows => { if (alive) setStamp(rows[0]?.data_url || null) })
+      .catch(() => { /* 021 표가 아직 없으면 도장 없이 간다 */ })
+      .finally(() => { if (alive) setStampReady(true) })
+    return () => { alive = false }
+  }, [])
+
+  /** 도장 그림 올리기 — 브라우저에서 300px 로 줄여 PNG data URL 로 저장 (원본은 올리지 않는다) */
+  async function uploadStamp(file: File) {
+    setStampSaving(true)
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const img = new Image()
+        const url = URL.createObjectURL(file)
+        img.onload = () => {
+          const max = 300
+          const scale = Math.min(1, max / Math.max(img.width, img.height))
+          const c = document.createElement('canvas')
+          c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale)
+          const ctx = c.getContext('2d')
+          if (!ctx) { reject(new Error('캔버스를 만들 수 없습니다')); return }
+          ctx.drawImage(img, 0, 0, c.width, c.height)
+          URL.revokeObjectURL(url)
+          resolve(c.toDataURL('image/png'))
+        }
+        img.onerror = () => reject(new Error('그림 파일을 읽지 못했습니다'))
+        img.src = url
+      })
+      const payload = { data_url: dataUrl, note: file.name, updated_at: new Date().toISOString() }
+      const updated = await db.update('app_assets', 'company_stamp', payload)
+      if (!updated.length) await db.insert('app_assets', { id: 'company_stamp', ...payload })
+      setStamp(dataUrl)
+      toast.success('회사 도장을 저장했습니다. 이제 모든 계약서에 자동으로 찍힙니다.')
+    } catch (e) {
+      toast.error('도장 저장 실패: ' + (e as Error).message + ' (021 마이그레이션을 실행했는지 확인)')
+    } finally { setStampSaving(false) }
+  }
   const docsRef = useRef<HTMLDivElement>(null)
 
   const loadContracts = useCallback(async (assignmentIds: string[]) => {
@@ -285,6 +328,23 @@ export default function LaborContractContent() {
           <p className="text-2xs text-gray-500">링크를 만든 순간의 내용이 저장되어 크루에게 보입니다. 내용을 고쳤으면 ‘갱신’을 눌러야 반영됩니다. 링크를 아는 사람만 열 수 있으니 본인에게만 보내세요.</p>
         </section>
 
+        {/* 회사 도장 */}
+        <section className="rounded-xl border border-gray-200 bg-gray-50 p-3 flex items-center gap-3">
+          <div className="h-14 w-14 shrink-0 rounded-lg bg-white border border-gray-200 flex items-center justify-center overflow-hidden">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            {stamp ? <img src={stamp} alt="회사 도장" className="max-h-12 max-w-12" /> : <span className="text-2xs text-gray-400">{stampReady ? '없음' : '…'}</span>}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-bold text-gray-700">회사 도장 {stamp ? '· 모든 계약서에 자동 날인' : '· 아직 없음'}</p>
+            <label className="text-xs text-emerald-700 font-bold hover:underline cursor-pointer">
+              {stampSaving ? '저장 중…' : stamp ? '도장 그림 바꾸기' : '도장 그림 올리기 (PNG)'}
+              <input type="file" accept="image/png,image/jpeg" className="hidden" disabled={stampSaving}
+                onChange={e => { const f = e.target.files?.[0]; if (f) uploadStamp(f); e.target.value = '' }} />
+            </label>
+            <p className="text-2xs text-gray-400">그림은 DB에만 저장되고 코드 저장소에는 들어가지 않습니다.</p>
+          </div>
+        </section>
+
         <div>
           <label className="text-xs font-bold text-gray-600 mb-1 block">양식</label>
           <Select value={variant} onChange={e => changeVariant(e.target.value as ContractVariant)}>
@@ -350,7 +410,7 @@ export default function LaborContractContent() {
       <div className="flex-1 overflow-auto bg-gray-200 p-6">
         <div ref={docsRef} className="space-y-6">
           {docs.map(d => (
-            <div key={d.id} className="shadow-lg"><LaborContractDoc fields={d.shown} signature={d.signature} /></div>
+            <div key={d.id} className="shadow-lg"><LaborContractDoc fields={d.shown} signature={d.signature} stampSrc={stamp} /></div>
           ))}
         </div>
       </div>

@@ -111,19 +111,25 @@ function PayTable({ f }: { f: ContractFields }) {
   )
 }
 
-export default function LaborContractDoc({ fields: f, fluid = false, signature }: {
+export default function LaborContractDoc({ fields: f, fluid = false, signature, stampSrc }: {
   fields: ContractFields
   /** 휴대폰 서명 화면용 — A4 폭 고정 대신 화면 폭에 맞춘다 */
   fluid?: boolean
   /** 서명이 끝난 계약서면 근로자 칸에 서명 이미지와 시각을 찍는다 */
   signature?: DocSignature
+  /** 회사 인감 그림(data URL). app_assets 'company_stamp'. 있으면 사업주 날인 칸에 항상 찍힌다 */
+  stampSrc?: string | null
 }) {
   const emp = employerLabel(f.variant)
   // 서명은 data URL 이라 next/image 를 못 쓴다. 인쇄 창(outerHTML)에도 그대로 실려야 하므로 일부러 <img>
   const sig = signature?.dataUrl
     // eslint-disable-next-line @next/next/no-img-element
-    ? <img src={signature.dataUrl} alt="서명" style={{ height: '34px', verticalAlign: 'middle', marginLeft: '8px' }} />
+    ? <img src={signature.dataUrl} alt="서명" style={{ height: '56px', maxWidth: '100%', verticalAlign: 'middle' }} />
     : null
+  // eslint-disable-next-line @next/next/no-img-element
+  const stamp = stampSrc ? <img src={stampSrc} alt="날인" style={{ height: '64px', verticalAlign: 'middle' }} /> : null
+  // 날인 칸 — 도장·서명이 들어갈 만큼 높게, 글자는 흐리게
+  const signCell = { ...S.td, textAlign: 'center' as const, color: '#999', height: '72px', padding: '4px 8px' }
   const sigNote = signature?.signedAt ? <span style={{ fontSize: '10px', color: '#555', marginLeft: '6px' }}>전자서명 {fmtSignedAt(signature.signedAt)}</span> : null
   return (
     <div className="labor-contract-page" style={fluid ? { ...S.page, width: '100%', minHeight: 0, padding: '18px 12px' } : S.page}>
@@ -145,17 +151,17 @@ export default function LaborContractDoc({ fields: f, fluid = false, signature }
       </p>
 
       <table style={{ ...S.table, marginBottom: 0 }}>
-        <colgroup><col style={{ width: '14%' }} /><col /><col style={{ width: '22%' }} /></colgroup>
+        <colgroup><col style={{ width: '14%' }} /><col /><col style={{ width: '30%' }} /></colgroup>
         <tbody>
           <tr>
             <th style={S.th}>[{emp}]</th>
-            <td style={S.td}>{COMPANY.name}　{COMPANY.ceo}</td>
-            <td style={{ ...S.td, textAlign: 'center', color: '#555' }}>(서명 또는 날인)</td>
+            <td style={S.td}>{COMPANY.name}　대표이사 {COMPANY.ceo}</td>
+            <td style={signCell}>{stamp || '(인)'}</td>
           </tr>
           <tr>
             <th style={S.th}>[근로자]</th>
             <td style={S.td}>{f.workerName}{sigNote}</td>
-            <td style={{ ...S.td, textAlign: 'center', color: '#555' }}>{sig || '(서명 또는 날인)'}</td>
+            <td style={signCell}>{sig || '(서명)'}</td>
           </tr>
           <tr>
             <th style={S.th}>교부 확인</th>

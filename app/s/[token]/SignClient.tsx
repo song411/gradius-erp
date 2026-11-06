@@ -9,13 +9,14 @@ import LaborContractDoc from '@/components/contracts/LaborContractDoc'
 import SignaturePad, { type SignaturePadHandle } from '@/components/contracts/SignaturePad'
 import { fmtSignedAt, type ContractFields } from '@/lib/laborContract'
 
-export default function SignClient({ token, staffName, fields, status, signedAt, signatureData }: {
+export default function SignClient({ token, staffName, fields, status, signedAt, signatureData, stampSrc }: {
   token: string
   staffName: string
   fields: ContractFields
   status: string
   signedAt?: string | null
   signatureData?: string | null
+  stampSrc?: string | null
 }) {
   const padRef = useRef<SignaturePadHandle>(null)
   const [agreed, setAgreed]   = useState(false)
@@ -70,7 +71,7 @@ export default function SignClient({ token, staffName, fields, status, signedAt,
 
       {/* 계약서 본문 — 휴대폰 폭에 맞춰 흐르게 */}
       <div className="mx-3 mt-3 rounded-2xl bg-white border border-gray-200 overflow-hidden">
-        <LaborContractDoc fields={fields} fluid signature={done ? { dataUrl: done.signature, signedAt: done.signedAt } : undefined} />
+        <LaborContractDoc fields={fields} fluid signature={done ? { dataUrl: done.signature, signedAt: done.signedAt } : undefined} stampSrc={stampSrc} />
       </div>
 
       {!done && !locked && (
