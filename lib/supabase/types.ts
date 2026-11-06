@@ -454,6 +454,7 @@ export interface FieldLog {
   applied_at?: string | null
   applied_to?: string | null
   applied_note?: string | null
+  photos?: { url: string; path: string }[] | null   // 현장 사진 (026) — 저장소 주소만
   created_at: string
   updated_at?: string
 }

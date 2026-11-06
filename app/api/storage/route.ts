@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 // 허용된 버킷 목록 (보안 화이트리스트)
-const ALLOWED_BUCKETS = ['guard-documents']
+const ALLOWED_BUCKETS = ['guard-documents', 'field-photos']   // field-photos: 현장 기록 사진(영수증 등). 없으면 아래서 만든다
 
 // 허용된 파일 타입
 const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/pdf']
@@ -30,14 +30,21 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
 
-    const { data, error } = await supabase.storage
+    let { data, error } = await supabase.storage
       .from(bucket)
       .upload(path, buffer, {
         contentType: file.type,
         upsert: true,
       })
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    // 버킷이 아직 없으면 만들고 한 번 더 — 사진 버킷은 Supabase 콘솔을 거치지 않아도 되게
+    if (error && /bucket/i.test(error.message) && /not found/i.test(error.message)) {
+      await supabase.storage.createBucket(bucket, { public: true, fileSizeLimit: 10 * 1024 * 1024 })
+      const retry = await supabase.storage.from(bucket).upload(path, buffer, { contentType: file.type, upsert: true })
+      data = retry.data; error = retry.error
+    }
+
+    if (error || !data) return NextResponse.json({ error: error?.message || '업로드 실패' }, { status: 500 })
 
     const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(data.path)
     return NextResponse.json({ url: urlData.publicUrl, path: data.path })

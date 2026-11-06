@@ -24,6 +24,8 @@ import SiteCodePanel from './SiteCodePanel'
 import { fmtDistance, isFar, getFix } from '@/lib/geo'
 import { ensureLinksForCrew } from '@/lib/contractLinks'
 import { groupLinkMessage } from '@/lib/laborContract'
+import { uploadPhoto, deletePhotos } from '@/lib/photos'
+import { PhotoPicker, PhotoThumbs } from '@/components/ui/PhotoPicker'
 import { toast } from 'sonner'
 import {
   MapPin, Phone, Clock, Users, ChevronDown, ChevronUp, RefreshCw, Monitor,
@@ -823,6 +825,7 @@ function QuickLog({ inquiryId, logDate, logs, author, onAuthor, onSaved }: {
 }) {
   const [kind, setKind]       = useState<FieldLogKind>('특이사항')
   const [content, setContent] = useState('')
+  const [photos, setPhotos]   = useState<File[]>([])     // 영수증·배치 사진. 저장할 때 줄여서 올린다 (lib/photos)
   const [saving, setSaving]   = useState(false)
 
   // 잘못 적은 기록 지우기 — 반영 전 것만 여기서. 반영된 것은 사무실 대기함에서
@@ -830,23 +833,28 @@ function QuickLog({ inquiryId, logDate, logs, author, onAuthor, onSaved }: {
     if (!confirm(`이 기록을 지웁니다.\n[${l.kind}] ${l.content}`)) return
     try {
       await db.delete('field_logs', l.id)
+      await deletePhotos(l.photos)
       toast.success('기록을 지웠습니다')
       onSaved()
     } catch (e) { toast.error('삭제 실패: ' + (e as Error).message) }
   }
 
   async function save() {
-    if (!content.trim()) { toast.info('한 줄만 적어 주세요.'); return }
+    if (!content.trim() && photos.length === 0) { toast.info('한 줄만 적어 주세요.'); return }
     setSaving(true)
     try {
+      // 사진 먼저 올리고(줄여서) 주소만 기록에 붙인다
+      const uploaded = []
+      for (const f of photos) uploaded.push(await uploadPhoto(f, `field-logs/${inquiryId}`))
       // 현장 기록(/field)과 같은 칸. 숫자는 사무실에서 반영할 때 적는다
       await db.insert('field_logs', {
-        inquiry_id: inquiryId, kind, content: content.trim(),
+        inquiry_id: inquiryId, kind, content: content.trim() || (uploaded.length ? '(사진)' : ''),
         log_date: logDate, author: author.trim() || null,
+        ...(uploaded.length ? { photos: uploaded } : {}),
       })
       try { localStorage.setItem(AUTHOR_KEY, author.trim()) } catch { /* 무시 */ }
-      toast.success(`${kind} 기록 저장 — 사무실 대기함으로 갔습니다.`)
-      setContent('')
+      toast.success(`${kind} 기록 저장${uploaded.length ? ` · 사진 ${uploaded.length}장` : ''} — 사무실 대기함으로 갔습니다.`)
+      setContent(''); setPhotos([])
       onSaved()
     } catch (e) {
       toast.error('저장 실패: ' + (e as Error).message)
@@ -866,6 +874,7 @@ function QuickLog({ inquiryId, logDate, logs, author, onAuthor, onSaved }: {
       </div>
       <textarea value={content} onChange={e => setContent(e.target.value)} rows={3} placeholder={KIND_HINT[kind]}
         className="w-full rounded-xl border-2 border-gray-300 bg-white p-3 text-base leading-relaxed focus:border-gray-900 focus:outline-none" />
+      <div className="mt-2"><PhotoPicker files={photos} onChange={setPhotos} size="lg" /></div>
       <div className="flex gap-2 mt-2">
         <input value={author} onChange={e => onAuthor(e.target.value)} placeholder="적는 사람"
           className="h-12 w-28 rounded-xl border-2 border-gray-300 bg-white px-3 text-sm focus:border-gray-900 focus:outline-none" />
@@ -879,7 +888,7 @@ function QuickLog({ inquiryId, logDate, logs, author, onAuthor, onSaved }: {
           {logs.slice(0, 3).map(l => (
             <li key={l.id} className="text-sm text-gray-700 flex items-center gap-2">
               <span className="text-2xs font-bold text-gray-500 shrink-0 w-12">{l.kind}</span>
-              <span className="flex-1 break-keep">{l.content}</span>
+              <span className="flex-1 break-keep">{l.content}{l.photos && l.photos.length > 0 && <span className="ml-1 text-2xs text-gray-400">사진 {l.photos.length}</span>}<PhotoThumbs photos={l.photos} size="sm" /></span>
               <span className={`text-2xs shrink-0 ${l.applied_at ? 'text-green-600' : 'text-amber-600'}`}>{l.applied_at ? '반영됨' : fmtWhen(l.created_at)}</span>
               {!l.applied_at && (
                 <button onClick={() => remove(l)} title="이 기록 지우기" className="h-9 w-9 -mr-2 flex items-center justify-center text-gray-300 active:text-red-600">

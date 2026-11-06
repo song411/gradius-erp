@@ -23,6 +23,8 @@ import { toast } from 'sonner'
 import { Clock, Users, Banknote, Receipt, AlertCircle, Database, Copy, Search, Check, Undo2, Inbox, PenLine, ChevronDown, ChevronRight, FileText, Trash2 } from 'lucide-react'
 import type { Inquiry, FieldLog, FieldLogKind, Estimate } from '@/lib/supabase/types'
 import { representativeEstimate } from '@/lib/estimateItems'
+import { uploadPhoto, deletePhotos } from '@/lib/photos'
+import { PhotoPicker, PhotoThumbs } from '@/components/ui/PhotoPicker'
 
 type EstLite = Pick<Estimate, 'id' | 'inquiry_id' | 'is_final' | 'created_at' | 'version_label'>
 
@@ -154,6 +156,7 @@ function WriteTab({ inquiries, logs, initialInquiryId, onSaved }: {
   const [search, setSearch]     = useState('')
   const [kind, setKind]         = useState<FieldLogKind>('연장')
   const [content, setContent]   = useState('')
+  const [photos, setPhotos]     = useState<File[]>([])   // 영수증 등 사진 — 저장할 때 줄여서 올린다 (lib/photos)
   const [hours, setHours]       = useState('')
   const [headcount, setHeadcount] = useState('')
   const [amount, setAmount]     = useState('')
@@ -184,11 +187,14 @@ function WriteTab({ inquiries, logs, initialInquiryId, onSaved }: {
 
   async function save() {
     if (!inqId) { toast.info('행사를 먼저 고르세요.'); return }
-    if (!content.trim()) { toast.info('한 줄만 적어 주세요. 숫자는 비워도 됩니다.'); return }
+    if (!content.trim() && photos.length === 0) { toast.info('한 줄만 적어 주세요. 숫자는 비워도 됩니다.'); return }
     setSaving(true)
     try {
+      const uploaded = []
+      for (const f of photos) uploaded.push(await uploadPhoto(f, `field-logs/${inqId}`))
       await db.insert('field_logs', {
-        inquiry_id: inqId, kind, content: content.trim(),
+        inquiry_id: inqId, kind, content: content.trim() || (uploaded.length ? '(사진)' : ''),
+        ...(uploaded.length ? { photos: uploaded } : {}),
         hours: hours ? Number(hours) : null,
         headcount: headcount ? Number(headcount) : null,
         amount: amount ? Math.round(Number(amount)) : null,
@@ -198,7 +204,7 @@ function WriteTab({ inquiries, logs, initialInquiryId, onSaved }: {
       })
       try { localStorage.setItem(AUTHOR_KEY, author.trim()) } catch { /* 무시 */ }
       toast.success(`${kind} 기록 저장 — 사무실 반영 대기함에 들어갔습니다.`)
-      setContent(''); setHours(''); setHeadcount(''); setAmount(''); setStaffName('')
+      setContent(''); setHours(''); setHeadcount(''); setAmount(''); setStaffName(''); setPhotos([])
       onSaved()
     } catch (e) {
       toast.error('저장 실패: ' + (e as Error).message)
@@ -257,6 +263,10 @@ function WriteTab({ inquiries, logs, initialInquiryId, onSaved }: {
           ))}
         </div>
         <Textarea value={content} onChange={e => setContent(e.target.value)} placeholder={kindMeta.hint} rows={3} className="text-base" />
+        <div>
+          <label className="text-2xs font-semibold text-gray-500 block mb-1">사진 (영수증·배치·사고 현장, 선택)</label>
+          <PhotoPicker files={photos} onChange={setPhotos} />
+        </div>
 
         {/* 숫자는 선택 — 종류에 맞는 칸만 */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -307,6 +317,7 @@ function LogLine({ log }: { log: FieldLog }) {
         <span className="text-gray-400 ml-auto">{fmtWhen(log.created_at)}</span>
       </div>
       <p className="text-sm text-gray-800 mt-1 whitespace-pre-line">{log.content}</p>
+      <PhotoThumbs photos={log.photos} />
       <Numbers log={log} />
       {log.applied_at && <p className="text-2xs text-green-700 mt-1">✓ 반영됨 · {log.applied_to}{log.applied_note ? ` · ${log.applied_note}` : ''} · {fmtWhen(log.applied_at)}</p>}
     </div>
@@ -363,6 +374,7 @@ function InboxTab({ inquiries, logs, estimates, onChanged }: { inquiries: Inquir
     setBusy(log.id)
     try {
       await db.delete('field_logs', log.id)
+      await deletePhotos(log.photos)
       toast.success('기록을 지웠습니다')
       onChanged()
     } catch (e) { toast.error('삭제 실패: ' + (e as Error).message) }
@@ -452,6 +464,7 @@ function InboxTab({ inquiries, logs, estimates, onChanged }: { inquiries: Inquir
                       <span className="text-gray-400 ml-auto">{fmtWhen(l.created_at)}</span>
                     </div>
                     <p className="text-sm text-gray-800 whitespace-pre-line">{l.content}</p>
+                    <PhotoThumbs photos={l.photos} />
                     <Numbers log={l} />
                     {l.applied_at ? (
                       <div className="flex items-center gap-2 text-2xs text-green-700">
