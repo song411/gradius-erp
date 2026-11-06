@@ -26,6 +26,7 @@ import {
   type ContractFields, type ContractVariant,
 } from '@/lib/laborContract'
 import { saveStaffContact } from '@/lib/evaluation'
+import { contentHashOf, shortHash } from '@/lib/sealHash'
 import type { Assignment, Inquiry, Staff, LaborContract } from '@/lib/supabase/types'
 
 type Person = { assignment: Assignment; staff: Staff | null }
@@ -242,6 +243,17 @@ export default function LaborContractContent() {
     } finally { setLinking(false) }
   }
 
+  /** 봉인 확인 — 저장된 내용으로 지문을 다시 계산해 저장된 지문과 맞춰 본다 (규칙은 lib/sealHash 한 곳) */
+  async function verifySeal(c: LaborContract) {
+    if (!c.content_hash) { toast.info('봉인값이 없는 건입니다 (024 전에 서명됨)'); return }
+    const h = await contentHashOf({
+      contractId: c.id, assignmentId: c.assignment_id, staffName: c.staff_name || '', variant: c.variant,
+      fields: c.fields as Record<string, unknown>, signature: c.signature_data || '', signedAt: c.signed_at || '', verifiedBy: c.verified_by || '',
+    })
+    if (h === c.content_hash) toast.success(`봉인 일치 — ${c.staff_name} 계약서는 서명 뒤 바뀐 것이 없습니다`)
+    else toast.error(`봉인 불일치! ${c.staff_name} 계약서가 서명 뒤 바뀌었을 수 있습니다. 노무사와 상의하세요`)
+  }
+
   async function copyText(text: string, what: string) {
     try { await navigator.clipboard.writeText(text); toast.success(`${what} 복사됨`) }
     catch { toast.info(text, { duration: 15000 }) }
@@ -298,6 +310,10 @@ export default function LaborContractContent() {
                 <span className="font-bold text-gray-800 w-16 truncate">{d.fields.workerName || '(이름 없음)'}</span>
                 {d.signed ? (
                   <span className="inline-flex items-center gap-0.5 text-emerald-700 font-bold"><CheckCircle2 className="h-3.5 w-3.5" />서명완료 <span className="font-normal text-gray-500">{fmtSignedAt(d.signed.signed_at || '')}</span></span>
+                    {d.signed.content_hash && (
+                      <button type="button" onClick={() => verifySeal(d.signed!)} title="저장된 내용으로 지문을 다시 계산해 맞춰 봅니다"
+                        className="text-2xs font-mono text-gray-500 hover:text-emerald-700 hover:underline">봉인 {shortHash(d.signed.content_hash)}</button>
+                    )}
                 ) : d.latest ? (
                   <span className="inline-flex items-center gap-0.5 text-amber-700 font-bold"><Clock className="h-3.5 w-3.5" />서명 대기</span>
                 ) : (
@@ -419,7 +435,7 @@ export default function LaborContractContent() {
       <div className="flex-1 overflow-auto bg-gray-200 p-6">
         <div ref={docsRef} className="space-y-6">
           {docs.map(d => (
-            <div key={d.id} className="shadow-lg"><LaborContractDoc fields={d.shown} signature={d.signature} stampSrc={stamp} /></div>
+            <div key={d.id} className="shadow-lg"><LaborContractDoc fields={d.shown} signature={d.signature} stampSrc={stamp} seal={d.signed && showSigned && d.signed.content_hash ? { hash: d.signed.content_hash } : undefined} /></div>
           ))}
         </div>
       </div>

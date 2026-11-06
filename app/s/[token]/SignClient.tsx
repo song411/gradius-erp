@@ -9,7 +9,7 @@ import LaborContractDoc from '@/components/contracts/LaborContractDoc'
 import SignaturePad, { type SignaturePadHandle } from '@/components/contracts/SignaturePad'
 import { fmtSignedAt, type ContractFields } from '@/lib/laborContract'
 
-export default function SignClient({ token, staffName, fields, status, signedAt, signatureData, stampSrc }: {
+export default function SignClient({ token, staffName, fields, status, signedAt, signatureData, stampSrc, contentHash }: {
   token: string
   staffName: string
   fields: ContractFields
@@ -17,14 +17,15 @@ export default function SignClient({ token, staffName, fields, status, signedAt,
   signedAt?: string | null
   signatureData?: string | null
   stampSrc?: string | null
+  contentHash?: string | null
 }) {
   const padRef = useRef<SignaturePadHandle>(null)
   const [agreed, setAgreed]   = useState(false)
   const [hasInk, setHasInk]   = useState(false)
   const [busy, setBusy]       = useState(false)
   const [error, setError]     = useState('')
-  const [done, setDone]       = useState<{ signedAt: string; signature: string } | null>(
-    status === '서명완료' && signatureData ? { signedAt: signedAt || '', signature: signatureData } : null,
+  const [done, setDone]       = useState<{ signedAt: string; signature: string; hash: string } | null>(
+    status === '서명완료' && signatureData ? { signedAt: signedAt || '', signature: signatureData, hash: contentHash || '' } : null,
   )
 
   async function submit() {
@@ -37,7 +38,7 @@ export default function SignClient({ token, staffName, fields, status, signedAt,
       const res = await fetch('/api/sign', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, signature, agreed }) })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) { setError(data.error || '서명에 실패했습니다.'); return }
-      setDone({ signedAt: data.signed_at, signature })
+      setDone({ signedAt: data.signed_at, signature, hash: data.content_hash || '' })
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch {
       setError('연결에 실패했습니다. 잠시 후 다시 시도해 주세요.')
@@ -71,7 +72,7 @@ export default function SignClient({ token, staffName, fields, status, signedAt,
 
       {/* 계약서 본문 — 휴대폰 폭에 맞춰 흐르게 */}
       <div className="mx-3 mt-3 rounded-2xl bg-white border border-gray-200 overflow-hidden">
-        <LaborContractDoc fields={fields} fluid signature={done ? { dataUrl: done.signature, signedAt: done.signedAt } : undefined} stampSrc={stampSrc} />
+        <LaborContractDoc fields={fields} fluid signature={done ? { dataUrl: done.signature, signedAt: done.signedAt } : undefined} stampSrc={stampSrc} seal={done?.hash ? { hash: done.hash } : undefined} />
       </div>
 
       {!done && !locked && (

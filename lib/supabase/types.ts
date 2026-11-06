@@ -387,6 +387,9 @@ export interface LaborContract {
   signer_ip?: string | null
   verified_by?: string | null
   verify_fails: number
+  content_hash?: string | null   // 봉인 지문 (024, lib/sealHash)
+  prev_hash?: string | null
+  chain_hash?: string | null
   created_at: string
   updated_at?: string
 }

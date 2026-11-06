@@ -111,7 +111,7 @@ function PayTable({ f }: { f: ContractFields }) {
   )
 }
 
-export default function LaborContractDoc({ fields: f, fluid = false, signature, stampSrc }: {
+export default function LaborContractDoc({ fields: f, fluid = false, signature, stampSrc, seal }: {
   fields: ContractFields
   /** 휴대폰 서명 화면용 — A4 폭 고정 대신 화면 폭에 맞춘다 */
   fluid?: boolean
@@ -119,6 +119,8 @@ export default function LaborContractDoc({ fields: f, fluid = false, signature, 
   signature?: DocSignature
   /** 회사 인감 그림(data URL). app_assets 'company_stamp'. 있으면 사업주 날인 칸에 항상 찍힌다 */
   stampSrc?: string | null
+  /** 봉인 지문(024) — 서명 완료본 맨 아래에 적는다 */
+  seal?: { hash: string } | null
 }) {
   const emp = employerLabel(f.variant)
   // 서명은 data URL 이라 next/image 를 못 쓴다. 인쇄 창(outerHTML)에도 그대로 실려야 하므로 일부러 <img>
@@ -169,6 +171,11 @@ export default function LaborContractDoc({ fields: f, fluid = false, signature, 
           </tr>
         </tbody>
       </table>
+      {seal?.hash && (
+        <p style={{ fontSize: '9px', color: '#777', marginTop: '8px', wordBreak: 'break-all', lineHeight: 1.4 }}>
+          전자서명 봉인(SHA-256) {seal.hash} — 서명 당시의 내용·서명·시각을 묶은 지문값입니다. 저장된 값과 다르면 서명 뒤 내용이 바뀐 것입니다.
+        </p>
+      )}
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { sendToAll, subjectFrom } from '@/lib/push'
+import { contentHashOf, chainHashOf } from '@/lib/sealHash'
 
 // 근로계약서 전자서명 — 로그인 없이 호출되는 공개 라우트 (proxy.ts PUBLIC_PATHS).
 // 체크인(/api/checkin)과 같은 원칙으로 범위를 최대한 좁힌다.
@@ -27,7 +28,7 @@ export async function POST(request: NextRequest) {
   const supabase = createAdminClient()
   const { data: row } = await supabase
     .from('labor_contracts')
-    .select('id, assignment_id, inquiry_id, staff_name, status')
+    .select('id, assignment_id, inquiry_id, staff_name, status, variant, fields')
     .eq('token', token)
     .maybeSingle()
   if (!row) return NextResponse.json({ error: '계약서를 찾을 수 없습니다. 담당자에게 링크를 다시 요청해 주세요.' }, { status: 404 })
@@ -36,12 +37,25 @@ export async function POST(request: NextRequest) {
 
   const signedAt = new Date().toISOString()
   const ip = (request.headers.get('x-forwarded-for') || '').split(',')[0].trim() || null
+  const verifiedBy = '링크'
+
+  // 봉인 (024) — 내용·서명·시각을 묶은 지문, 바로 앞 서명 건과 이어 붙인 사슬. 규칙은 lib/sealHash 한 곳
+  const contentHash = await contentHashOf({
+    contractId: row.id, assignmentId: row.assignment_id, staffName: row.staff_name || '', variant: row.variant || '',
+    fields: (row.fields || {}) as Record<string, unknown>, signature, signedAt, verifiedBy,
+  })
+  const { data: prev } = await supabase
+    .from('labor_contracts').select('chain_hash').eq('status', '서명완료').not('chain_hash', 'is', null)
+    .order('signed_at', { ascending: false }).limit(1).maybeSingle()
+  const chainHash = await chainHashOf(prev?.chain_hash, contentHash)
+
   const { error } = await supabase
     .from('labor_contracts')
     .update({
       status: '서명완료', signed_at: signedAt, signature_data: signature,
       signer_ua: (request.headers.get('user-agent') || '').slice(0, 300) || null, signer_ip: ip,
-      verified_by: '링크', updated_at: signedAt,
+      verified_by: verifiedBy, updated_at: signedAt,
+      content_hash: contentHash, prev_hash: prev?.chain_hash || null, chain_hash: chainHash,
     })
     .eq('id', row.id)
     .eq('status', '대기')   // 동시에 두 번 눌러도 한 번만
@@ -59,5 +73,5 @@ export async function POST(request: NextRequest) {
     }, subjectFrom(request), { kind: 'sign', dedupeKey: `sign:${row.id}` })
   } catch (e) { console.error('서명 알림 실패', e) }
 
-  return NextResponse.json({ ok: true, signed_at: signedAt })
+  return NextResponse.json({ ok: true, signed_at: signedAt, content_hash: contentHash })
 }

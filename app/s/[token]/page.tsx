@@ -20,7 +20,7 @@ export default async function SignPage({ params }: { params: Promise<{ token: st
   const { data: row } = valid
     ? await supabase
       .from('labor_contracts')
-      .select('id, staff_name, variant, fields, status, signed_at, signature_data')
+      .select('id, staff_name, variant, fields, status, signed_at, signature_data, content_hash')
       .eq('token', token)
       .maybeSingle()
     : { data: null }
@@ -49,6 +49,7 @@ export default async function SignPage({ params }: { params: Promise<{ token: st
       signedAt={row.signed_at}
       signatureData={row.signature_data}
       stampSrc={stampRow?.data_url || null}
+      contentHash={row.content_hash || null}
     />
   )
 }
