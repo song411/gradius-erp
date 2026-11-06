@@ -5,7 +5,6 @@
 
 export interface SealInput {
   contractId: string
-  assignmentId: string
   staffName: string
   variant: string
   fields: Record<string, unknown>

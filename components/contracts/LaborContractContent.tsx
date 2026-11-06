@@ -247,7 +247,7 @@ export default function LaborContractContent() {
   async function verifySeal(c: LaborContract) {
     if (!c.content_hash) { toast.info('봉인값이 없는 건입니다 (024 전에 서명됨)'); return }
     const h = await contentHashOf({
-      contractId: c.id, assignmentId: c.assignment_id, staffName: c.staff_name || '', variant: c.variant,
+      contractId: c.id, staffName: c.staff_name || '', variant: c.variant,
       fields: c.fields as Record<string, unknown>, signature: c.signature_data || '', signedAt: c.signed_at || '', verifiedBy: c.verified_by || '',
     })
     if (h === c.content_hash) toast.success(`봉인 일치 — ${c.staff_name} 계약서는 서명 뒤 바뀐 것이 없습니다`)

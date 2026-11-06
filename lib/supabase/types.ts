@@ -373,7 +373,7 @@ export type LaborContractStatus = '대기' | '서명완료' | '취소'
 export interface LaborContract {
   id: string
   token: string
-  assignment_id: string
+  assignment_id: string | null   // 배정이 지워지면 NULL (025) — 계약서는 남는다
   inquiry_id?: string | null
   staff_id?: string | null
   staff_name?: string | null

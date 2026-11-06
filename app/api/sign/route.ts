@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
 
   // 봉인 (024) — 내용·서명·시각을 묶은 지문, 바로 앞 서명 건과 이어 붙인 사슬. 규칙은 lib/sealHash 한 곳
   const contentHash = await contentHashOf({
-    contractId: row.id, assignmentId: row.assignment_id, staffName: row.staff_name || '', variant: row.variant || '',
+    contractId: row.id, staffName: row.staff_name || '', variant: row.variant || '',
     fields: (row.fields || {}) as Record<string, unknown>, signature, signedAt, verifiedBy,
   })
   const { data: prev } = await supabase
