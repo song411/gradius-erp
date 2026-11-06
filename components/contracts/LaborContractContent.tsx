@@ -21,7 +21,7 @@ import { toast } from 'sonner'
 import { Printer, AlertTriangle, RotateCcw, Link2, Copy, CheckCircle2, Clock, RefreshCw } from 'lucide-react'
 import LaborContractDoc from './LaborContractDoc'
 import {
-  buildContractFields, missingFields, FIELD_LABELS, PER_PERSON_KEYS, VARIANT_DESC, makeToken, signLinkMessage, fmtSignedAt,
+  buildContractFields, missingFields, FIELD_LABELS, PER_PERSON_KEYS, VARIANT_DESC, makeToken, signLinkMessage, groupLinkMessage, fmtSignedAt,
   formatIdNumber, accountTextOf, splitAccount,
   type ContractFields, type ContractVariant,
 } from '@/lib/laborContract'
@@ -320,6 +320,15 @@ export default function LaborContractContent() {
               </li>
             ))}
           </ul>
+          {/* 행사 공용 링크 — 단톡방에 하나만 올린다. 크루는 이름을 누르고 뒷 4자리를 넣어 자기 것만 연다 */}
+          {inqId && docs.some(d => d.latest) && (
+            <div className="flex items-center gap-1.5 pt-2 border-t border-emerald-200">
+              <span className="text-xs font-bold text-emerald-900 shrink-0">행사 공용 링크</span>
+              <span className="flex-1 min-w-0 text-2xs text-gray-500 truncate">{origin}/s/e/{inqId}</span>
+              <button type="button" onClick={() => copyText(groupLinkMessage(inquiry?.event_name || '', `${origin}/s/e/${inqId}`), '공용 링크 문구')}
+                className="h-6 px-2 rounded-full border border-emerald-400 bg-white text-emerald-800 text-xs font-bold hover:bg-emerald-50 shrink-0" title="단톡방에 붙여넣을 문구 복사">복사</button>
+            </div>
+          )}
           {anySigned && (
             <label className="flex items-center gap-2 text-xs text-gray-700 pt-1">
               <input type="checkbox" checked={showSigned} onChange={e => setShowSigned(e.target.checked)} />서명 끝난 사람은 서명본(서명 당시 내용)으로 보기·인쇄

@@ -327,6 +327,13 @@ export function signLinkMessage(name: string, eventName: string, url: string): s
 ${url}`
 }
 
+/** 단톡방에 올리는 공용 링크 문구 — 이름 누르고 뒷 4자리 넣고 서명 */
+export function groupLinkMessage(eventName: string, url: string): string {
+  return `[가디어스] ${eventName ? `${eventName} ` : ''}근로계약서 서명 안내
+아래 링크를 열어 본인 이름을 누르고, 전화번호 뒷 4자리를 넣은 뒤 내용을 확인하고 서명해 주세요.
+${url}`
+}
+
 /** 서명 시각 "2026년 4월 23일 14:05" (한국 시간) */
 export function fmtSignedAt(iso: string): string {
   if (!iso) return ''
