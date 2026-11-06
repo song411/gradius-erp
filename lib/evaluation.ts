@@ -137,7 +137,6 @@ export const PROFILE_FIELDS = [
   { key: 'english_skill', label: '영어',   kind: 'pick',   options: ['하', '중', '상', '원어민'] },
   { key: 'driving',       label: '운전',   kind: 'pick',   options: ['1종', '2종', '없음'] },
   { key: 'region',        label: '지역',   kind: 'text' },
-  { key: 'address',       label: '주소',   kind: 'text' },   // 근로계약서 주소 칸 (019)
 ] as const
 
 export type ProfileKey = typeof PROFILE_FIELDS[number]['key']
@@ -149,7 +148,6 @@ export function profileFormOf(staff?: Staff | null): ProfileForm {
   return {
     gender: v(staff?.gender), age: v(staff?.age), height: v(staff?.height), weight: v(staff?.weight),
     mbti: v(staff?.mbti), english_skill: v(staff?.english_skill), driving: v(staff?.driving), region: v(staff?.region),
-    address: v(staff?.address),
   }
 }
 
@@ -164,7 +162,6 @@ export function profileChips(form: ProfileForm): string[] {
   if (form.english_skill) out.push(`영어 ${form.english_skill}`)
   if (form.driving) out.push(`운전 ${form.driving}`)
   if (form.region)  out.push(form.region)
-  if (form.address) out.push(`주소 ${form.address}`)
   return out
 }
 
@@ -179,6 +176,16 @@ export function profilePatch(before: ProfileForm, after: ProfileForm): Record<st
     else patch[f.key] = a
   }
   return patch
+}
+
+/** 계약서 화면에서 적은 전화·주민번호·계좌를 크루관리에 저장. 이 네 칸 외에는 버린다(점수 칸 보호) */
+export async function saveStaffContact(staffId: string, patch: { phone?: string; id_number?: string; bank_name?: string; account_number?: string }): Promise<void> {
+  const safe: Record<string, string> = {}
+  for (const k of ['phone', 'id_number', 'bank_name', 'account_number'] as const) {
+    const v = (patch[k] || '').trim()
+    if (v) safe[k] = v
+  }
+  if (Object.keys(safe).length) await db.update('staff', staffId, safe)
 }
 
 /** 크루 프로필만 저장. PROFILE_FIELDS 밖의 키는 조용히 버린다(점수 칸 보호). 몇 칸 썼는지 돌려준다 */

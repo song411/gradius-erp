@@ -639,10 +639,6 @@ function EvalPanel({ assignment, existing, staff, siteName, author, onAuthor, on
                   <input value={profile.region} placeholder="서울, 경기" onChange={e => setProfile(p => ({ ...p, region: e.target.value }))} className={inputCls} />
                 </label>
               </div>
-              <label className="block">
-                <span className="text-2xs font-bold text-gray-500">주소 <span className="font-normal">(근로계약서용)</span></span>
-                <input value={profile.address} placeholder="서울시 종로구 …" onChange={e => setProfile(p => ({ ...p, address: e.target.value }))} className={inputCls} />
-              </label>
               {PROFILE_FIELDS.filter(f => f.kind === 'pick').map(f => (
                 <div key={f.key} className="flex items-center gap-1.5 flex-wrap">
                   <span className="w-9 text-2xs font-bold text-gray-500 shrink-0">{f.label}</span>

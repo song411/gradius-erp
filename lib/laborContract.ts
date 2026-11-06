@@ -33,8 +33,7 @@ export interface ContractFields {
   workerPhone: string
   workerIdNumber: string   // 상세 양식(주민등록번호 칸)
   workerBirth: string      // 기본 양식(생년월일 칸) — 주민번호 앞자리로 만든다
-  workerAddress: string
-  hireDate: string         // 기본 양식(입사일 칸)
+  workerAccount: string    // 지급계좌 (은행 계좌번호) — 급여를 보낼 곳
   periodText: string       // Ⓐ 근로계약기간
   positionText: string     // Ⓑ 담당직위
   dutyText: string         // Ⓒ 담당업무
@@ -48,14 +47,14 @@ export interface ContractFields {
 
 export const FIELD_LABELS: Record<keyof Omit<ContractFields, 'variant'>, string> = {
   workerName: '성명', workerPhone: '전화번호', workerIdNumber: '주민등록번호', workerBirth: '생년월일',
-  workerAddress: '주소', hireDate: '입사일', periodText: 'Ⓐ 근로계약기간', positionText: 'Ⓑ 담당직위',
+  workerAccount: '지급계좌', periodText: 'Ⓐ 근로계약기간', positionText: 'Ⓑ 담당직위',
   dutyText: 'Ⓒ 담당업무', placeText: 'Ⓓ 취업장소', hoursText: 'Ⓔ 소정근로시간', payMethodText: 'Ⓗ 임금산정방법',
   dailyPayText: '기본 일당총액', totalPayText: '지급가 / 합계', signDate: '작성일',
 }
 
 /** 사람마다 다른 칸 — 여러 명 한 번에 뽑을 때 공통 수정에서 제외한다 */
 export const PER_PERSON_KEYS: (keyof ContractFields)[] = [
-  'workerName', 'workerPhone', 'workerIdNumber', 'workerBirth', 'workerAddress', 'hireDate', 'periodText', 'dailyPayText', 'totalPayText',
+  'workerName', 'workerPhone', 'workerIdNumber', 'workerBirth', 'workerAccount', 'periodText', 'dailyPayText', 'totalPayText',
 ]
 
 // ── 날짜 ────────────────────────────────────────────────
@@ -162,6 +161,17 @@ export function dutyTextOf(jobType?: string | null): string {
   return hit ? hit[1] : '행사 및 현장 운영 보조, 안내, 정리, 질서유지 등'
 }
 
+/** 지급계좌 표기 "기업은행 123-456-789". 둘 중 하나만 있어도 적는다 */
+export function accountTextOf(bank?: string | null, account?: string | null): string {
+  return [bank, account].map(x => (x || '').trim()).filter(Boolean).join(' ')
+}
+/** 화면에서 적은 "기업은행 123-456" 을 은행·계좌로 나눈다. 첫 낱말에 숫자가 거의 없으면 은행 이름으로 본다 */
+export function splitAccount(text: string): { bank_name: string; account_number: string } {
+  const parts = (text || '').trim().split(/\s+/).filter(Boolean)
+  if (parts.length >= 2 && !/\d{3,}/.test(parts[0])) return { bank_name: parts[0], account_number: parts.slice(1).join(' ') }
+  return { bank_name: '', account_number: parts.join(' ') }
+}
+
 export function payDeadlineText(lastDate: string): string {
   const due = lastDate ? addDaysYmd(lastDate, 14) : ''
   return due ? `계약종료일로부터 14일 이내(${fmtKorean(due)} 이내 지급)` : '계약종료일로부터 14일 이내'
@@ -184,7 +194,7 @@ export interface BuildInput {
 /** 배정·문의·크루에서 계약서 칸을 채운다. 비어 있는 칸은 빈 문자열 — 화면이 빈 칸으로 알려 준다 */
 export function buildContractFields({ assignment: a, inquiry, staff, variant, today }: BuildInput): ContractFields {
   const dates = workDatesOf(a, inquiry)
-  const first = dates[0] || '', last = dates[dates.length - 1] || ''
+  const last = dates[dates.length - 1] || ''
   const idNumber = formatIdNumber(a.id_number || staff?.id_number)
   const dailyPay = Number(a.pay_rate) || 0
   const days = Number(a.work_days) || dates.length
@@ -195,8 +205,7 @@ export function buildContractFields({ assignment: a, inquiry, staff, variant, to
     workerPhone: a.phone || staff?.phone || '',
     workerIdNumber: idNumber,
     workerBirth: birthFromIdNumber(idNumber),
-    workerAddress: staff?.address || '',
-    hireDate: first ? fmtKorean(first) : '',
+    workerAccount: accountTextOf(a.bank_name || staff?.bank_name, a.account_number || staff?.account_number),
     periodText: periodTextOf(variant, dates, Number(a.work_days) || undefined),
     positionText: positionTextOf(variant, a.job_type),
     dutyText: dutyTextOf(a.job_type),
@@ -215,7 +224,7 @@ export function buildContractFields({ assignment: a, inquiry, staff, variant, to
 export function missingFields(f: ContractFields): string[] {
   const need: (keyof ContractFields)[] = f.variant === '상세'
     ? ['workerName', 'workerPhone', 'workerIdNumber', 'periodText', 'placeText', 'hoursText', 'dailyPayText']
-    : ['workerName', 'workerPhone', 'workerBirth', 'workerAddress', 'periodText', 'placeText', 'hoursText', 'dailyPayText']
+    : ['workerName', 'workerPhone', 'workerBirth', 'periodText', 'placeText', 'hoursText', 'dailyPayText']
   return need.filter(k => !String(f[k] || '').trim()).map(k => FIELD_LABELS[k as keyof typeof FIELD_LABELS])
 }
 
@@ -305,7 +314,7 @@ export function makeToken(): string {
 
 /** 카톡에 붙여넣는 문구 — 사람 이름·행사·링크 */
 export function signLinkMessage(name: string, eventName: string, url: string): string {
-  return `[가디어스] ${name}님, ${eventName ? `${eventName} ` : ''}근로계약서입니다. 아래 링크를 열어 내용을 확인하고 서명해 주세요. (본인 확인: 전화번호 뒷 4자리)
+  return `[가디어스] ${name}님, ${eventName ? `${eventName} ` : ''}근로계약서입니다. 아래 링크를 열어 내용을 확인하고 서명해 주세요.
 ${url}`
 }
 

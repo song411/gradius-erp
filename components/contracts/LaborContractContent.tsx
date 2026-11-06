@@ -22,9 +22,10 @@ import { Printer, AlertTriangle, RotateCcw, Link2, Copy, CheckCircle2, Clock, Re
 import LaborContractDoc from './LaborContractDoc'
 import {
   buildContractFields, missingFields, FIELD_LABELS, PER_PERSON_KEYS, VARIANT_DESC, makeToken, signLinkMessage, fmtSignedAt,
+  formatIdNumber, accountTextOf, splitAccount,
   type ContractFields, type ContractVariant,
 } from '@/lib/laborContract'
-import { saveStaffProfile } from '@/lib/evaluation'
+import { saveStaffContact } from '@/lib/evaluation'
 import type { Assignment, Inquiry, Staff, LaborContract } from '@/lib/supabase/types'
 
 type Person = { assignment: Assignment; staff: Staff | null }
@@ -33,7 +34,7 @@ type FieldKey = keyof Overrides
 
 // 화면에서 고치는 순서. 긴 글은 Textarea
 const EDIT_ORDER: { key: FieldKey; long?: boolean }[] = [
-  { key: 'workerName' }, { key: 'workerPhone' }, { key: 'workerIdNumber' }, { key: 'workerBirth' }, { key: 'workerAddress' }, { key: 'hireDate' },
+  { key: 'workerName' }, { key: 'workerPhone' }, { key: 'workerIdNumber' }, { key: 'workerBirth' }, { key: 'workerAccount' },
   { key: 'periodText', long: true }, { key: 'positionText' }, { key: 'dutyText', long: true }, { key: 'placeText', long: true },
   { key: 'hoursText' }, { key: 'payMethodText', long: true }, { key: 'dailyPayText' }, { key: 'totalPayText' }, { key: 'signDate' },
 ]
@@ -133,22 +134,32 @@ export default function LaborContractContent() {
   }
   function reset() { setCommon({}); setEach({}) }
 
-  // 주소가 비어 있으면 계약서 화면에서 바로 적고 크루관리에도 저장한다 — 다음 계약서부터는 자동으로 들어온다
-  const [savingAddr, setSavingAddr] = useState(false)
-  async function saveAddressToStaff(d: typeof docs[number]) {
+  // 전화·주민번호·계좌가 비어 있으면 계약서 화면에서 바로 적고 크루관리에도 저장한다 — 다음 계약서부터는 자동으로 들어온다
+  const SAVABLE: Partial<Record<FieldKey, string>> = { workerPhone: '전화번호', workerIdNumber: '주민등록번호', workerAccount: '지급계좌' }
+  const [savingKey, setSavingKey] = useState<FieldKey | null>(null)
+  function staffValueOf(st: Staff, key: FieldKey): string {
+    if (key === 'workerPhone') return (st.phone || '').trim()
+    if (key === 'workerIdNumber') return formatIdNumber(st.id_number)
+    if (key === 'workerAccount') return accountTextOf(st.bank_name, st.account_number)
+    return ''
+  }
+  async function saveToStaff(d: typeof docs[number], key: FieldKey) {
     const staffId = d.person.assignment.staff_id
-    const address = (d.fields.workerAddress || '').trim()
-    if (!staffId || !address) return
-    setSavingAddr(true)
+    const value = (d.fields[key] || '').trim()
+    if (!staffId || !value) return
+    setSavingKey(key)
     try {
-      await saveStaffProfile(staffId, { address })
-      setPeople(ps => ps.map(p => p.assignment.id === d.id && p.staff ? { ...p, staff: { ...p.staff, address } } : p))
+      const patch = key === 'workerPhone' ? { phone: value }
+        : key === 'workerIdNumber' ? { id_number: value }
+        : splitAccount(value)
+      await saveStaffContact(staffId, patch)
+      setPeople(ps => ps.map(p => p.assignment.id === d.id && p.staff ? { ...p, staff: { ...p.staff, ...patch } } : p))
       // 손으로 적은 값이 이제 자동값과 같아졌으니 덮어쓰기 기록은 지운다
-      setEach(m => { const { workerAddress: _drop, ...rest } = m[d.id] || {}; void _drop; return { ...m, [d.id]: rest } })
-      toast.success(`${d.fields.workerName} 주소를 크루관리에 저장했습니다`)
+      setEach(m => { const next = { ...(m[d.id] || {}) }; delete next[key]; return { ...m, [d.id]: next } })
+      toast.success(`${d.fields.workerName} ${SAVABLE[key]} 저장 — 다음 계약서부터 자동으로 들어옵니다`)
     } catch (e) {
-      toast.error('주소 저장 실패: ' + (e as Error).message)
-    } finally { setSavingAddr(false) }
+      toast.error('저장 실패: ' + (e as Error).message)
+    } finally { setSavingKey(null) }
   }
 
   const warnings = docs.flatMap(d => {
@@ -163,7 +174,6 @@ export default function LaborContractContent() {
   /** 한 명 링크 만들기. 대기 중인 링크가 있으면 내용만 갱신(링크 유지), 없으면 새로 만든다 */
   async function makeLink(d: typeof docs[number]): Promise<LaborContract | null> {
     const phone = d.fields.workerPhone || d.person.assignment.phone || d.person.staff?.phone || ''
-    if (phone.replace(/\D/g, '').length < 4) { toast.error(`${d.fields.workerName}: 전화번호가 없어 본인 확인을 할 수 없습니다. 크루관리에 번호를 먼저 적어 주세요.`); return null }
     const payload = {
       assignment_id: d.id, inquiry_id: inquiry?.id || null, staff_id: d.person.assignment.staff_id || null,
       staff_name: d.fields.workerName, phone, variant, fields: d.fields, status: '대기',
@@ -272,7 +282,7 @@ export default function LaborContractContent() {
               <input type="checkbox" checked={showSigned} onChange={e => setShowSigned(e.target.checked)} />서명 끝난 사람은 서명본(서명 당시 내용)으로 보기·인쇄
             </label>
           )}
-          <p className="text-2xs text-gray-500">링크를 만든 순간의 내용이 저장되어 크루에게 보입니다. 내용을 고쳤으면 ‘갱신’을 눌러야 반영됩니다. 크루는 전화번호 뒷 4자리로 본인 확인 후 서명합니다.</p>
+          <p className="text-2xs text-gray-500">링크를 만든 순간의 내용이 저장되어 크루에게 보입니다. 내용을 고쳤으면 ‘갱신’을 눌러야 반영됩니다. 링크를 아는 사람만 열 수 있으니 본인에게만 보내세요.</p>
         </section>
 
         <div>
@@ -299,7 +309,7 @@ export default function LaborContractContent() {
           <div className="rounded-lg border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-800">
             <p className="font-bold flex items-center gap-1 mb-1"><AlertTriangle className="h-3.5 w-3.5" />빈 칸이 있습니다</p>
             {warnings.map(w => <p key={w}>{w}</p>)}
-            <p className="text-2xs text-amber-700 mt-1">주소·주민번호는 크루관리에 적어 두면 다음부터 자동으로 들어옵니다.</p>
+            <p className="text-2xs text-amber-700 mt-1">비어 있는 칸은 아래에서 직접 적을 수 있고, 전화·주민번호·계좌는 크루관리에도 저장할 수 있습니다.</p>
           </div>
         )}
 
@@ -309,7 +319,7 @@ export default function LaborContractContent() {
             {EDIT_ORDER.map(({ key, long }) => {
               const perPerson = PER_PERSON_KEYS.includes(key)
               const disabled = editingAll && docs.length > 1 && perPerson
-              const hidden = (variant === '상세' && (key === 'workerBirth' || key === 'hireDate')) || (variant === '기본' && key === 'workerIdNumber')
+              const hidden = (variant === '상세' && key === 'workerBirth') || (variant === '기본' && key === 'workerIdNumber')
               if (hidden) return null
               const val = current.fields[key] || ''
               return (
@@ -318,15 +328,15 @@ export default function LaborContractContent() {
                   {long
                     ? <Textarea value={val} disabled={disabled} rows={2} onChange={e => setField(key, e.target.value)} className="text-sm" />
                     : <Input value={val} disabled={disabled} type={key === 'signDate' ? 'date' : 'text'} onChange={e => setField(key, e.target.value)}
-                        placeholder={key === 'workerAddress' && !val ? '비어 있음 — 여기에 적으면 됩니다' : undefined} className="h-9 text-sm" />}
-                  {key === 'workerAddress' && !disabled && current.person.staff && val.trim() && val.trim() !== (current.person.staff.address || '').trim() && (
-                    <button type="button" disabled={savingAddr} onClick={() => saveAddressToStaff(current)}
+                        placeholder={SAVABLE[key] && !val ? '비어 있음 — 여기에 적으면 됩니다' : undefined} className="h-9 text-sm" />}
+                  {SAVABLE[key] && !disabled && current.person.staff && val.trim() && val.trim() !== staffValueOf(current.person.staff, key) && (
+                    <button type="button" disabled={savingKey !== null} onClick={() => saveToStaff(current, key)}
                       className="mt-1 text-xs font-bold text-emerald-700 hover:underline disabled:opacity-50">
-                      {savingAddr ? '저장 중…' : '이 주소를 크루관리에도 저장 (다음부터 자동)'}
+                      {savingKey === key ? '저장 중…' : `이 ${SAVABLE[key]} 크루관리에도 저장 (다음부터 자동)`}
                     </button>
                   )}
-                  {key === 'workerAddress' && !current.person.staff && !val.trim() && (
-                    <p className="mt-0.5 text-2xs text-gray-400">크루관리에 연결되지 않은 사람이라 여기 적은 주소는 이 계약서에만 쓰입니다.</p>
+                  {SAVABLE[key] && !current.person.staff && !val.trim() && (
+                    <p className="mt-0.5 text-2xs text-gray-400">크루관리에 연결되지 않은 사람이라 여기 적은 값은 이 계약서에만 쓰입니다.</p>
                   )}
                 </div>
               )

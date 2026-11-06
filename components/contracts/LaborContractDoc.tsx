@@ -38,13 +38,13 @@ function PartyTable({ f }: { f: ContractFields }) {
       ['사업체명', COMPANY.name, '성    명', f.workerName],
       ['대표자명', COMPANY.ceo, '주민등록번호', f.workerIdNumber],
       ['사업자등록증', COMPANY.regNo, '전화번호', f.workerPhone],
-      ['전화번호', COMPANY.phone, '주    소', f.workerAddress],
+      ['전화번호', COMPANY.phone, '지급계좌', f.workerAccount],
     ]
     : [
       ['사업체명', COMPANY.name, '성    명', f.workerName],
-      ['대표자명', COMPANY.ceo, '주    소', f.workerAddress],
+      ['대표자명', COMPANY.ceo, '전화번호', f.workerPhone],
       ['주    소', COMPANY.address, '생년월일', f.workerBirth],
-      ['전화번호', COMPANY.phone, '입 사 일', f.hireDate],
+      ['전화번호', COMPANY.phone, '지급계좌', f.workerAccount],
     ]
   return (
     <table style={S.table}>
@@ -159,8 +159,7 @@ export default function LaborContractDoc({ fields: f, fluid = false, signature }
           </tr>
           <tr>
             <th style={S.th}>교부 확인</th>
-            <td style={S.td}>근로계약서를 교부받았음을 확인합니다.　{f.workerName}</td>
-            <td style={{ ...S.td, textAlign: 'center', color: '#555' }}>{sig || '(서명 또는 날인)'}</td>
+            <td colSpan={2} style={S.td}>근로자는 본 계약서를 교부받았음을 확인합니다. (위 근로자 서명으로 갈음)</td>
           </tr>
         </tbody>
       </table>

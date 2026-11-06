@@ -1,10 +1,10 @@
 'use client'
 
-// 근로계약서 서명 화면 (휴대폰) — 계약서 전문 → 본인 확인(전화 뒷 4자리) → 손가락 서명 → 동의
+// 근로계약서 서명 화면 (휴대폰) — 계약서 전문 → 손가락 서명 → 동의. 본인 확인은 두지 않는다(사장님 결정 2026-11-06)
 // 서명이 끝나면 같은 링크가 서명 완료본이 된다 (근로자가 언제든 다시 열어 볼 수 있음 = 교부).
 
 import { useRef, useState } from 'react'
-import { CheckCircle2, Eraser, PenLine, ShieldCheck } from 'lucide-react'
+import { CheckCircle2, Eraser, PenLine } from 'lucide-react'
 import LaborContractDoc from '@/components/contracts/LaborContractDoc'
 import SignaturePad, { type SignaturePadHandle } from '@/components/contracts/SignaturePad'
 import { fmtSignedAt, type ContractFields } from '@/lib/laborContract'
@@ -18,7 +18,6 @@ export default function SignClient({ token, staffName, fields, status, signedAt,
   signatureData?: string | null
 }) {
   const padRef = useRef<SignaturePadHandle>(null)
-  const [last4, setLast4]     = useState('')
   const [agreed, setAgreed]   = useState(false)
   const [hasInk, setHasInk]   = useState(false)
   const [busy, setBusy]       = useState(false)
@@ -30,12 +29,11 @@ export default function SignClient({ token, staffName, fields, status, signedAt,
   async function submit() {
     setError('')
     const signature = padRef.current?.toDataURL()
-    if (!/^\d{4}$/.test(last4)) { setError('전화번호 뒷 4자리를 입력해 주세요.'); return }
     if (!signature) { setError('서명을 그려 주세요.'); return }
     if (!agreed) { setError('계약 내용 확인에 체크해 주세요.'); return }
     setBusy(true)
     try {
-      const res = await fetch('/api/sign', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, last4, signature, agreed }) })
+      const res = await fetch('/api/sign', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, signature, agreed }) })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) { setError(data.error || '서명에 실패했습니다.'); return }
       setDone({ signedAt: data.signed_at, signature })
@@ -66,7 +64,7 @@ export default function SignClient({ token, staffName, fields, status, signedAt,
         <div className="mx-3 mt-3 rounded-2xl bg-gray-50 border-2 border-gray-300 p-4 text-sm text-gray-600">이 계약서는 서명을 받을 수 없는 상태입니다. 담당자에게 문의해 주세요.</div>
       ) : (
         <div className="mx-3 mt-3 rounded-2xl bg-white border-2 border-gray-200 p-4 text-sm text-gray-700">
-          아래 계약서를 끝까지 읽어 주세요. 맨 아래에서 본인 확인 후 손가락으로 서명하면 끝납니다.
+          아래 계약서를 끝까지 읽어 주세요. 맨 아래에서 손가락으로 서명하면 끝납니다.
         </div>
       )}
 
@@ -77,13 +75,6 @@ export default function SignClient({ token, staffName, fields, status, signedAt,
 
       {!done && !locked && (
         <div className="mx-3 mt-4 space-y-4">
-          <section className="rounded-2xl bg-white border-2 border-gray-200 p-4">
-            <p className="font-extrabold text-gray-900 flex items-center gap-1.5 mb-2"><ShieldCheck className="h-5 w-5 text-gray-700" />본인 확인</p>
-            <label className="text-sm text-gray-600 block mb-1">회사에 등록된 전화번호 뒷 4자리</label>
-            <input value={last4} onChange={e => setLast4(e.target.value.replace(/\D/g, '').slice(0, 4))} inputMode="numeric" maxLength={4} placeholder="0000"
-              className="h-14 w-40 rounded-xl border-2 border-gray-300 px-4 text-2xl font-extrabold tracking-[0.3em] text-center focus:border-gray-900 focus:outline-none" />
-          </section>
-
           <section className="rounded-2xl bg-white border-2 border-gray-200 p-4">
             <div className="flex items-center justify-between mb-2">
               <p className="font-extrabold text-gray-900 flex items-center gap-1.5"><PenLine className="h-5 w-5 text-gray-700" />서명</p>
@@ -99,7 +90,7 @@ export default function SignClient({ token, staffName, fields, status, signedAt,
 
           {error && <p className="text-sm font-bold text-red-600 px-1">{error}</p>}
 
-          <button type="button" onClick={submit} disabled={busy || !hasInk || !agreed || last4.length !== 4}
+          <button type="button" onClick={submit} disabled={busy || !hasInk || !agreed}
             className="h-14 w-full rounded-2xl bg-gray-900 text-white text-lg font-extrabold active:scale-[0.98] disabled:opacity-40">
             {busy ? '저장 중…' : '서명하고 계약 완료'}
           </button>

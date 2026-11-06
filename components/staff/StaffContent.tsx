@@ -655,7 +655,7 @@ export default function StaffContent() {
               <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="010-0000-0000" />
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-600 mb-1 block">주소 <span className="text-gray-400">(근로계약서용)</span></label>
+              <label className="text-xs font-medium text-gray-600 mb-1 block">주소 <span className="text-gray-400">(선택)</span></label>
               <Input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="서울시 종로구 ..." />
             </div>
             <div>
